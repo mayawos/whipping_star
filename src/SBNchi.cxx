@@ -1006,10 +1006,10 @@ TH1D SBNchi::SampleCovarianceVaryInput(SBNspec *specin, int num_MC, std::vector<
 
 #pragma acc parallel loop num_gangs(2048) private(gaus_sample[:54],sampled_fullvector[:54],collapsed[:38],state) \
   copyin(this[0:1],a_specin[:num_bins_total],a_vec_matrix_lower_triangular[:num_bins_total][:num_bins_total],\ 
-    a_corein[:num_bins_total_compressed],				\
-    a_vec_matrix_inverted[:num_bins_total_compressed][:num_bins_total_compressed], \
-    seed[0:num_MC],  a_chival[:num_chival], this->a_num_bins[:num_channels], this->a_num_subchannels[:num_channels])							\
-  copyout(a_vec_chis[:num_MC]) 			\
+  a_corein[:num_bins_total_compressed],\
+  a_vec_matrix_inverted[:num_bins_total_compressed][:num_bins_total_compressed],\
+  seed[0:num_MC],  a_chival[:num_chival], this->a_num_bins[:num_channels], this->a_num_subchannels[:num_channels])\
+  copyout(a_vec_chis[:num_MC])\
   copy(nlower[:num_chival])
 {
       
@@ -1169,7 +1169,6 @@ SBNspec SBNchi::SampleCovariance(SBNspec *specin){
   for(int a=0; a<n_t; a++){
     gaus_sample(a) = rangen->Gaus(0,1);	
   }
-
   multi_sample = u + matrix_lower_triangular*gaus_sample;
 
   std::vector<double> sampled_fullvector(n_t,0.0);
@@ -1192,12 +1191,11 @@ SBNspec SBNchi::SampleCovariance(SBNspec *specin){
 
 
 TH1D SBNchi::SamplePoissonVaryInput(SBNspec *specin, int num_MC){ 
-  std::vector<double>  tmp = {10};
+  std::vector<double>  tmp;
   return SamplePoissonVaryInput(specin,num_MC,&tmp);
 }
 //This one varies the input comparative spectrum, and as sucn has  only to calculate the matrix_systematics once
 TH1D SBNchi::SamplePoissonVaryInput(SBNspec *specin, int num_MC, std::vector<double> *chival){
-  std::vector<int> nlower(chival->size(),0);
 
   TRandom3 *rangen = new TRandom3(0);
 
@@ -1205,29 +1203,63 @@ TH1D SBNchi::SamplePoissonVaryInput(SBNspec *specin, int num_MC, std::vector<dou
   //So save the core one that we will sample for
   ans.GetXaxis()->SetCanExtend(kTRUE);
   is_verbose = false;
-  for(int i=0; i < num_MC;i++){
-    SBNspec tmp = *specin;
-    tmp.ScalePoisson(rangen);
-    tmp.CollapseVector(); //this line important isnt it!
-    //tmp.PrintFullVector();
 
-    double thischi = this->CalcChi(&tmp);
-    ans.Fill(thischi);
+  double collapsed[38];
 
-    for(int j=0; j< chival->size(); j++){
-      if(thischi>=chival->at(j)) nlower.at(j)++;
-    }
+  std::vector<double> vec_chis (num_MC, 0.0);
+  double* a_vec_chis  = vec_chis.data();
+  double* a_chival = chival->data();
+  int num_chival = chival->size();
 
-    if(i%1000==0) std::cout<<"SBNchi::SamplePoissonVaryInput(SBNspec*, int) on MC :"<<i<<"/"<<num_MC<<". Ans: "<<thischi<<std::endl;
+  double *a_specin;
+  a_specin = (double*)malloc(sizeof(double)*num_bins_total);
+  for(int i=0; i< num_bins_total; i++){
+    a_specin[i] = specin->full_vector[i];
   }
-  for(int n =0; n< nlower.size(); n++){
-    chival->at(n) = nlower.at(n)/(double)num_MC;
+
+  int *nlower = (int*)malloc(sizeof(int)*num_chival);
+  for(int i=0; i< num_chival; i++){
+    nlower[i]=0; 
+  }
+
+  // Set up stuff for random seeds
+  unsigned long long seed[num_MC];
+  unsigned long long seq = 0ULL;
+  unsigned long long offset = 0ULL;
+  curandState_t state;
+  for(int i=0; i<num_MC; ++i) {
+    seed[i] = (int)rangen->Uniform(1e8);
+  }
+
+  #pragma acc parallel loop private(collapsed[:38],state) copyin(this[:1],a_specin[:num_bins_total],a_chival[:num_chival],seed[:num_MC]) copyout(a_vec_chis[:num_MC]) copy(nlower[:num_chival])
+  for(int i=0; i < num_MC;i++){
+
+    unsigned long long seed_sd = seed[i];
+    curand_init(seed_sd, seq, offset, &state);
+
+    for(int a=0; a<num_bins_total; a++) {
+      a_specin[a] = curand_normal(&state) * sqrt(a_specin[a]) + a_specin[a];
+    }
+ 
+    this->CollapseVectorStandAlone(a_specin,collapsed);
+
+    a_vec_chis[i] = this->CalcChi(collapsed);    
+
+    for(int j = 0; j < num_chival; j++){
+      if(a_vec_chis[i] >= a_chival[j]) nlower[j]++;
+    }
+  }
+
+  for(int i = 0; i < num_MC; i++){
+    ans.Fill(a_vec_chis[i]);
+  }
+
+  for(int n =0; n< num_chival; n++){
+    chival->at(n) = nlower[n]/(double)num_MC;
   }
 
   is_verbose = true;
   return ans;
-
-
 }
 /*
   std::vector<double> SBNchi::SampleCovarianceVaryInput_getpval(SBNspec *specin, int num_MC, std::vector<double> chival){
