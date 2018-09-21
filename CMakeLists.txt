@@ -55,8 +55,8 @@ message("GSL_CXX_FLAGS: ${GSL_CXX_FLAGS}")
 
 if(USE_GPU)
     set(CMAKE_MAGMA_CXX_FLAGS "-$ENV{MAGMA_CFLAGS} $ENV{MAGMA_LIB}")
-    message("@main CMAKE_MAGMA_CXX_FLAGS: ${CMAKE_MAGMA_CXX_FLAGS}")
-    set(CMAKE_GPU_CXX_FLAGS "-ta=tesla:nollvm -Mcudalib=curand -Minfo=accel -acc -w ${CMAKE_MAGMA_CXX_FLAGS}" )
+    #message("@main CMAKE_MAGMA_CXX_FLAGS: ${CMAKE_MAGMA_CXX_FLAGS}")
+    set(CMAKE_GPU_CXX_FLAGS "-ta=tesla:nollvm -Mcudalib=curand -Minfo=accel -acc -w") #${CMAKE_MAGMA_CXX_FLAGS}" )
 ENDIF()
 
 #gopt is forcing LLVM compilation
