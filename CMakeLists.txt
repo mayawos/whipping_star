@@ -1,5 +1,6 @@
 cmake_minimum_required (VERSION 2.6)
 project (SBNfit)
+
 # The version number.
 set (SBNfit_VERSION_MAJOR 3)
 set (SBNfit_VERSION_MINOR 0)
@@ -13,56 +14,67 @@ if (CMAKE_VERSION VERSION_LESS "3.1")
 endif ()
 
 message("@main CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+message("")
 unset (CMAKE_CXX_FLAGS)
 
 option(USE_GPU "USE GPU" OFF)
 if(USE_GPU)
-	message("")
-	message("Using GPU")
+	message("@main Using GPU")
 	message("")
 	add_compile_definitions(USE_GPU)
 else()
-	message("")
-	message("Not using GPU")
+	message("@main Not using GPU")
 	message("")
 endif()
 
 
-
-FIND_PACKAGE(ROOT)# COMPONENTS Core Cint RIO Net Hist Graf Graf3d Gpad Tree Rint Postscript Matrix Physics MathCore Thread)
+FIND_PACKAGE(ROOT)
 
 if(ROOT_FOUND)
-	message("Found ROOT using CMAKE FIND_PACKAGE")
+	message("@main Found ROOT using CMAKE FIND_PACKAGE")
+	message("")
 	include(${ROOT_USE_FILE})
 ELSE()
-	message("ROOT not compiled using CMAKE, use root-config")
-	#Get our ROOT libraries and such
+	message("@main ROOT not compiled using CMAKE, use root-config")
+	message("")
 	FIND_PROGRAM(ROOT_CONFIG root-config)
 	EXEC_PROGRAM(${ROOT_CONFIG} ARGS --cflags --glibs OUTPUT_VARIABLE ROOT_CXX_FLAGS)
-	message("ROOT cxx flags set to: ${ROOT_CXX_FLAGS}")
+	message("@main ROOT cxx flags set to: ${ROOT_CXX_FLAGS}")
+	message("")
 ENDIF()
 
-#Get our GSL libraries
+# Get our GSL libraries
 FIND_PROGRAM(GSL_CONFIG gsl-config)
 EXEC_PROGRAM(${GSL_CONFIG} ARGS --cflags OUTPUT_VARIABLE GSL_CXX_FLAGS)
 EXEC_PROGRAM(${GSL_CONFIG} ARGS --libs OUTPUT_VARIABLE GSL_LIBS)
 
 message("@main CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+message("")
 unset (CMAKE_CXX_FLAGS)
 
-message("GSL_LIBS: ${GSL_LIBS}")
-message("GSL_CXX_FLAGS: ${GSL_CXX_FLAGS}")
+message("@main GSL_LIBS: ${GSL_LIBS}")
+message("")
+message("@main GSL_CXX_FLAGS: ${GSL_CXX_FLAGS}")
+message("")
 
 if(USE_GPU)
-    set(CMAKE_MAGMA_CXX_FLAGS "-$ENV{MAGMA_CFLAGS} $ENV{MAGMA_LIB}")
-    message("@main CMAKE_MAGMA_CXX_FLAGS: ${CMAKE_MAGMA_CXX_FLAGS}")
-    set(CMAKE_GPU_CXX_FLAGS "-ta=tesla:nollvm -Mcudalib=curand -Minfo=accel -acc -w ${CMAKE_MAGMA_CXX_FLAGS}" )
+    #set(CMAKE_MAGMA_CXX_FLAGS "-$ENV{MAGMA_CFLAGS} $ENV{MAGMA_LIB}")
+    #message("@main CMAKE_MAGMA_CXX_FLAGS: ${CMAKE_MAGMA_CXX_FLAGS}")
+    #message("")
+    #set(CMAKE_GPU_CXX_FLAGS "-noswitcherror -ta=tesla:nollvm -Mcudalib=curand -Minfo=accel -acc -w ${CMAKE_MAGMA_CXX_FLAGS}" )
+    set(CMAKE_GPU_CXX_FLAGS "-noswitcherror -ta=tesla:nollvm -Mcudalib=curand -Minfo=accel -acc -w" )
 ENDIF()
 
 #gopt is forcing LLVM compilation
 # -noswitcherror only for pgcc
-#set (CMAKE_SO_CXX_FLAGS "-noswitcherror ${ROOT_CXX_FLAGS} ${GSL_LIBS} ${CMAKE_CXX_FLAGS} -w -Wno-deprecated-declarations")
-set (CMAKE_SO_CXX_FLAGS " ${ROOT_CXX_FLAGS} ${GSL_LIBS} ${GSL_CXX_FLAGS} ${CMAKE_CXX_FLAGS} -w -Wno-deprecated-declarations")
+
+set (CMAKE_SO_CXX_FLAGS "${ROOT_CXX_FLAGS} ${GSL_LIBS} ${GSL_CXX_FLAGS} ${CMAKE_CXX_FLAGS} -w -Wno-deprecated-declarations")
+if(USE_GPU)
+	message("@main Add -noswitcherror to CMAKE_SO_CXX_FLAGS")
+	message("")
+	set (CMAKE_SO_CXX_FLAGS "-noswitcherror ${ROOT_CXX_FLAGS} ${GSL_LIBS} ${CMAKE_CXX_FLAGS} -w -Wno-deprecated-declarations")
+ENDIF()
+
 set (CMAKE_ACC_CXX_FLAGS "${CMAKE_GPU_CXX_FLAGS} ${CMAKE_SO_CXX_FLAGS} -g")
 set (CMAKE_PCC_CXX_FLAGS "-ta=multicore -Minfo=accel -acc -w ${CMAKE_SO_CXX_FLAGS}")
 
@@ -82,6 +94,7 @@ add_subdirectory(libio)
 unset(CMAKE_CXX_FLAGS)
 set(CMAKE_CXX_FLAGS "${CMAKE_ACC_CXX_FLAGS}")
 message("@main CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+message("")
 
 add_subdirectory(tinyxml)
 add_subdirectory(src)

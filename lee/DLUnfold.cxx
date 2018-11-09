@@ -1,5 +1,7 @@
 #include <getopt.h>
 
+#include "TTree.h"
+
 #include "SBNcls.h"
 #include "SBNchi.h"
 #include "SBNspec.h"
