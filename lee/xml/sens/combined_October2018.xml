@@ -1,0 +1,93 @@
+<?xml version="1.0" ?>
+
+<mode name="nu" use="1"/>
+<detector name="uBooNE" use="1" />
+
+<channel name="elike" unit="MeV" use="1" numbins="4">
+		<bins
+			edges="100 500 900 1300 1800"
+		/>
+		<subchannel name="intrinsic" use="1" osc = "11"/>
+		<subchannel name="cocktail" use="1" osc = "22"/>
+		<subchannel name="extbnb" use="1" osc="0"/>
+		<subchannel name="fullosc" use="1" osc="21"/>
+</channel>
+
+<channel name="mlike" unit="MeV" use="1" numbins="6">
+		<bins
+			edges="200 400 600 800 1000 1300 1600"
+		/>
+		<subchannel name="cocktail" use="1" osc = "22"/>
+		<subchannel name="extbnb" use="1" osc = "0"/>
+</channel>
+
+
+<!-- ############################# MultiSims #####################################################-->
+<MultisimFile treename="SBNFitVars" filename="/uboone/data/users/moon/SBNFitFiles/nueintrinsic_ForSBNFit_10-24-18.root" scale = ".13" maxevents ="20000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="NuEReco"
+		type="double"
+		associated_subchannel="nu_uBooNE_elike_intrinsic"
+		oscillate = "true"
+		true_param_name = "NuETrue"
+		true_L_name = "OscLenTrue"/>
+</MultisimFile>
+
+<MultisimFile treename="SBNFitVars" filename="/uboone/data/users/moon/SBNFitFiles/bnboverlay_ForSBNFit_10-24-18.root" scale = "2.038" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="NuEReco"
+		type="double"
+		associated_subchannel="nu_uBooNE_elike_cocktail"
+		oscillate = "true"
+		true_param_name = "NuETrue"
+		true_L_name = "OscLenTrue"/>
+</MultisimFile>
+
+<MultisimFile treename="nue_extbnb_tree" filename="/uboone/data/users/yatesla/othersys/for_davio/input_to_sbnfit_2018-10_Post-Review.root" scale = "17.118" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		oscillate = "true"
+		associated_subchannel="nu_uBooNE_elike_extbnb"
+		true_param_name = "true_nu_energy"
+		true_L_name = "true_nu_L"/>
+</MultisimFile>
+
+<MultisimFile treename="fullosc_tree" filename="/uboone/data/users/yatesla/othersys/for_davio/input_to_sbnfit_2018-10_Post-Review.root" scale = ".13" maxevents ="20000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		oscillate = "true"
+		associated_subchannel="nu_uBooNE_elike_fullosc"
+		true_param_name = "true_nu_energy"
+		true_L_name = "true_nu_L"/>
+</MultisimFile>
+
+<MultisimFile treename="numu_cocktail_tree" filename="/uboone/data/users/yatesla/othersys/for_davio/input_to_sbnfit_2018-10_Post-Review.root" scale = "2.038" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		oscillate = "true"
+		associated_subchannel="nu_uBooNE_mlike_cocktail"
+		true_param_name = "true_nu_energy"
+		true_L_name = "true_nu_L"/>
+</MultisimFile>
+
+<MultisimFile treename="numu_extbnb_tree" filename="/uboone/data/users/yatesla/othersys/for_davio/input_to_sbnfit_2018-10_Post-Review.root" scale = "17.118" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		associated_subchannel="nu_uBooNE_mlike_extbnb"
+		oscillate = "true"
+		true_param_name = "true_nu_energy"
+		true_L_name = "true_nu_L"/>
+</MultisimFile>
+
+<data path="" />
+<covariance file="" name="" />

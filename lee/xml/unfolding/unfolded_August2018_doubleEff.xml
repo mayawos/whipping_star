@@ -1,0 +1,72 @@
+<?xml version="1.0" ?>
+
+<mode name="nu" use="1"/>
+<detector name="uBooNE" use="1" />
+
+<channel name="elike" unit="MeV" use="1" numbins="4">
+		<bins
+			edges="100 500 900 1300 1800"
+		/>
+		<subchannel name="intrinsic" use="1" osc = "0"/>
+		<subchannel name="cocktail" use="1" osc = "0"/>
+		<subchannel name="extbnb" use="1" osc="0"/>
+		<subchannel name="lee" use="1" osc="0"/>
+</channel>
+
+<channel name="mlike" unit="MeV" use="1" numbins="6">
+		<bins
+			edges="200 400 600 800 1000 1300 1600"
+		/>
+		<subchannel name="cocktail" use="1" osc = "0"/>
+		<subchannel name="extbnb" use="1" osc="0"/>
+</channel>
+
+
+<!-- ############################# MultiSims #####################################################-->
+<MultisimFile treename="nue_intrinsic_tree" filename="/uboone/data/users/yatesla/othersys/inputs_to_sbnfit/arxiv/input_to_sbnfit_August2018.root" scale = ".572" maxevents ="20000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		associated_subchannel="nu_uBooNE_elike_intrinsic"
+	/>
+</MultisimFile>
+
+<MultisimFile treename="nue_cocktail_tree" filename="/uboone/data/users/yatesla/othersys/inputs_to_sbnfit/arxiv/input_to_sbnfit_August2018.root" scale = "5.46" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		associated_subchannel="nu_uBooNE_elike_cocktail"
+	/>
+</MultisimFile>
+
+<MultisimFile treename="nue_extbnb_tree" filename="/uboone/data/users/yatesla/othersys/inputs_to_sbnfit/arxiv/input_to_sbnfit_August2018.root" scale = "14.819" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		associated_subchannel="nu_uBooNE_elike_extbnb"
+	/>
+</MultisimFile>
+
+<MultisimFile treename="numu_cocktail_tree" filename="/uboone/data/users/yatesla/othersys/inputs_to_sbnfit/arxiv/input_to_sbnfit_August2018.root" scale = "5.46" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		associated_subchannel="nu_uBooNE_mlike_cocktail"
+	/>
+</MultisimFile>
+
+<MultisimFile treename="numu_extbnb_tree" filename="/uboone/data/users/yatesla/othersys/inputs_to_sbnfit/arxiv/input_to_sbnfit_August2018.root" scale = "14.819" maxevents ="10000" >
+	<parameters names = "ALL"/>
+	<branch
+		name="reco_energy"
+		type="double"
+		associated_subchannel="nu_uBooNE_mlike_extbnb"
+	/>
+</MultisimFile>
+
+<data path="" />
+<covariance file="" name="" />

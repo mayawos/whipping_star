@@ -169,7 +169,7 @@ int SBNosc::OscillateThis(std::string tag){
 						default:
 							break;
 					}
-
+					std::cout << "@channel_names.at(" << i << ")=" << channel_names.at(i) << " osc_amp_sq=" << osc_amp_sq << std::endl;
 					single_frequency.Scale(channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp );
 					single_frequency_square.Scale(channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp_sq );
 				}

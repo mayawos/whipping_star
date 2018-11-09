@@ -75,13 +75,11 @@ SBNgenerate::SBNgenerate(std::string xmlname, NeutrinoModel inModel ) : SBNconfi
 			trees.at(i)->SetBranchAddress( branch_variables.at(i).at(k)->name.c_str(), branch_variables.at(i).at(k)->GetValue() );
 
 			if(branch_variables.at(i).at(k)->GetOscillate()){
-				std::cout<<"Setting true branch variables"<<std::endl;
 				trees.at(i)->SetBranchAddress( branch_variables.at(i).at(k)->true_param_name.c_str(), branch_variables.at(i).at(k)->GetTrueValue() );
 				trees.at(i)->SetBranchAddress( branch_variables.at(i).at(k)->true_L_name.c_str(), branch_variables.at(i).at(k)->GetTrueL() );
 			}
 		}
 	}
-
 
 	std::cout<<"SBNgenerate::SBNgenerate\t|| -------------------------------------------------------------\n";
 	std::cout<<"SBNgenerate::SBNgenerate\t|| -------------------------------------------------------------\n";
@@ -112,7 +110,7 @@ SBNgenerate::SBNgenerate(std::string xmlname, NeutrinoModel inModel ) : SBNconfi
 
 			if( this->EventSelection(j) ){
 				for(int t=0; t<branch_variables.at(j).size();t++){
-					//std::cout<<"Starting branch : "<<branch_variables.at(j).at(t)->name<<" "<<branch_variables.at(j).at(t)->associated_hist<<std::endl;
+					std::cout<<"Starting branch : "<<branch_variables.at(j).at(t)->name<<" "<<branch_variables.at(j).at(t)->associated_hist<<std::endl;
 					//Need the histogram index, the value, the global bin...
 					int ih = spec_central_value.map_hist.at(branch_variables.at(j).at(t)->associated_hist);
 					double reco_var = *(static_cast<double*>(branch_variables.at(j).at(t)->GetValue()));
@@ -130,7 +128,7 @@ SBNgenerate::SBNgenerate(std::string xmlname, NeutrinoModel inModel ) : SBNconfi
 						spec_osc_sinsq.hist.at(ih).Fill(reco_var, global_weight*osc_Probability_sinsq);
 						spec_osc_sin.hist.at(ih).Fill(reco_var, global_weight*osc_Probability_sin);
 						spec_central_value.hist.at(ih).Fill(reco_var,global_weight);
-						//std::cout<<"Reco: "<<reco_var<<" True: "<<true_var<<" L: "<<true_L<<" "<<osc_Probability_sin<<" "<<osc_Probability_sinsq<<" glob: "<<global_weight<<std::endl;
+						std::cout<<"Reco: "<<reco_var<<" True: "<<true_var<<" L: "<<true_L<<" "<<osc_Probability_sin<<" "<<osc_Probability_sinsq<<" glob: "<<global_weight<<std::endl;
 					}else{
 						std::cout<<"Not Oscillated"<<std::endl;
 						spec_central_value.hist.at(ih).Fill(reco_var,global_weight);
