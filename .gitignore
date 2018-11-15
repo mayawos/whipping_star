@@ -4,3 +4,14 @@ build
 *.root
 *.so
 *.o
+*.log
+*.out
+*.err
+*.txt
+*.make
+*.includecache
+*.a
+*.marks
+Makefile
+build_gcc/*
+build_pgi/*

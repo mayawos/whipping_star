@@ -30,39 +30,39 @@
 namespace sbn{
 
 
-class SBNcls{
+  class SBNcls{
 
-	public:
+  public:
 
-	SBNcls(SBNspec *inh0, SBNspec * inh1, TMatrixD matin) : h0(inh0), h1(inh1), covariance_matrix(matin), chi(*inh0, matin){
-		which_sample = 0; //default Poisson
-		rangen= new TRandom3(0);
-	}
-	SBNcls(SBNspec *inh0, SBNspec * inh1) : h0(inh0), h1(inh1), chi(*inh0){
-		which_sample = 0; //default Poisson
-		rangen= new TRandom3(0);
-	}
+    SBNcls(SBNspec *inh0, SBNspec * inh1, TMatrixD matin) : h0(inh0), h1(inh1), covariance_matrix(matin), chi(*inh0, matin){
+      which_sample = 0; //default Poisson
+      rangen= new TRandom3(0);
+    }
+    SBNcls(SBNspec *inh0, SBNspec * inh1) : h0(inh0), h1(inh1), chi(*inh0){
+      which_sample = 0; //default Poisson
+      rangen= new TRandom3(0);
+    }
 
 
 
-	SBNspec * h0;
-	SBNspec * h1;
+    SBNspec * h0;
+    SBNspec * h1;
 	
-	SBNchi chi;
-	TMatrixD covariance_matrix;
+    SBNchi chi;
+    TMatrixD covariance_matrix;
 
-	TRandom3 * rangen;
+    TRandom3 * rangen;
 
-	int which_sample;
+    int which_sample;
 
 
-	/****************** Member Functions *************/
-	int CalcCLS(int,std::string);
-	int SetSampleCovariance();
-	int SetSamplePoisson();
+    /****************** Member Functions *************/
+    int CalcCLS(int,std::string);
+    int SetSampleCovariance();
+    int SetSamplePoisson();
     double pval2sig(double p);
 
-};
+  };
 
 
 };
