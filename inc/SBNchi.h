@@ -118,8 +118,10 @@ namespace sbn{
 
     SBNspec SampleCovariance(SBNspec *specin); 
     TH1D SamplePoissonVaryCore(SBNspec *specin, int num_MC);
+
     TH1D SamplePoissonVaryInput(SBNspec *specin, int num_MC);
     TH1D SamplePoissonVaryInput(SBNspec *specin, int num_MC, std::vector<double>*);
+
     TH1D SampleCovarianceVaryInput(SBNspec *specin, int num_MC);
     TH1D SampleCovarianceVaryInput(SBNspec *specin, int num_MC, std::vector<double>*);
 

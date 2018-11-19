@@ -4,7 +4,6 @@
 #include "SBNspec.h"
 #include "SBNosc.h"
 #include "SBNgenerate.h"
-#include "SBNcls.h"
 
 #define no_argument 0
 #define required_argument 1
@@ -76,9 +75,13 @@ int main(int argc, char* argv[])
     NeutrinoModel nullModel(0, 0, 0);
     SBNgenerate * bkgo = new SBNgenerate(xml,nullModel);
     SBNspec bkg = bkgo->spec_central_value;
-    bkg.Scale("fullosc",0.0);
-    bkg.WriteOut(tag+"_Bkg");
 
+    bkg.Scale("fullosc",0.0);
+    bkg.WriteOut(tag+"_Data");
+    
+    bkg.Scale("signal",0.0);
+    bkg.WriteOut(tag+"_Bkg");
+    
     // write precomputed spectrum with fullosc sample
     float mnu;
     for(int mi = 0; mi < 50; mi++){
@@ -90,47 +93,38 @@ int main(int argc, char* argv[])
 
       // on construction it makes 3 SBNspecs, 1 sin amp, 1 sin2 amp, 1 CV oscilatted
       SBNgenerate * gen = new SBNgenerate(xml,testModel);
+      gen->spec_central_value.Scale("signal",0.0);
 
       // Write them to file
       gen->WritePrecomputedOscSpecs(tag);
     }
-    return 1;
+    return 0;
   }
 
   //PART  2: Now that sin and sin2 libs are generated, calculate that sensitivity
   if(!gen){
-	
 		
     //SBNspec bkg(tag+"_Central.SBNspec.root",xml);
     //bkg.Scale("fullosc",0.0);
     //bkg.WriteOut(tag+"_Bkg");
     //return 1;
 
-    // Create our unoscillated background
+    // Create our unoscillated background + signal
+    SBNspec dat(tag+"_Data.SBNspec.root",xml);
     SBNspec bkg(tag+"_Bkg.SBNspec.root",xml);
 		
-    //Bring in our covariance matrix!
-    // Stats only.
-    TMatrixD *cov;
-    SBNchi uboone_chi_statsonly(bkg,true);
-
     // Stats + sys
     TFile * fsys = new TFile("DL.SBNcovar.root","read");
-    cov = (TMatrixD*)fsys->Get("frac_covariance_DL");
-    std::cout << "Frac Covariance Matrix" << std::endl;
-    cov->Print();
-    SBNchi uboone_chi(bkg,*cov);
+    TMatrixD *cov = (TMatrixD*)fsys->Get("frac_covariance_DL");
+
+    SBNchi uboone_chi(dat,*cov);
+    SBNchi uboone_chi_statsonly(dat,true);
 
     // Load up oscillation model
     NeutrinoModel nullModel(0,0,0);
     SBNosc osctrue(tag+"_Bkg.SBNspec.root",xml, nullModel);
-    //SBNosc osctrue(tag+".SBNspec.root",xml, nullModel);
 
-
-    //
-    // Nue appearance
-    //
-    // If we're doing nue appearance (with some nue disappearance)
+    // If we're doing nue appearance
     std::cout << "NUE APPEARANCE" << std::endl;
     float mnu, um, ue, sin22th;
     for(int mi = 0; mi < 50; mi++){
@@ -156,31 +150,14 @@ int main(int argc, char* argv[])
 	  
 	// oscillate the spectrum and add it to the bkg
 	osc.OscillateThis(tag);
-	  
 
 	// calculate chi w.r.t background uboone_chi w. stat err or w.o. stat err
 	double chi2 = uboone_chi.CalcChi(&osc);
 	double chi2_statsonly = uboone_chi_statsonly.CalcChi(&osc);
-	  
 
-	std::stringstream ss;
-	// ss << "poisson_sample_m_" << mnu << "_sin22th_" << sin22th << ".root";
-	ss << "poisson_sample_null_test.root";
-	TFile *tf_h1 = TFile::Open(ss.str().c_str(),"RECREATE");
-	tf_h1->cd();
-	std::cout << "Sampling poisson..." << std::endl;
-	int num_mc_events = 1e6;
-	SBNspec osc_spec = static_cast<SBNspec>(osc);
-	auto h1_pdf = uboone_chi.SamplePoissonVaryInput(&osc_spec, num_mc_events);
-	h1_pdf.SetName("pp");
-	h1_pdf.Write();
-	tf_h1->Close();
-	std::cout << "...sampled" << std::endl;
-	  
 	std::cout << "COUNT: " << (mi*50 + sin22thi)/float(50*.50) << "%" << std::endl;
 	std::cout << "ANS: " << std::setprecision(15) << pow(mnu,2) <<  " " << ue << " " << um << " " << 4*um*um*ue*ue << " " << chi2 << std::endl;
 	std::cout << "ANS_STATSONLY: " << std::setprecision(15) << pow(mnu,2) <<  " " << ue << " " << um << " " << 4*um*um*ue*ue << " " << chi2_statsonly << std::endl;
-	std::exit(1);
       }
     }
 

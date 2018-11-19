@@ -37,12 +37,14 @@ SBNcovariance::SBNcovariance(std::string xmlname) : SBNconfig(xmlname) {
     int good_event = 0;
 
     for(int fid=0; fid < num_files; ++fid) {
+        std::cout << "SBNcovariance::SBNcovariance\t||" << std::endl;
+        std::cout << "SBNcovariance::SBNcovariance\t|| @multisim_name=" << multisim_name.at(fid) << std::endl;
+
         const auto& fn = multisim_file.at(fid);
         files[fid] = TFile::Open(fn.c_str());
         trees[fid] = (TTree*)(files[fid]->Get(multisim_name.at(fid).c_str()));
         nentries[fid]= (int)trees.at(fid)->GetEntries();
 
-        std::cout << "SBNcovariance::SBNcovariance\t||" << std::endl;
         std::cout << "SBNcovariance::SBNcovariance\t|| TFile::Open() file=" << files[fid]->GetName() << " @" << files[fid] << std::endl;
 
         auto multisim_file_friend_treename_iter = multisim_file_friend_treename_map.find(fn);
@@ -98,6 +100,8 @@ SBNcovariance::SBNcovariance(std::string xmlname) : SBNconfig(xmlname) {
 
             variations_tmp.push_back(it.first);
         }
+	std::cout <<" SBNcovariance::SBNcovariance\t|| " << " next file" << std::endl;
+
     } // end fid
 
     std::sort(variations_tmp.begin(),variations_tmp.end());
