@@ -103,26 +103,26 @@ int main(int argc, char* argv[])
 
   //PART  2: Now that sin and sin2 libs are generated, calculate that sensitivity
   if(!gen){
-		
-    //SBNspec bkg(tag+"_Central.SBNspec.root",xml);
-    //bkg.Scale("fullosc",0.0);
-    //bkg.WriteOut(tag+"_Bkg");
-    //return 1;
 
-    // Create our unoscillated background + signal
-    SBNspec dat(tag+"_Data.SBNspec.root",xml);
-    SBNspec bkg(tag+"_Bkg.SBNspec.root",xml);
+    // Load up oscillation model
+    NeutrinoModel nullModel(0,0,0);
 		
+    // Create our data with fullosc=0
+    SBNspec data("DL.SBNspec.root",xml);
+    data.Scale("fullosc",0.0);
+    
     // Stats + sys
     TFile * fsys = new TFile("DL.SBNcovar.root","read");
     TMatrixD *cov = (TMatrixD*)fsys->Get("frac_covariance_DL");
 
-    SBNchi uboone_chi(dat,*cov);
-    SBNchi uboone_chi_statsonly(dat,true);
-
-    // Load up oscillation model
-    NeutrinoModel nullModel(0,0,0);
+    // Chi with data
+    SBNchi uboone_chi(data,*cov);
+    SBNchi uboone_chi_statsonly(data,true);
+    
+    // Background spectrum with fullosc=0 signal=0
     SBNosc osctrue(tag+"_Bkg.SBNspec.root",xml, nullModel);
+    osctrue.Scale("fullosc",0.0);
+    osctrue.Scale("signal",0.0);
 
     // If we're doing nue appearance
     std::cout << "NUE APPEARANCE" << std::endl;

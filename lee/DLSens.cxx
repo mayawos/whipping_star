@@ -76,6 +76,8 @@ int main(int argc, char* argv[])
     SBNgenerate * bkgo = new SBNgenerate(xml,nullModel);
     SBNspec bkg = bkgo->spec_central_value;
     bkg.Scale("fullosc",0.0);
+    bkg.Scale("signal",0.0);
+
     bkg.WriteOut(tag+"_Bkg");
 
     // write precomputed spectrum with fullosc sample
@@ -89,6 +91,7 @@ int main(int argc, char* argv[])
 
       // on construction it makes 3 SBNspecs, 1 sin amp, 1 sin2 amp, 1 CV oscilatted
       SBNgenerate * gen = new SBNgenerate(xml,testModel);
+      gen->spec_central_value.Scale("signal",0.0);
 
       // Write them to file
       gen->WritePrecomputedOscSpecs(tag);
@@ -99,14 +102,10 @@ int main(int argc, char* argv[])
   //PART  2: Now that sin and sin2 libs are generated, calculate that sensitivity
   if(!gen){
 	
-		
-    //SBNspec bkg(tag+"_Central.SBNspec.root",xml);
-    //bkg.Scale("fullosc",0.0);
-    //bkg.WriteOut(tag+"_Bkg");
-    //return 1;
-
     // Create our unoscillated background
     SBNspec bkg(tag+"_Bkg.SBNspec.root",xml);
+    bkg.Scale("fullosc",0.0);
+    bkg.Scale("signal",0.0);
 		
     //Bring in our covariance matrix!
     // Stats only.
@@ -119,11 +118,11 @@ int main(int argc, char* argv[])
     std::cout << "Frac Covariance Matrix" << std::endl;
     cov->Print();
     SBNchi uboone_chi(bkg,*cov);
-
+    
     // Load up oscillation model
     NeutrinoModel nullModel(0,0,0);
     SBNosc osctrue(tag+"_Bkg.SBNspec.root",xml, nullModel);
-    //SBNosc osctrue(tag+".SBNspec.root",xml, nullModel);
+    osctrue.Scale("signal",0.0);
 
     if(numudis){
       // If we're doing numu disappearance:
