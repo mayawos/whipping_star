@@ -15,9 +15,11 @@ namespace sbn {
  *		Constructors
  * ********************************************/
   
-  SBNchi::SBNchi(std::string xml) : SBNconfig(xml,false){};
+  SBNchi::SBNchi(std::string xml) : SBNconfig(xml,false) {};
 
-  SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNconfig(in.xmlname), core_spectrum(in){
+  SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNconfig(in.xmlname, false), core_spectrum(in){
+    is_verbose = false;
+
     last_calculated_chi = -9999999;
     is_stat_only= false;
 
@@ -213,7 +215,7 @@ namespace sbn {
     TMatrixD McI(num_bins_total_compressed,num_bins_total_compressed);
     McI.Zero();
 
-    std::cout<<otag<<" About to do a SVD decomposition"<<std::endl;
+    if(is_verbose)std::cout<<otag<<" About to do a SVD decomposition"<<std::endl;
     TDecompSVD svd(Mctotal);
     if (!svd.Decompose()) {
       std::cout <<otag<<"Decomposition failed, matrix not symettric?, has nans?" << std::endl;
@@ -228,7 +230,7 @@ namespace sbn {
 
     }
 
-    std::cout<<otag<<"SUCCESS! Inverted."<<std::endl;
+    if(is_verbose)    std::cout<<otag<<"SUCCESS! Inverted."<<std::endl;
     //McI.Print();
     vec_matrix_inverted = TMatrixDToVector(McI);
 
@@ -965,6 +967,93 @@ namespace sbn {
     return 0;
   }
 
+  std::vector<std::vector<double> > SBNchi::PerformCholoskyDecomposition(const SBNspec& specin) const{
+    TRandom3 * rangen = new TRandom3(0);
+
+    double tol = 1e-7;
+
+    TMatrixD U  = matrix_fractional_covariance;
+
+    for(int i =0; i<U.GetNcols(); i++)
+      {
+	for(int j =0; j<U.GetNrows(); j++)
+	  {
+	    if(isnan(U(i,j)))
+	      U(i,j) = 0;
+	    else
+	      U(i,j)=U(i,j)*specin.full_vector.at(i)*specin.full_vector.at(j);
+	  }
+      }
+
+    for(int i =0; i<U.GetNcols(); i++)
+      {
+	U(i,i) += specin.full_vector.at(i);
+      }
+
+    //First up, we have some problems with positive semi-definite and not positive definite
+    TMatrixDEigen eigen (U);
+    TVectorD eigen_values = eigen.GetEigenValuesRe();
+
+    int n_t = U.GetNcols();
+
+    for(int i=0; i< eigen_values.GetNoElements(); i++){
+      if(eigen_values(i)<=0){
+	if(fabs(eigen_values(i))< tol){
+	  std::cout<<"SBNchi::SampleCovariance\t|| cov has a very small, < "<<tol<<" , negative eigenvalue. Adding it back to diagonal of : "<<eigen_values(i)<<std::endl;
+
+	  for(int a =0; a<U.GetNcols(); a++){
+	    U(a,a) += eigen_values(i);
+	  }
+
+	}else{
+	  std::cout<<"SBNchi::SampleCovariance\t|| 0 or negative eigenvalues! error."<<std::endl;
+	  exit(EXIT_FAILURE);
+	}
+      }
+
+      if(fabs(eigen_values(i))< tol){
+	//SP_WARNING()<<"U has a very small, < "<<tol<<", eigenvalue which for some reason fails to decompose. Adding 1e9 to diagonal of U"<<std::endl;
+
+	for(int a =0; a<U.GetNcols(); a++){
+	  U(a,a) += tol;
+	}
+
+      }	
+    }
+
+
+    //Seconndly attempt a Cholosky Decomposition
+    TDecompChol * chol = new TDecompChol(U,0.1);
+    bool worked = chol->Decompose();
+
+    if(!worked){
+      std::cout<<"SBNchi::SampleCovariance\t|| Cholosky Decomposition Failed."<<std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    TMatrixT<double> upper_trian(n_t,n_t);
+    TMatrixT<double> local_matrix_lower_triangular(n_t,n_t);
+
+    upper_trian = chol->GetU();
+    local_matrix_lower_triangular = upper_trian;
+    local_matrix_lower_triangular.T();
+
+    std::vector<std::vector<double> > ret_vec_matrix_lower_triangular;
+    ret_vec_matrix_lower_triangular.resize(n_t, std::vector<double>(n_t));
+
+    for(int i=0; i < num_bins_total; i++){
+      for(int j=0; j < num_bins_total; j++){
+	ret_vec_matrix_lower_triangular[i][j] = local_matrix_lower_triangular[i][j];
+      }
+    }
+    
+    delete rangen;
+    delete chol;
+
+    return ret_vec_matrix_lower_triangular;
+  }
+
+
 
   TH1D SBNchi::SampleCovarianceVaryInput(SBNspec *specin, int num_MC){ 
     std::vector<double>  tmp;
@@ -1101,7 +1190,6 @@ namespace sbn {
 
   is_verbose = true;
 
-
   for(int i=0; i<num_MC; i++){
     if (i<(int)1e3) 
       std::cout << "@i=" << a_vec_chis[i] << std::endl;
@@ -1134,6 +1222,126 @@ namespace sbn {
 
   return ans;
 }
+
+std::vector<SBNspec> SBNchi::SpecReturnSCVI(const SBNspec& specin, const int num_MC, const std::string xml) const {
+
+  std::cout << "Cholosky" << std::endl;
+  const auto ret_vec_matrix_lower_triangular = PerformCholoskyDecomposition(specin);
+  
+  float** a_vec_matrix_lower_triangular = new float*[num_bins_total];
+  float** sampled_fullvector_v = new float*[num_MC];
+  float* a_specin = new float[num_bins_total];
+
+  
+  for(int i=0; i < num_MC; i++){
+    sampled_fullvector_v[i] = new float[num_bins_total];
+  }
+  
+  for(int i=0; i < num_bins_total; i++){
+    a_specin[i] = specin.full_vector[i];
+
+    a_vec_matrix_lower_triangular[i] = new float[num_bins_total];
+    for(int j=0; j < num_bins_total; j++){
+      a_vec_matrix_lower_triangular[i][j] = ret_vec_matrix_lower_triangular[i][j]; 
+    }
+
+  }
+  
+  TRandom3 * rangen = new TRandom3(0);
+  
+  float* gaus_sample = new float[num_bins_total];
+  float* sampled_fullvector = new float[num_bins_total];
+  
+  // #ifdef USE_GPU
+  //     unsigned long long seed[num_MC];
+  //     unsigned long long seq = 0ULL;
+  //     unsigned long long offset = 0ULL;
+  //     curandState_t state;
+
+  //     for(int i=0; i<num_MC; ++i) {
+  //       seed[i] = (int)rangen->Uniform(1e8);
+  //     }
+  // #endif
+
+    int local_num_bins_total = num_bins_total;
+    int local_num_MC = num_MC;
+    int local_num_channels = num_channels;
+
+    std::cout << "Sampling full vector" << std::endl;
+    // #ifdef USE_GPU
+    // #pragma acc parallel loop private(state,				\
+    // 				  gaus_sample[:local_num_bins_total],	\
+    // 				  sampled_fullvector[:local_num_bins_total]) \
+    //   copyin(a_specin[:local_num_bins_total],				\
+    //   a_vec_matrix_lower_triangular[:local_num_bins_total][:local_num_bins_total],\ 
+    //     seed[0:local_num_MC])						\
+    //     copy(sampled_fullvector_v[:local_num_MC][:local_num_bins_total])
+    // #endif
+      for(int i=0; i < local_num_MC;i++){
+	// #ifdef USE_GPU
+	// 	unsigned long long seed_sd = seed[i];
+	// 	curand_init(seed_sd, seq, offset, &state);
+      
+	// 	// this loop must be seq
+	// 	// for some reason to make "state" 
+	// 	// local and not part of CUDA shared memory      
+	// #pragma acc loop seq 
+	// 	for(int a=0; a<local_num_bins_total; a++) {
+	// 	  gaus_sample[a] = (double)curand_normal(&state);
+	// 	}
+	// #else
+	for(int a=0; a<local_num_bins_total; a++) {
+	  gaus_sample[a] = (double)rangen->Gaus(0,1);
+	}      
+	// #endif
+
+	  for(int j = 0; j < local_num_bins_total; j++){
+	    sampled_fullvector[j] = a_specin[j];
+	    for(int k = 0; k < local_num_bins_total; k++){
+	      sampled_fullvector[j] += a_vec_matrix_lower_triangular[j][k] * gaus_sample[k];
+	    }
+	    if(sampled_fullvector[j] < 0) 
+	      sampled_fullvector[j] = 0.0;
+	  
+	    sampled_fullvector_v[i][j] = sampled_fullvector[j];
+	  }
+	
+      }
+
+
+      std::cout << "Fill output" << std::endl;
+      // fill the output
+      std::vector<SBNspec> ret_v;
+      ret_v.reserve(num_MC);
+
+      std::vector<double> sampled_fullvector_as_double;
+      sampled_fullvector_as_double.resize(local_num_bins_total,0.0);
+      for(size_t i=0; i<num_MC; ++i) {
+	for(size_t j=0; j<local_num_bins_total; ++j) {
+	  sampled_fullvector_as_double[j] = sampled_fullvector_v[i][j];
+	}
+	SBNspec spec(sampled_fullvector_as_double,xml,false,-1);
+	ret_v.emplace_back(std::move(spec));
+      }
+
+      delete[] a_specin;
+
+      for(int i=0; i < num_bins_total; i++){
+	delete[] a_vec_matrix_lower_triangular[i];
+      }
+
+      for(int i=0; i < num_MC; i++){
+	delete[] sampled_fullvector_v[i];
+      }
+
+      delete[] a_vec_matrix_lower_triangular;
+      delete[] sampled_fullvector_v;
+      delete[] gaus_sample;
+      delete[] sampled_fullvector;
+      delete rangen;
+      return ret_v;
+}
+
 
 int SBNchi::CollapseVectorStandAlone(std::vector<double> * full_vector, std::vector<double> *collapsed_vector){
   for(int im = 0; im < num_modes; im++){

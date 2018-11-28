@@ -15,6 +15,7 @@
 #include "TFile.h"
 #include "TStyle.h"
 #include "TLine.h"
+#include "TStopwatch.h"
 
 #include "params.h"
 
@@ -42,6 +43,8 @@ namespace sbn{
     SBNchi(std::string);
 
     ~SBNchi(){}
+
+    TStopwatch watch;
 
     //This is the core spectra that you are comparing too. This is used to calculate covariance matrix and in a way is on the 'bottom' of the chi^2.
     SBNspec core_spectrum;
@@ -116,6 +119,7 @@ namespace sbn{
 
     //Cholosky related
     int PerformCholoskyDecomposition(SBNspec *specin);
+    std::vector<std::vector<double> > PerformCholoskyDecomposition(const SBNspec& specin) const;
 
     SBNspec SampleCovariance(SBNspec *specin); 
     TH1D SamplePoissonVaryCore(SBNspec *specin, int num_MC);
@@ -126,19 +130,14 @@ namespace sbn{
     TH1D SampleCovarianceVaryInput(SBNspec *specin, int num_MC);
     TH1D SampleCovarianceVaryInput(SBNspec *specin, int num_MC, std::vector<double>*);
 
+    std::vector<SBNspec> SpecReturnSCVI(const SBNspec& specin, const int num_MC, const std::string xml) const;
+    
     int CollapseVectorStandAlone(std::vector<double> * full_vector, std::vector<double> *collapsed_vector);
 
     int CollapseVectorStandAlone(double* full_vector, double* collapsed_vector);
     int CollapseVectorStandAlone(float* full_vector, float* collapsed_vector);
 
-
-
     int SingleValueDecomposition(double ** matrix, double ** U, double**V, double *single_values );
-
-
-
-
-
 
     //some plotting things
     TH2D* GetChiogram();

@@ -10,7 +10,7 @@ namespace sbn {
     SBNgenerate(xmlname, nullModel);
   }
   
-  SBNgenerate::SBNgenerate(std::string xmlname, NeutrinoModel inModel ) : SBNconfig(xmlname), nu_model(inModel) {
+  SBNgenerate::SBNgenerate(std::string xmlname, NeutrinoModel inModel ) : SBNconfig(xmlname, false), nu_model(inModel) {
 
     std::map<std::string, int> parameter_sims;
 
@@ -38,7 +38,7 @@ namespace sbn {
 	  std::string treefriendname = (multisim_file_friend_treename_map.at(multisim_file.at(i))).at(k);
 	  std::string treefriendfile = (multisim_file_friend_map.at(multisim_file.at(i))).at(k);
 
-	  std::cout<<"SBNmultisim::SBNmultisim\t|| Adding a friend tree  "<< treefriendfile<<" to file "<<multisim_file.at(i)<<std::endl;
+	  if (is_verbose) std::cout<<"SBNmultisim::SBNmultisim\t|| Adding a friend tree  "<< treefriendfile<<" to file "<<multisim_file.at(i)<<std::endl;
 
 	  trees.at(i)->AddFriend( treefriendname.c_str()   ,  treefriendfile.c_str()   );
 	}
@@ -58,7 +58,7 @@ namespace sbn {
       trees.at(i)->SetBranchAddress("weights", &f_weights->at(i) );
       delete f_weights->at(i);	f_weights->at(i) = 0;
       for(int k=0; k<branch_variables.at(i).size(); k++){
-	std::cout<<"Setting Branch: "<<branch_variables.at(i).at(k)->name<<std::endl;
+	if (is_verbose) std::cout<<"Setting Branch: "<<branch_variables.at(i).at(k)->name<<std::endl;
 	trees.at(i)->SetBranchAddress( branch_variables.at(i).at(k)->name.c_str(), branch_variables.at(i).at(k)->GetValue() );
 
 	if(branch_variables.at(i).at(k)->GetOscillate()){
@@ -68,8 +68,8 @@ namespace sbn {
       }
     }
 
-    std::cout<<"SBNgenerate::SBNgenerate\t|| -------------------------------------------------------------\n";
-    std::cout<<"SBNgenerate::SBNgenerate\t|| -------------------------------------------------------------\n";
+    if (is_verbose) std::cout<<"SBNgenerate::SBNgenerate\t|| -------------------------------------------------------------\n";
+    if (is_verbose) std::cout<<"SBNgenerate::SBNgenerate\t|| -------------------------------------------------------------\n";
     std::vector<double> base_vec (spec_central_value.num_bins_total,0.0);
 
     for(int j=0;j<num_files;j++){
@@ -81,7 +81,9 @@ namespace sbn {
 	trees.at(j)->GetEntry(i);
 	std::map<std::string, std::vector<double>> * thisfWeight = f_weights->at(j);
 
-	if(i%100==0) std::cout<<"SBNgenerate::SBNgenerate\t|| On event: "<<i<<" of "<<nentries[j]<<" from File: "<<multisim_file[j]<<std::endl;
+	if(i%100==0)  {
+	  if (is_verbose) std::cout<<"SBNgenerate::SBNgenerate\t|| On event: "<<i<<" of "<<nentries[j]<<" from File: "<<multisim_file[j]<<std::endl;
+	}
 
 	double global_weight = 1;
 	global_weight = global_weight*multisim_scale.at(j);
