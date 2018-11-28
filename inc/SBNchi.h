@@ -16,7 +16,6 @@
 #include "TStyle.h"
 #include "TLine.h"
 
-#include <ctime>
 #include "params.h"
 
 #include "TDecompChol.h"
@@ -41,7 +40,8 @@ namespace sbn{
     //Initialise a stat_only one;
     SBNchi(SBNspec, bool is_stat_only);
     SBNchi(std::string);
-	
+
+    ~SBNchi(){}
 
     //This is the core spectra that you are comparing too. This is used to calculate covariance matrix and in a way is on the 'bottom' of the chi^2.
     SBNspec core_spectrum;
@@ -97,6 +97,7 @@ namespace sbn{
     //Return chi^2 from eith a SBnspec (RECCOMENDED as it checks to make sure xml compatable)
     //double CalcChi(SBNspec sigSpec);
     double CalcChi(SBNspec *sigSpec);
+    double CalcChi(const SBNspec& sigSpec) const;
     // Or a vector
     double CalcChi(std::vector<double> );
     //Or you are taking covariance from one, and prediciton from another

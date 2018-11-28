@@ -67,38 +67,9 @@ int main(int argc, char* argv[])
 
   std::string tag = "DL";
 
-
-  //PART 1: precompute all of our sin and sin2 amplitudes so we don't need to later
-  if(gen){
-
-    // write background spectrum, fullosc=0
-    NeutrinoModel nullModel(0, 0, 0);
-    SBNgenerate * bkgo = new SBNgenerate(xml,nullModel);
-    SBNspec bkg = bkgo->spec_central_value;
-
-    bkg.Scale("fullosc",0.0);
-    bkg.WriteOut(tag+"_Data");
-    
-    bkg.Scale("signal",0.0);
-    bkg.WriteOut(tag+"_Bkg");
-    
-    // write precomputed spectrum with fullosc sample
-    float mnu;
-    for(int mi = 0; mi < 50; mi++){
-      mnu = pow(10.,(float(mi)/50.*TMath::Log10(10./.1) + TMath::Log10(.1)));
-
-      //Model: mnu, ue4, um4
-      //we're precomputing, so we don't really care about the u's
-      NeutrinoModel testModel(mnu, 1, 1);
-
-      // on construction it makes 3 SBNspecs, 1 sin amp, 1 sin2 amp, 1 CV oscilatted
-      SBNgenerate * gen = new SBNgenerate(xml,testModel);
-      gen->spec_central_value.Scale("signal",0.0);
-
-      // Write them to file
-      gen->WritePrecomputedOscSpecs(tag);
-    }
-    return 0;
+  if (gen) {
+    std::cout << "You cannot use GEN with this code" << std::endl;
+    return 1;
   }
 
   //PART  2: Now that sin and sin2 libs are generated, calculate that sensitivity
@@ -110,7 +81,8 @@ int main(int argc, char* argv[])
     // Create our data with fullosc=0
     SBNspec data("DL.SBNspec.root",xml);
     data.Scale("fullosc",0.0);
-    
+    data.Scale("fullosc2",0.0);
+ 
     // Stats + sys
     TFile * fsys = new TFile("DL.SBNcovar.root","read");
     TMatrixD *cov = (TMatrixD*)fsys->Get("frac_covariance_DL");
@@ -122,6 +94,7 @@ int main(int argc, char* argv[])
     // Background spectrum with fullosc=0 signal=0
     SBNosc osctrue(tag+"_Bkg.SBNspec.root",xml, nullModel);
     osctrue.Scale("fullosc",0.0);
+    osctrue.Scale("fullosc2",0.0);
     osctrue.Scale("signal",0.0);
 
     // If we're doing nue appearance

@@ -1,11 +1,9 @@
 #ifndef SBNCOVARIANCE_H_
 #define SBNCOVARIANCE_H_
 
-#include <cmath>
 #include <vector>
 #include <iostream>
 #include <map>
-#include <ctime>
 
 #include "SBNspec.h"
 #include "SBNconfig.h"
@@ -43,6 +41,9 @@ namespace sbn{
     bool is_small_negative_eigenvalue;
 
   public:
+
+    SBNcovariance() {}
+    ~SBNcovariance() {}
 		
     SBNspec spec_central_value;	
 

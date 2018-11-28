@@ -10,7 +10,7 @@
 /**********************************************
  *	This is a less general 3+N osc spectrum
  * *******************************************/
-namespace sbn{
+namespace sbn {
   // Note for this to work, you need to have precomputed spectra in data/precomp
   // Ability to precompute is not yet included!
 
@@ -20,8 +20,8 @@ namespace sbn{
   // to 2 sig figures
 
 
-  class SBNosc : public SBNspec{
-  protected:
+  class SBNosc : public SBNspec {
+
   public:
     //this is the structure contains 3+N oscillation parameters (find in prob.h)
     struct NeutrinoModel working_model;	
@@ -32,6 +32,7 @@ namespace sbn{
 
     SBNosc(std::string, std::string); //constructor
     SBNosc(std::string, std::string, NeutrinoModel); //constructor
+    ~SBNosc() {}
 
     //find all the frequencies! Needs to know if a frequency corresponds to 41 51 54..etc.. so thats the int
     std::vector< std::pair <double, int>> mass_splittings;	

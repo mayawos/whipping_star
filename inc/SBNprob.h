@@ -15,65 +15,66 @@
 
 namespace sbn{
 
-	struct SBNprob{
-		public:	
-			SBNprob(int);
-			SBNprob(int, std::vector<double>,std::vector<double>, std::vector<double>);
+  struct SBNprob{
+  public:	
+    SBNprob(int);
+    SBNprob(int, std::vector<double>,std::vector<double>, std::vector<double>);
+    ~SBNprob() {}
 
-			int init();
+    int init();
 
-			double t12,t13,t23,t14,t24,t34;
-			double dm21, dm31,dm41;
-			double ms1, ms2,ms3,ms4;
-			double d13,d24,d34;
+    double t12,t13,t23,t14,t24,t34;
+    double dm21, dm31,dm41;
+    double ms1, ms2,ms3,ms4;
+    double d13,d24,d34;
 
-			double potential_cc,potential_nc;
-			bool use_matter_effect;
-			bool use_nc_matter_effect;
-			bool use_antineutrino_mode;
+    double potential_cc,potential_nc;
+    bool use_matter_effect;
+    bool use_nc_matter_effect;
+    bool use_antineutrino_mode;
 
-			int dimension;
-			double convert_ev_to_gev;	
-			double convert_km_to_inverse_gev;
-			double rho;
-			double degree;
-			double num_neutrinos;
-			double conversion_parameter;
+    int dimension;
+    double convert_ev_to_gev;	
+    double convert_km_to_inverse_gev;
+    double rho;
+    double degree;
+    double num_neutrinos;
+    double conversion_parameter;
 
-			double GaussianPDF(double x, double mean, double sigma);
+    double GaussianPDF(double x, double mean, double sigma);
 
-			ComplexMatrix hamiltonian;
-			ComplexMatrix hamil_kin;
-			ComplexMatrix potential;
-			ComplexMatrix utvu;
-			ComplexMatrix U;
-			ComplexMatrix u_conj;	
+    ComplexMatrix hamiltonian;
+    ComplexMatrix hamil_kin;
+    ComplexMatrix potential;
+    ComplexMatrix utvu;
+    ComplexMatrix U;
+    ComplexMatrix u_conj;	
 			
-			//New methodology
-			ComplexMatrix u_h0_ut;
+    //New methodology
+    ComplexMatrix u_h0_ut;
 
-			int SetMatterEffect(bool);
-			int SetAntiNeutrinoMode(bool);
-			int SetNCMatterEffect(bool);
-			int SetParameters( std::vector<double>,std::vector<double>, std::vector<double>);
+    int SetMatterEffect(bool);
+    int SetAntiNeutrinoMode(bool);
+    int SetNCMatterEffect(bool);
+    int SetParameters( std::vector<double>,std::vector<double>, std::vector<double>);
 
-			double ProbabilityVacuumExact(int a, int b ,double E, double L);
-			double ProbabilityVacuumExact(int a, int b, int nuornubar, double E, double L );
+    double ProbabilityVacuumExact(int a, int b ,double E, double L);
+    double ProbabilityVacuumExact(int a, int b, int nuornubar, double E, double L );
 			
-			double ProbabilityMatterExact(int a, int b ,int nuornubar, double E, double L);
-			double ProbabilityMatterExact(int a, int b ,double E, double L);
+    double ProbabilityMatterExact(int a, int b ,int nuornubar, double E, double L);
+    double ProbabilityMatterExact(int a, int b ,double E, double L);
 
 
-			//double ProbabilityGlobes(int a, int b, int panti, double E, double L );
+    //double ProbabilityGlobes(int a, int b, int panti, double E, double L );
 
-			double ProbabilityMatterExactSmear(int, int ,double, double, double p, double n);
+    double ProbabilityMatterExactSmear(int, int ,double, double, double p, double n);
 
-			int PlotProbabilityMatter(int a, int b, double Emin, double Emax, double L, double percen, double n, std::ofstream *filestream);
+    int PlotProbabilityMatter(int a, int b, double Emin, double Emax, double L, double percen, double n, std::ofstream *filestream);
 
-			std::vector<double> GetTernaryPoints(int start_flavour, double Energy, double Length);
+    std::vector<double> GetTernaryPoints(int start_flavour, double Energy, double Length);
 
 
-	};
+  };
 
 
 

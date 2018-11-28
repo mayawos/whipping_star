@@ -27,8 +27,16 @@
 #include "TMatrixDEigen.h"
 #include "TMatrixDSymEigen.h"
 
-namespace sbn{
+template <typename T>
+std::string to_string_prec(const T a_value, const int n = 6)
+{
+  std::ostringstream out;
+  out <<std::fixed<< std::setprecision(n) << a_value;
+  return out.str();
+}
 
+
+namespace sbn{
 
   class SBNcls{
 
@@ -43,8 +51,8 @@ namespace sbn{
       rangen= new TRandom3(0);
     }
 
-
-
+    ~SBNcls(){} 
+    
     SBNspec * h0;
     SBNspec * h1;
 	

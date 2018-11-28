@@ -7,7 +7,6 @@
 #include <iostream>
 #include <sstream>
 #include <map>
-#include <time.h>
 #include <numeric>
 #include <algorithm>
 #include <iomanip>
@@ -17,17 +16,8 @@
 #include "tinyxml.h"
 #include "branch_variable.h"
 
-template <typename T>
-std::string to_string_prec(const T a_value, const int n = 6)
-{
-  std::ostringstream out;
-  out <<std::fixed<< std::setprecision(n) << a_value;
-  return out.str();
-}
 
-
-
-namespace sbn{
+namespace sbn {
   // All declarations are within the namespace scope.
 
   //Order is important, "xml order" means that we loop over all modes,detectors channels and subchannels, But finished each mode,det and channels before moving on.
@@ -48,15 +38,19 @@ namespace sbn{
 
   class SBNconfig {
 
-  protected:
-	
   public:
 	
     //Constructors
     SBNconfig(std::string,bool);
     SBNconfig(std::string);
-    SBNconfig(){};
-    SBNconfig(std::vector<std::string>, std::vector<std::string>, std::vector<std::string>, std::vector<std::vector<std::string>>, std::vector<std::vector<double>>);
+    SBNconfig() {}
+    SBNconfig(std::vector<std::string>,
+	      std::vector<std::string>,
+	      std::vector<std::string>,
+	      std::vector<std::vector<std::string>>,
+	      std::vector<std::vector<double>>);
+    ~SBNconfig(){}
+
     //This is going to be a manual Setup thing
 
     //Some stringsteam stuff
@@ -65,7 +59,6 @@ namespace sbn{
     // Fullnames is kinda important, it contains all the concatanated names of all individual histograms that have been configured with the "use=1" attribute
     // The order is IMPORTANT its the same as defined in xml
     std::vector<std::string> fullnames;
-
 
     //Bools to contain what is and is not in the xml
     bool has_oscillation_patterns;
@@ -100,19 +93,18 @@ namespace sbn{
     std::string correlation_matrix_rootfile;
     std::string correlation_matrix_name;
 
-	
     //the xml names are the way we track which channels and subchannels we want to use later
     std::vector<std::string> mode_names; 			
     std::vector<std::string> detector_names; 		
     std::vector<std::string> channel_names; 		
     std::vector<std::string> channel_units; 		
-    std::vector<std::vector<std::string >> subchannel_names; 
+    std::vector<std::vector<std::string> > subchannel_names; 
 
     // vector Bools for turning on and off certain modes/detectors..etc..
     std::vector<bool> mode_bool; 
     std::vector<bool> detector_bool; 
     std::vector<bool> channel_bool; 
-    std::vector<std::vector<bool >> subchannel_bool; 
+    std::vector<std::vector<bool> > subchannel_bool; 
 
     std::vector<int> channel_used;
     std::vector<int> detector_used;
@@ -140,16 +132,10 @@ namespace sbn{
     std::map<std::string,std::vector<std::string>> multisim_file_friend_map;
     std::map<std::string,std::vector<std::string>> multisim_file_friend_treename_map;
 
-
     std::vector<int> multisim_maxevents;	
     std::vector<double> multisim_scale;	
 	
-    std::vector<double> pot_scaling;
-    std::vector<double> pot;
-	
-    std::vector<std::vector<std::string>> parameter_names;	//obsolete code
     std::vector<std::vector<BranchVariable*>> branch_variables;
-
 
     /*********************************** Member Functions ********************************/	
 

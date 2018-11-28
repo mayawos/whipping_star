@@ -58,10 +58,6 @@ message("@main GSL_CXX_FLAGS: ${GSL_CXX_FLAGS}")
 message("")
 
 if(USE_GPU)
-    #set(CMAKE_MAGMA_CXX_FLAGS "-$ENV{MAGMA_CFLAGS} $ENV{MAGMA_LIB}")
-    #message("@main CMAKE_MAGMA_CXX_FLAGS: ${CMAKE_MAGMA_CXX_FLAGS}")
-    #message("")
-    #set(CMAKE_GPU_CXX_FLAGS "-noswitcherror -ta=tesla:nollvm -Mcudalib=curand -Minfo=accel -acc -w ${CMAKE_MAGMA_CXX_FLAGS}" )
     set(CMAKE_GPU_CXX_FLAGS "-noswitcherror -ta=tesla:nollvm -Mcudalib=curand -Minfo=accel -acc -w" )
 ENDIF()
 
@@ -77,6 +73,7 @@ ENDIF()
 
 set (CMAKE_ACC_CXX_FLAGS "${CMAKE_GPU_CXX_FLAGS} ${CMAKE_SO_CXX_FLAGS}")
 set (CMAKE_PCC_CXX_FLAGS "-ta=multicore -Minfo=accel -acc -w ${CMAKE_SO_CXX_FLAGS}")
+set (CMAKE_OMP_CXX_FLAGS "-mp -acc -w ${CMAKE_SO_CXX_FLAGS}")
 
 set (CMAKE_CXX_FLAGS "${CMAKE_ACC_CXX_FLAGS}")
 
@@ -99,6 +96,11 @@ message("")
 add_subdirectory(tinyxml)
 add_subdirectory(src)
 add_subdirectory(examples)
+
+unset(CMAKE_CXX_FLAGS)
+set(CMAKE_CXX_FLAGS "${CMAKE_OMP_CXX_FLAGS}")
+message("@main CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 add_subdirectory(lee)
+
 
 

@@ -52,9 +52,11 @@ int main(int argc, char* argv[])
 
   SBNspec sig("DL.SBNspec.root",xml);
   sig.Scale("fullosc",0.0);
+  sig.Scale("oscfull",0.0);
   
   SBNspec bkg("DL.SBNspec.root",xml);
   bkg.Scale("fullosc",0.0);
+  bkg.Scale("oscfull",0.0);
   bkg.Scale("signal",0.0);
   
   // Stats + sys

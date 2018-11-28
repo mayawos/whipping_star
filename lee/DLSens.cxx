@@ -75,10 +75,11 @@ int main(int argc, char* argv[])
     NeutrinoModel nullModel(0, 0, 0);
     SBNgenerate * bkgo = new SBNgenerate(xml,nullModel);
     SBNspec bkg = bkgo->spec_central_value;
+    bkg.Scale("oscfull",0.0);
     bkg.Scale("fullosc",0.0);
     bkg.Scale("signal",0.0);
 
-    bkg.WriteOut(tag+"_Bkg");
+    bkg.WriteOut("DLSens_Bkg");
 
     // write precomputed spectrum with fullosc sample
     float mnu;
@@ -91,7 +92,12 @@ int main(int argc, char* argv[])
 
       // on construction it makes 3 SBNspecs, 1 sin amp, 1 sin2 amp, 1 CV oscilatted
       SBNgenerate * gen = new SBNgenerate(xml,testModel);
-      gen->spec_central_value.Scale("signal",0.0);
+
+      gen->spec_osc_sinsq.Scale("signal",0.0);
+      gen->spec_osc_sin.Scale("signal",0.0);
+
+      gen->spec_osc_sinsq.Scale("fullosc",0.0);
+      gen->spec_osc_sin.Scale("fullosc",0.0);
 
       // Write them to file
       gen->WritePrecomputedOscSpecs(tag);
@@ -102,132 +108,78 @@ int main(int argc, char* argv[])
   //PART  2: Now that sin and sin2 libs are generated, calculate that sensitivity
   if(!gen){
 	
-    // Create our unoscillated background
-    SBNspec bkg(tag+"_Bkg.SBNspec.root",xml);
+    // Read background
+    SBNspec bkg("DLSens_Bkg.SBNspec.root",xml);
     bkg.Scale("fullosc",0.0);
+    bkg.Scale("oscfull",0.0);
     bkg.Scale("signal",0.0);
 		
-    //Bring in our covariance matrix!
-    // Stats only.
+    // Stats only covariance matrix
     TMatrixD *cov;
     SBNchi uboone_chi_statsonly(bkg,true);
 
-    // Stats + sys
+    // Stats + Sys covariance matrix
     TFile * fsys = new TFile("DL.SBNcovar.root","read");
     cov = (TMatrixD*)fsys->Get("frac_covariance_DL");
     std::cout << "Frac Covariance Matrix" << std::endl;
     cov->Print();
     SBNchi uboone_chi(bkg,*cov);
     
-    // Load up oscillation model
+    // Set no oscillations model
     NeutrinoModel nullModel(0,0,0);
-    SBNosc osctrue(tag+"_Bkg.SBNspec.root",xml, nullModel);
+    SBNosc osctrue("DLSens_Bkg.SBNspec.root",xml, nullModel);
+    osctrue.Scale("fullosc",0.0);
+    osctrue.Scale("oscfull",0.0);
     osctrue.Scale("signal",0.0);
-
-    if(numudis){
-      // If we're doing numu disappearance:
-      std::cout << "NUMU DISAPPEARANCE" <<  std::endl;
-      float mnu, um, ue;
-      for(int mi = 0; mi < 50; mi++){
-	for(int umi = 0; umi < 50; umi++){
-
-	  um = umi/float(100)*(.5);
-	  mnu = pow(10.,(mi/float(50)*TMath::Log10(10./.1) + TMath::Log10(.1)));
-	  NeutrinoModel testModel(mnu,0,um);
-	  std::cout << "NU MODEL: " << mnu << " " << ue << " " << um << std::endl;
-
-	  SBNosc osc = osctrue;
-	  osc.LoadModel(testModel);
-	  osc.OscillateThis(tag);
-
-	  double chi2 = uboone_chi.CalcChi(&osc);
-	  double chi2_statsonly = uboone_chi_statsonly.CalcChi(&osc);
-	  std::cout << "COUNT: " << (mi*100 + umi)/float(100) << "%" << std::endl;
-	  std::cout << "ANS: " << pow(mnu,2) << " " << um << " " << 4*um*um*(1-um*um) << " " << chi2 << std::endl;
-	  std::cout << "ANS_STATSONLY: " << pow(mnu,2) << " " << um << " " << 4*um*um*(1-um*um) << " " << chi2_statsonly << std::endl;
-	}
-      }
-    }
-    else if(combined){
-      std::cout << "COMBINED FIT" <<  std::endl;
-      float mnu, um, ue;
-      int mass_end;
-      if(mass_start > 0){
-	mass_end = mass_start + 1;
-      }
-      else{
-	mass_start = 0;
-	mass_end = 50;
-      }
-
-      for(int mi = mass_start; mi < mass_end; mi++){
-	for(int umi = 0; umi < 25; umi++){
-	  for(int uei = 0; uei < 25; uei++){
-
-	    um = pow(10.,(umi/float(25)*TMath::Log10(1./1e-3) + TMath::Log10(1e-3)));
-	    ue = pow(10.,(uei/float(25)*TMath::Log10(1./1e-3) + TMath::Log10(1e-3)));
-	    mnu = pow(10.,(mi/float(50)*TMath::Log10(10./.1) + TMath::Log10(.1)));
-	    NeutrinoModel testModel(mnu,ue,um);
-	    std::cout << "NU MODEL: " << mnu << " " << ue << " " << um << std::endl;
-
-	    SBNosc osc = osctrue;
-	    osc.LoadModel(testModel);
-	    osc.OscillateThis(tag);
-
-	    if(umi == 7 && mi == 7 ){
-	      osc.WriteOut("osctest");
-	      bkg.WriteOut("bkgtest");
-	    }
-
-	    double chi2 = uboone_chi.CalcChi(&osc);
-	    double chi2_statsonly = uboone_chi_statsonly.CalcChi(&osc);
-	    std::cout << "COUNT: " << (mi*25*25 + umi*25 + uei)/float(50*25*25/100) << "%" << std::endl;
-	    std::cout << "ANS: " << pow(mnu,2) << " " << um << " " << ue << " " << chi2 << std::endl;
-	    std::cout << "ANS_STATSONLY: " << pow(mnu,2) << " " << um << " " << ue << " " << chi2_statsonly << std::endl;
-	  }
-	}
-      }
-    } // end combined
+    osctrue.has_been_scaled = false;
 
     //
     // Nue appearance
     //
-    else{
-      // If we're doing nue appearance
-      std::cout << "NUE APPEARANCE" << std::endl;
-      float mnu, um, ue, sin22th;
-      for(int mi = 0; mi < 50; mi++){
-	for(int sin22thi = 0; sin22thi < 50; sin22thi++){
 
-	  sin22th = pow(10.,(sin22thi/float(50)*TMath::Log10(1./1e-5) + TMath::Log10(1e-5)));
-	  mnu = pow(10.,(mi/float(50)*TMath::Log10(10./.1) + TMath::Log10(.1)));
-	  ue = pow(sin22th/float(4),.5);
-	  um = 1.f;	// set sin22th(mu mu) = 0
-	  NeutrinoModel testModel(mnu,ue,um);
+    // If we're doing nue appearance
+    std::cout << "NUE APPEARANCE" << std::endl;
+    float mnu, um, ue, sin22th;
+    for(int mi = 0; mi < 50; mi++){
+      for(int sin22thi = 0; sin22thi < 50; sin22thi++){
 
-	  std::cout << "NU MODEL: " << mnu << " " << ue << " " << um << std::endl;
+	sin22th = pow(10.,(sin22thi/float(50)*TMath::Log10(1./1e-5) + TMath::Log10(1e-5)));
+	mnu = pow(10.,(mi/float(50)*TMath::Log10(10./.1) + TMath::Log10(.1)));
+	ue = pow(sin22th/float(4),.5);
+	um = 1.f;	// set sin22th(mu mu) = 0
+	NeutrinoModel testModel(mnu,ue,um);
+
+	std::cout << "NU MODEL: " << mnu << " " << ue << " " << um << std::endl;
 					
-	  // osctrue = background spectrum
-	  SBNosc osc = osctrue;
+	// osctrue = background spectrum
+	SBNosc osc = osctrue;
 	  
-	  // set numu disappearance, nue app & dis
-	  // but doesn't matter since um = 1, no numu disappearance
-	  osc.SetBothMode();
+	// set numu disappearance, nue app & dis
+	// but doesn't matter since um = 1, no numu disappearance
+	osc.SetBothMode();
 	  
-	  // set the oscillation model
-	  osc.LoadModel(testModel);
+	// set the oscillation model
+	osc.LoadModel(testModel);
 	  
-	  // oscillate the spectrum and add it to the bkg
-	  osc.OscillateThis(tag);
+	// oscillate the spectrum and add it to the bkg
+	osc.OscillateThis(tag);
 
-	  // calculate chi w.r.t background uboone_chi w. stat err or w.o. stat err
-	  double chi2 = uboone_chi.CalcChi(&osc);
-	  double chi2_statsonly = uboone_chi_statsonly.CalcChi(&osc);
+	// calculate chi w.r.t background uboone_chi w. stat err or w.o. stat err
+	double chi2 = uboone_chi.CalcChi(&osc);
+	double chi2_statsonly = uboone_chi_statsonly.CalcChi(&osc);
 
-	  std::cout << "COUNT: " << (mi*50 + sin22thi)/float(50*.50) << "%" << std::endl;
-	  std::cout << "ANS: " << std::setprecision(15) << pow(mnu,2) <<  " " << ue << " " << um << " " << 4*um*um*ue*ue << " " << chi2 << std::endl;
-	  std::cout << "ANS_STATSONLY: " << std::setprecision(15) << pow(mnu,2) <<  " " << ue << " " << um << " " << 4*um*um*ue*ue << " " << chi2_statsonly << std::endl;
+	std::cout << "COUNT: " << (mi*50 + sin22thi)/float(50*.50) << "%" << std::endl;
+	std::cout << "ANS: " << std::setprecision(15) << pow(mnu,2) <<  " " << ue << " " << um << " " << 4*um*um*ue*ue << " " << chi2 << std::endl;
+	std::cout << "ANS_STATSONLY: " << std::setprecision(15) << pow(mnu,2) <<  " " << ue << " " << um << " " << 4*um*um*ue*ue << " " << chi2_statsonly << std::endl;
+
+	if (mi==25 and sin22thi==25) {
+	  std::stringstream ss;
+	  ss.str("");
+	  ss << "DLSens_25_25";
+	  SBNspec spec = static_cast<SBNspec>(osc);    
+	  spec.WriteOut(ss.str());
 	}
+
       }
     }
 

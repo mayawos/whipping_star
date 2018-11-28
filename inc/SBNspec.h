@@ -1,29 +1,27 @@
 #ifndef SBNSPEC_H_
 #define SBNSPEC_H_
 
-#include <cmath>
 #include <vector>
 #include <iostream>
-#include "SBNconfig.h"
-#include <TH1D.h>
 #include <string>
-#include <TF1.h>
-#include <THStack.h>
-#include <TLegend.h>
-#include <TCanvas.h>
-#include <TLine.h>
-#include <TStyle.h>
-
-//#include <TROOT.h>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <numeric>
 
-#include <ctime>
-#include <TFile.h>
+#include "SBNconfig.h"
+
+#include "TH1D.h"
+#include "TF1.h"
+#include "THStack.h"
+#include "TLegend.h"
+#include "TCanvas.h"
+#include "TLine.h"
+#include "TStyle.h"
+
+#include "TFile.h"
 #include "params.h"
-#include <TRandom3.h>
+#include "TRandom3.h"
 
 
 template <typename T> 
@@ -40,17 +38,15 @@ std::vector<size_t> SortIndexes(const std::vector<T> &v) {
   return idx; 
 }
 
-namespace sbn{
+namespace sbn {
   //This is the basic class that holds all spectral information in whatever reco or true variable you have decided you want in the xml files.
   // Inherits from SBNconfig as thats how its all configured/kept equal! :
 
 
 
-  class SBNspec : public SBNconfig{
+  class SBNspec : public SBNconfig {
 
   public:
-
-
 
     SBNspec() {};
     SBNspec(std::string); //Load in config file EMPTY hists
@@ -62,19 +58,18 @@ namespace sbn{
 
     SBNspec(std::vector<double> input_full_vec, std::string whichxml);
     SBNspec(std::vector<double> input_full_vec, std::string whichxml, bool isverbose);
-
+    ~SBNspec() {}
 
 
     // this vector of hists contains all spectra used.
     // The order of filling is the same as the order defined in xml file!
-    std::vector<TH1D > hist;
+    std::vector<TH1D> hist;
     std::map<std::string, int> map_hist;
 
     //This is the full concatanated vector (in xml order)	
     std::vector<double > full_vector;
     //This is the compessed vector, collapsing all subchannels down to a single channel
     std::vector<double > collapsed_vector;
-
 
 
     //need to store a history of the scales for oscillation purposes.  FIX THIS
@@ -130,7 +125,7 @@ namespace sbn{
     int PrintFullVector();
     int PrintCollapsedVector();
     //WriteOut saves all to an externam rootfile, each individual subchannel and a stacked channel plot.
-    int WriteOut(std::string);
+    int WriteOut(const std::string& tag) const;
 			
     int CompareSBNspecs(SBNspec * compsec, std::string tag);
   };

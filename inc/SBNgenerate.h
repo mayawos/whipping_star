@@ -1,7 +1,6 @@
 #ifndef SBNGENERATE_H_
 #define SBNGENERATE_H_
 
-#include <cmath>
 #include <vector>
 #include <iostream>
 
@@ -38,45 +37,48 @@
 namespace sbn{
 
 
-class SBNgenerate : public SBNconfig{
+  class SBNgenerate : public SBNconfig{
 	
 
-	public:
-		
-	SBNspec spec_central_value;	
-	NeutrinoModel nu_model;
-
-	SBNspec spec_osc_sin;
-	SBNspec spec_osc_sinsq;
+  public:
 	
-	SBNgenerate(std::string xmlname, NeutrinoModel inModel );
-	SBNgenerate(std::string xmlname);
+    SBNgenerate(){}
+    ~SBNgenerate(){}
+    
+    SBNspec spec_central_value;	
+    NeutrinoModel nu_model;
 
-	int WriteOut();
-
-	virtual bool EventSelection(int file);
-	virtual int FillHistograms(int file, int uni, double wei);
+    SBNspec spec_osc_sin;
+    SBNspec spec_osc_sinsq;
 	
-	int WritePrecomputedOscSpecs(std::string tag);
+    SBNgenerate(std::string xmlname, NeutrinoModel inModel );
+    SBNgenerate(std::string xmlname);
 
-	//Some checks on multisims
+    int WriteOut();
 
-	//Multisim input variables
-	std::vector<std::vector<double> > vars;
+    virtual bool EventSelection(int file);
+    virtual int FillHistograms(int file, int uni, double wei);
+	
+    int WritePrecomputedOscSpecs(std::string tag);
 
-	int num_files;
-	std::vector<TFile *> files;
-	std::vector<TTree *> trees;
+    //Some checks on multisims
 
-	std::vector<int> nentries;
-	std::vector< TBranch *> * branch_weight;
-	std::vector< std::map<std::string, std::vector<double> > * > * f_weights;
+    //Multisim input variables
+    std::vector<std::vector<double> > vars;
 
-	std::vector<std::vector<int> > vars_i;
-	std::vector<std::vector<double> > vars_d;
+    int num_files;
+    std::vector<TFile *> files;
+    std::vector<TTree *> trees;
+
+    std::vector<int> nentries;
+    std::vector< TBranch *> * branch_weight;
+    std::vector< std::map<std::string, std::vector<double> > * > * f_weights;
+
+    std::vector<std::vector<int> > vars_i;
+    std::vector<std::vector<double> > vars_d;
 
 
-};
+  };
 
 
 };
