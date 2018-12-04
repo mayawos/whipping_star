@@ -131,12 +131,19 @@ int main(int argc, char* argv[])
 	spec.WriteOut(ss.str());
       }
 
+      // std::stringstream ss;
+      // ss.str("");
+      // ss << "DLCombinedFitFake_" << mnu*mnu << "_" << sin22th << "_" << suffix;
+      // SBNspec spec = static_cast<SBNspec>(osc);    
+      // spec.WriteOut(ss.str());
+      
+
     }
     twatch.Stop();
     std::cout << "@ mi=" << mi << "/" << n_mi << " : " << twatch.RealTime() << std::endl;
     twatch.Reset();
   }
-  
+
   std::cout << "done" << std::endl;
 
   // Create our background
@@ -210,21 +217,21 @@ int main(int argc, char* argv[])
   for(size_t it = 0; it < 6; ++it) {
     std::cout << "start @it=" << it << std::endl;
     
-    std::stringstream ss;
-    ss << "DLCombinedFitFake_BF_chi_spec_" << it << suffix;
-    BF_chi.core_spectrum.WriteOut(ss.str());
+    // std::stringstream ss;
+    // ss << "DLCombinedFitFake_BF_chi_spec_" << it << suffix;
+    // BF_chi.core_spectrum.WriteOut(ss.str());
 
-    cf.ScanChi2(osc_v, BF_chi, n_mi, n_sin22thi);
+    cf.ScanChi(osc_v, BF_chi, n_mi, n_sin22thi);
 
-    const auto& lowest_spec = cf.LowSBNspec();
+    const auto& lowest_spec = cf.LowChiSBNspec();
 
     BF_chi = SBNchi(lowest_spec,*cov);
     BF_chi.core_spectrum = bkg_and_data; 
     BF_chi.core_spectrum.CollapseVector();
     
-    for(size_t idx=0; idx < cf.RegionChi2().size(); ++idx) {
+    for(size_t idx=0; idx < cf.RegionChi().size(); ++idx) {
       _iter = it;
-      _chi2 = cf.RegionChi2()[idx];
+      _chi2 = cf.RegionChi()[idx];
       _chi_idx = idx;
       _sin22th = sin22th_v[idx];
       _m2 = mnu_v[idx];
@@ -232,9 +239,9 @@ int main(int argc, char* argv[])
       outtree->Fill();
     }
     
-    ss.str("");
-    ss << "DLCombinedFitFake_lowest_spec_" << it << suffix;
-    lowest_spec.WriteOut(ss.str());
+    // ss.str("");
+    // ss << "DLCombinedFitFake_lowest_spec_" << it << suffix;
+    // lowest_spec.WriteOut(ss.str());
     
   }
 

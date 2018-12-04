@@ -8,6 +8,7 @@ add_executable (DLUnfold DLUnfold.cxx)
 add_executable (DLCombinedFit DLCombinedFit.cxx)
 add_executable (DLCombinedFitFake DLCombinedFitFake.cxx)
 add_executable (DLCombinedFitDOF DLCombinedFitDOF.cxx)
+add_executable (DLChi2Draw DLChi2Draw.cxx)
 
 target_link_libraries (DLSens SBNfitlib tinyxmllib EventWeight)
 target_link_libraries (DLCovar SBNfitlib tinyxmllib EventWeight)
@@ -15,4 +16,5 @@ target_link_libraries (DLUnfold SBNfitlib tinyxmllib EventWeight)
 target_link_libraries (DLCombinedFit SBNfitlib tinyxmllib EventWeight DLUtils)
 target_link_libraries (DLCombinedFitFake SBNfitlib tinyxmllib EventWeight DLUtils)
 target_link_libraries (DLCombinedFitDOF SBNfitlib tinyxmllib EventWeight DLUtils)
+target_link_libraries (DLChi2Draw SBNfitlib tinyxmllib EventWeight DLUtils)
 

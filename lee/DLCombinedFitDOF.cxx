@@ -132,6 +132,13 @@ int main(int argc, char* argv[])
 	spec.WriteOut(ss.str());
       }
 
+      // std::stringstream ss;
+      // ss.str("");
+      // ss << "DLCombinedFitDOF_m2_sin22th_" << mnu << "_" << sin22th << suffix;
+      // SBNspec spec = static_cast<SBNspec>(osc);    
+      // spec.WriteOut(ss.str());
+
+
     }
     twatch.Stop();
     std::cout << "@ mi=" << mi << "/" << n_mi << " : " << twatch.RealTime() << std::endl;
@@ -173,6 +180,7 @@ int main(int argc, char* argv[])
   fake_signal.LoadModel(fake_model);
   fake_signal.OscillateThis(tag);
   SBNspec data = static_cast<SBNspec>(fake_signal);
+  data.WriteOut(std::string("DLCombinedFitDOF_fake_signal_spec") + suffix);
   data.Scale("intrinsic",0.0);
   data.Scale("cocktail",0.0);
   data.Scale("extbnb",0.0);
@@ -190,11 +198,13 @@ int main(int argc, char* argv[])
   // Chi2 using background only covariance
   SBNchi BF_chi(bkg,*cov);
   BF_chi.core_spectrum.Add(&data);
+  BF_chi.core_spectrum.CalcFullVector();
   BF_chi.core_spectrum.CollapseVector();
 
   auto bkg_and_data = BF_chi.core_spectrum;
   bkg_and_data.CalcFullVector();
   bkg_and_data.CollapseVector();
+  bkg_and_data.WriteOut(std::string("DLCombinedFitDOF_bkg_and_data_spec") + suffix);
 
   std::string out_file_name = "DLCombinedFitDOF_ana";
   out_file_name += suffix;
@@ -204,104 +214,144 @@ int main(int argc, char* argv[])
   
   int fexp = 0;
   int _iter = -1;
-  double _sin22th = -1;
-  double _m2 = -1;
-  double _chi2 = -1;
 
-  double _tsin22th = -1;
-  double _tm2 = -1;
-  double _tchi2 = -1;
+  float _chi_sin22th = -1;
+  float _chi_m2 = -1;
+  float _chi  = -1;
 
-  int _chi_idx = -1;
-  int _pt = 0;
+  float _L_sin22th = -1;
+  float _L_m2 = -1;
+  float _L = -1;
+
+  float _true_sin22th = -1;
+  float _true_m2 = -1;
+
+  float _chi_pt_bf = -1;
+  float _chi_pt_pt = -1;
+
+  float _L_pt_pt = -1;
 
   TTree* outtree1 = new TTree("ana","");
   outtree1->Branch("fexp"   , &fexp     , "fexp/I");
   outtree1->Branch("iter"   , &_iter    , "iter/I");
-  outtree1->Branch("sin22th", &_sin22th , "sin22th/D");
-  outtree1->Branch("m2"     , &_m2      , "m2/D");
-  outtree1->Branch("chi2"   , &_chi2    , "chi2/D");
-  outtree1->Branch("chi_idx", &_chi_idx , "chi_idx/I");
-  outtree1->Branch("pt"     , &_pt      , "pt/I");
+
+  outtree1->Branch("chi_sin22th", &_chi_sin22th , "chi_sin22th/F");
+  outtree1->Branch("chi_m2"     , &_chi_m2      , "chi_m2/F");
+  outtree1->Branch("chi"        , &_chi         , "chi_chi2/F");
+  outtree1->Branch("L_sin22th"  , &_L_sin22th   , "L_sin22th/F");
+  outtree1->Branch("L_m2"       , &_L_m2        , "L_m2/F");
+  outtree1->Branch("L"          , &_L           , "L/F");
+
 
   TTree* outtree2 = new TTree("ana_slim","");
-  outtree2->Branch("fexp"    , &fexp      , "fexp/I");
-  outtree2->Branch("sin22th" , &_sin22th  , "sin22th/D");
-  outtree2->Branch("m2"      , &_m2       , "m2/D");
-  outtree2->Branch("chi2"    , &_chi2     , "chi2/D");
-  outtree2->Branch("tsin22th", &_tsin22th , "tsin22th/D");
-  outtree2->Branch("tm2"     , &_tm2      , "tm2/D");
-  outtree2->Branch("tchi2"   , &_tchi2    , "tchi2/D");
+  outtree2->Branch("fexp"       , &fexp         , "fexp/I");
+  outtree2->Branch("chi_sin22th", &_chi_sin22th , "chi_sin22th/F");
+  outtree2->Branch("chi_m2"     , &_chi_m2      , "chi_m2/F");
+  outtree2->Branch("chi"        , &_chi         , "chi/F");
+  outtree2->Branch("L_sin22th"  , &_L_sin22th   , "L_sin22th/F");
+  outtree2->Branch("L_m2"       , &_L_m2        , "L_m2/F");
+  outtree2->Branch("L"          , &_L           , "L/F");
 
+  outtree2->Branch("true_sin22th", &_true_sin22th , "true_sin22th/F");
+  outtree2->Branch("true_m2"     , &_true_m2      , "true_m2/F");
+
+  outtree2->Branch("chi_pt_bf"  , &_chi_pt_bf, "chi_pt_bf/F");
+  outtree2->Branch("chi_pt_pt"  , &_chi_pt_pt, "chi_pt_pt/F");
+
+  outtree2->Branch("L_pt_pt"  , &_L_pt_pt, "L_pt_pt/F");
 
   // Fitter data holder
   CombinedFit cf;
 
-  int n_fexp = 1000;
+  int n_fexp = 10000;
   int n_it = 6;
 
   std::cout << "Getting spec" << std::endl;
   twatch.Start();
   auto spec_fexp_v = BF_chi.SpecReturnSCVI(bkg_and_data, n_fexp, xml);
+  // auto spec_fexp_v = BF_chi.SpecReturnSPVI(bkg_and_data, n_fexp, xml);
   twatch.Stop();
   std::cout << "done @ t=" << twatch.RealTime() << std::endl;
   twatch.Reset();
 
+
   for(; fexp < n_fexp; ++fexp) {
+
+    auto BF_chi_chi_exp = BF_chi;
+    auto BF_chi_L_exp   = BF_chi;
 
     auto& spec_fexp = spec_fexp_v[fexp];
     // std::stringstream ss;
     // ss << "spec_output_" << fexp;
     // spec_fexp.WriteOut(ss.str());
     
+    // std::exit(1);
     // draw fake data
     twatch.Start();
     
-    BF_chi.core_spectrum = spec_fexp;
-    BF_chi.core_spectrum.CollapseVector();
-
+    BF_chi_chi_exp.core_spectrum = spec_fexp;
+    BF_chi_chi_exp.core_spectrum.CalcFullVector();
+    BF_chi_chi_exp.core_spectrum.CollapseVector();
+    
+    BF_chi_L_exp.core_spectrum = BF_chi_chi_exp.core_spectrum;
+    
+    spec_fexp.CalcFullVector();
+    spec_fexp.CollapseVector();
+    _chi_pt_pt = BF_chi.CalcChi(spec_fexp);
+      
     // 6 iterations fit
     for(size_t it = 0; it < n_it; ++it) {
 
-      cf.ScanChi2(osc_v, BF_chi, n_mi, n_sin22thi);
+      cf.ScanBoth(osc_v,BF_chi_chi_exp,BF_chi_L_exp, n_mi, n_sin22thi);
 
-      const auto& lowest_spec = cf.LowSBNspec();
+      const auto& lowest_chi_spec = cf.LowChiSBNspec();
+      const auto& lowest_L_spec   = cf.LowLSBNspec();
+      
+      BF_chi_chi_exp = SBNchi(lowest_chi_spec,*cov);
+      BF_chi_L_exp   = SBNchi(lowest_L_spec,*cov);
 
-      BF_chi = SBNchi(lowest_spec,*cov);
-      BF_chi.core_spectrum = spec_fexp;
-      BF_chi.core_spectrum.CollapseVector();    
+      BF_chi_chi_exp.core_spectrum = spec_fexp;
+      BF_chi_chi_exp.core_spectrum.CalcFullVector();
+      BF_chi_chi_exp.core_spectrum.CollapseVector();
+
+      BF_chi_L_exp.core_spectrum = BF_chi_chi_exp.core_spectrum;
     }
     
-    for(size_t idx=0; idx < cf.RegionChi2().size(); ++idx) {
-      _iter = n_it-1;
-      _chi2 = cf.RegionChi2()[idx];
-      _chi_idx = idx;
-      _sin22th = sin22th_v[idx];
-      _m2 = mnu_v[idx];
-      _m2 *= _m2;
-      _pt = 0;
+    for(size_t idx=0; idx < cf.RegionChi().size(); ++idx) {
+      _iter = n_it - 1;
+
+      _chi = cf.RegionChi()[idx];
+      _chi_sin22th = sin22th_v[idx];
+      _chi_m2 = mnu_v[idx];
+      _chi_m2 *= _chi_m2;
+
+      _L = cf.RegionL()[idx];
+      _L_sin22th = sin22th_v[idx];
+      _L_m2 = mnu_v[idx];
+      _L_m2 *= _L_m2;
+
       outtree1->Fill();
     }
 
-    auto low_idx = cf.LowChi2Index();
-    _sin22th = sin22th_v[low_idx];
-    _m2 = mnu_v[low_idx];
-    _m2 *= _m2;
-    _chi2 = cf.RegionChi2()[low_idx];
+    auto low_chi_idx = cf.LowChiIndex();
+    _chi_sin22th = sin22th_v[low_chi_idx];
+    _chi_m2 = mnu_v[low_chi_idx];
+    _chi_m2 *= _chi_m2;
+    _chi = cf.RegionChi()[low_chi_idx];
 
-    auto fake_chi2 = BF_chi.CalcChi(fake_signal);
-    _tsin22th = fake_sin22th;
-    _tm2 = fake_m2;
-    _tchi2 = fake_chi2;
+    auto low_L_idx = cf.LowLIndex();
+    _L_sin22th = sin22th_v[low_L_idx];
+    _L_m2 = mnu_v[low_L_idx];
+    _L_m2 *= _L_m2;
+    _L = cf.RegionL()[low_L_idx];
+
+    _true_sin22th = fake_sin22th;
+    _true_m2 = fake_m2;
+
+    _chi_pt_bf = (float) BF_chi_chi_exp.CalcChi(fake_signal);
+    _L_pt_pt   = (float) BF_chi.CalcChiLog(spec_fexp);
+
     outtree2->Fill();
-
-    _iter = n_it - 1;
-    _sin22th = fake_sin22th;
-    _m2 = fake_m2;
-    _pt = 1;
-    _chi2 = fake_chi2;
-    outtree1->Fill();
-
 
     // take the best fit point and compute the chi2 with the true distribution
 

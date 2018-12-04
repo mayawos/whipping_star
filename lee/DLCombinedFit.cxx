@@ -167,17 +167,17 @@ int main(int argc, char* argv[])
     ss << "DLCombinedFit_BF_chi_spec_" << it;
     BF_chi.core_spectrum.WriteOut(ss.str());
 
-    cf.ScanChi2(osc_v, BF_chi, n_mi, n_sin22thi);
+    cf.ScanChi(osc_v, BF_chi, n_mi, n_sin22thi);
 
-    const auto& lowest_spec = cf.LowSBNspec();
+    const auto& lowest_spec = cf.LowChiSBNspec();
 
     BF_chi = SBNchi(lowest_spec,*cov);
     BF_chi.core_spectrum = bkg_and_data; 
     BF_chi.core_spectrum.CollapseVector();
     
-    for(size_t idx=0; idx < cf.RegionChi2().size(); ++idx) {
+    for(size_t idx=0; idx < cf.RegionChi().size(); ++idx) {
       _iter = it;
-      _chi2 = cf.RegionChi2()[idx];
+      _chi2 = cf.RegionChi()[idx];
       _chi_idx = idx;
       _sin22th = sin22th_v[idx];
       _m2 = mnu_v[idx];
