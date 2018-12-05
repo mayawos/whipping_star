@@ -408,6 +408,26 @@ namespace sbn {
   }
 
   //A log-lilihood based one used @ MiniBooNE
+  double SBNchi::CalcChiLog(const SBNspec& sigSpec) const {
+    double tchi = 0;
+
+    if(sigSpec.collapsed_vector.size()==0) {
+      std::cout<<"WARNING: SBNchi::CalcChi, inputted sigSpec has un-compressed vector, I am doing it now, but this is inefficient!"<<std::endl;
+      std::exit(1);
+    }
+
+    for(int i =0; i<num_bins_total_compressed; i++){
+      for(int j =0; j<num_bins_total_compressed; j++){
+	tchi  += (core_spectrum.collapsed_vector[i]-sigSpec.collapsed_vector[i]) * vec_matrix_inverted[i][j] * (core_spectrum.collapsed_vector[j]-sigSpec.collapsed_vector[j] );
+      }
+    }
+    
+    double absDetM = log(fabs(matrix_collapsed.Determinant()));
+    
+    tchi += absDetM;
+    return tchi;
+  }
+
   double SBNchi::CalcChiLog(SBNspec *sigSpec){
     double tchi = 0;
 
@@ -428,6 +448,7 @@ namespace sbn {
     last_calculated_chi = tchi+absDetM;
     return tchi+absDetM;
   }
+
 
 
   double SBNchi::CalcChi(SBNspec *sigSpec, SBNspec *obsSpec){
@@ -1337,6 +1358,98 @@ std::vector<SBNspec> SBNchi::SpecReturnSCVI(const SBNspec& specin, const int num
       delete[] a_vec_matrix_lower_triangular;
       delete[] sampled_fullvector_v;
       delete[] gaus_sample;
+      delete[] sampled_fullvector;
+      delete rangen;
+      return ret_v;
+}
+
+
+std::vector<SBNspec> SBNchi::SpecReturnSPVI(const SBNspec& specin, const int num_MC, const std::string xml) const {
+
+  
+  float** sampled_fullvector_v = new float*[num_MC];
+  float* a_specin = new float[num_bins_total];
+  
+  for(int i=0; i < num_MC; i++){
+    sampled_fullvector_v[i] = new float[num_bins_total];
+  }
+  
+  for(int i=0; i < num_bins_total; i++){
+    a_specin[i] = specin.full_vector[i];
+  }
+  
+  TRandom3 * rangen = new TRandom3(0);
+  
+  float* sampled_fullvector = new float[num_bins_total];
+  
+  // #ifdef USE_GPU
+  //     unsigned long long seed[num_MC];
+  //     unsigned long long seq = 0ULL;
+  //     unsigned long long offset = 0ULL;
+  //     curandState_t state;
+
+  //     for(int i=0; i<num_MC; ++i) {
+  //       seed[i] = (int)rangen->Uniform(1e8);
+  //     }
+  // #endif
+
+  int local_num_bins_total = num_bins_total;
+  int local_num_MC = num_MC;
+  int local_num_channels = num_channels;
+  
+  std::cout << "Sampling full vector" << std::endl;
+  // #ifdef USE_GPU
+  // #pragma acc parallel loop private(state,				\
+  // 				  gaus_sample[:local_num_bins_total],	\
+  // 				  sampled_fullvector[:local_num_bins_total]) \
+  //   copyin(a_specin[:local_num_bins_total],				\
+  //   a_vec_matrix_lower_triangular[:local_num_bins_total][:local_num_bins_total],\ 
+  //     seed[0:local_num_MC])						\
+  //     copy(sampled_fullvector_v[:local_num_MC][:local_num_bins_total])
+  // #endif
+  for(int i=0; i < local_num_MC;i++){
+    // #ifdef USE_GPU
+    // 	unsigned long long seed_sd = seed[i];
+    // 	curand_init(seed_sd, seq, offset, &state);
+    
+    // 	// this loop must be seq
+    // 	// for some reason to make "state" 
+    // 	// local and not part of CUDA shared memory      
+    // #pragma acc loop seq 
+    // 	for(int a=0; a<local_num_bins_total; a++) {
+    // 	  gaus_sample[a] = (double)curand_normal(&state);
+    // 	}
+    // #else
+    for(int a=0; a<local_num_bins_total; a++) {
+      sampled_fullvector_v[i][a] = rangen->Poisson(a_specin[a]);
+    }      
+    // #endif
+    
+  }
+
+
+      std::cout << "Fill output" << std::endl;
+      // fill the output
+      std::vector<SBNspec> ret_v;
+      ret_v.reserve(num_MC);
+
+      std::vector<double> sampled_fullvector_as_double;
+      sampled_fullvector_as_double.resize(local_num_bins_total,0.0);
+      for(size_t i=0; i<num_MC; ++i) {
+	for(size_t j=0; j<local_num_bins_total; ++j) {
+	  sampled_fullvector_as_double[j] = sampled_fullvector_v[i][j];
+	}
+	SBNspec spec(sampled_fullvector_as_double,xml,false,-1);
+	ret_v.emplace_back(std::move(spec));
+      }
+
+      delete[] a_specin;
+
+      for(int i=0; i < num_MC; i++){
+	delete[] sampled_fullvector_v[i];
+      }
+
+      delete[] sampled_fullvector_v;
       delete[] sampled_fullvector;
       delete rangen;
       return ret_v;

@@ -1,5 +1,7 @@
 include(${ROOT_USE_FILE})
 
+message(${ROOT_USE_FILE})
+
 include_directories(${CMAKE_SOURCE_DIR}/inc)
 
 unset(CMAKE_CXX_FLAGS)

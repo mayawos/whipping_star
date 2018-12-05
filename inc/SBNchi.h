@@ -107,6 +107,7 @@ namespace sbn{
     double CalcChi(SBNspec *sigSpec, SBNspec *obsSpec);
     //or a log ratio (miniboone esque)
     double CalcChiLog(SBNspec *sigSpec);
+    double CalcChiLog(const SBNspec& sigSpec) const;
 
     double CalcChi(std::vector<double> * sigVec);
     double CalcChi(double* sigVec);
@@ -131,6 +132,7 @@ namespace sbn{
     TH1D SampleCovarianceVaryInput(SBNspec *specin, int num_MC, std::vector<double>*);
 
     std::vector<SBNspec> SpecReturnSCVI(const SBNspec& specin, const int num_MC, const std::string xml) const;
+    std::vector<SBNspec> SpecReturnSPVI(const SBNspec& specin, const int num_MC, const std::string xml) const;
     
     int CollapseVectorStandAlone(std::vector<double> * full_vector, std::vector<double> *collapsed_vector);
 

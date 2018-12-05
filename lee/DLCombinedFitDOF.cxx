@@ -229,6 +229,7 @@ int main(int argc, char* argv[])
   float _chi_pt_bf = -1;
   float _chi_pt_pt = -1;
 
+  float _L_pt_bf = -1;
   float _L_pt_pt = -1;
 
   TTree* outtree1 = new TTree("ana","");
@@ -258,12 +259,14 @@ int main(int argc, char* argv[])
   outtree2->Branch("chi_pt_bf"  , &_chi_pt_bf, "chi_pt_bf/F");
   outtree2->Branch("chi_pt_pt"  , &_chi_pt_pt, "chi_pt_pt/F");
 
+  outtree2->Branch("L_pt_bf"  , &_L_pt_bf, "L_pt_bf/F");
   outtree2->Branch("L_pt_pt"  , &_L_pt_pt, "L_pt_pt/F");
+
 
   // Fitter data holder
   CombinedFit cf;
 
-  int n_fexp = 10000;
+  int n_fexp = 1000;
   int n_it = 6;
 
   std::cout << "Getting spec" << std::endl;
@@ -281,6 +284,13 @@ int main(int argc, char* argv[])
     auto BF_chi_L_exp   = BF_chi;
 
     auto& spec_fexp = spec_fexp_v[fexp];
+    spec_fexp.CalcFullVector();
+    spec_fexp.CollapseVector();
+
+    // chi2_throw
+    _chi_pt_pt = BF_chi.CalcChi(spec_fexp);
+    _L_pt_pt   = BF_chi.CalcChiLog(spec_fexp);
+
     // std::stringstream ss;
     // ss << "spec_output_" << fexp;
     // spec_fexp.WriteOut(ss.str());
@@ -295,10 +305,6 @@ int main(int argc, char* argv[])
     
     BF_chi_L_exp.core_spectrum = BF_chi_chi_exp.core_spectrum;
     
-    spec_fexp.CalcFullVector();
-    spec_fexp.CollapseVector();
-    _chi_pt_pt = BF_chi.CalcChi(spec_fexp);
-      
     // 6 iterations fit
     for(size_t it = 0; it < n_it; ++it) {
 
@@ -317,6 +323,7 @@ int main(int argc, char* argv[])
       BF_chi_L_exp.core_spectrum = BF_chi_chi_exp.core_spectrum;
     }
     
+    // save the final iteration space
     for(size_t idx=0; idx < cf.RegionChi().size(); ++idx) {
       _iter = n_it - 1;
 
@@ -334,22 +341,22 @@ int main(int argc, char* argv[])
     }
 
     auto low_chi_idx = cf.LowChiIndex();
+    _chi = cf.RegionChi()[low_chi_idx];
     _chi_sin22th = sin22th_v[low_chi_idx];
     _chi_m2 = mnu_v[low_chi_idx];
     _chi_m2 *= _chi_m2;
-    _chi = cf.RegionChi()[low_chi_idx];
 
     auto low_L_idx = cf.LowLIndex();
+    _L = cf.RegionL()[low_L_idx];
     _L_sin22th = sin22th_v[low_L_idx];
     _L_m2 = mnu_v[low_L_idx];
     _L_m2 *= _L_m2;
-    _L = cf.RegionL()[low_L_idx];
 
     _true_sin22th = fake_sin22th;
     _true_m2 = fake_m2;
 
     _chi_pt_bf = (float) BF_chi_chi_exp.CalcChi(fake_signal);
-    _L_pt_pt   = (float) BF_chi.CalcChiLog(spec_fexp);
+    _L_pt_bf   = (float) BF_chi_L_exp.CalcChiLog(fake_signal);
 
     outtree2->Fill();
 
