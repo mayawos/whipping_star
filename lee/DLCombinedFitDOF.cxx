@@ -206,6 +206,8 @@ int main(int argc, char* argv[])
   bkg_and_data.CollapseVector();
   bkg_and_data.WriteOut(std::string("DLCombinedFitDOF_bkg_and_data_spec") + suffix);
 
+  SBNchi true_chi(bkg_and_data,*cov);
+
   std::string out_file_name = "DLCombinedFitDOF_ana";
   out_file_name += suffix;
   out_file_name += std::string(".root");
@@ -277,7 +279,6 @@ int main(int argc, char* argv[])
   std::cout << "done @ t=" << twatch.RealTime() << std::endl;
   twatch.Reset();
 
-
   for(; fexp < n_fexp; ++fexp) {
 
     auto BF_chi_chi_exp = BF_chi;
@@ -288,8 +289,8 @@ int main(int argc, char* argv[])
     spec_fexp.CollapseVector();
 
     // chi2_throw
-    _chi_pt_pt = BF_chi.CalcChi(spec_fexp);
-    _L_pt_pt   = BF_chi.CalcChiLog(spec_fexp);
+    _chi_pt_pt = true_chi.CalcChi(spec_fexp);
+    _L_pt_pt   = true_chi.CalcChiLog(spec_fexp);
 
     // std::stringstream ss;
     // ss << "spec_output_" << fexp;
