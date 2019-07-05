@@ -11,7 +11,7 @@ set(CMAKE_CXX_FLAGS "-Wall -ggdb")# -fPermissive")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -64,7 +64,7 @@ include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             SYSTEM ${MPI_INCLUDE_PATH}
                             )
                         
-#FIND_PACKAGE(ROOT COMPONENTS MathCore MathMore)# COMPONENTS Core Cint RIO Net Hist Graf Graf3d Gpad Tree Rint Postscript Matrix Physics MathCore Thread)
+                        #FIND_PACKAGE(ROOT COMPONENTS MathCore MathMore)# COMPONENTS Core Cint RIO Net Hist Graf Graf3d Gpad Tree Rint Postscript Matrix Physics MathCore Thread)
 
 if(ROOT_FOUND)
 	message("Found ROOT using CMAKE FIND_PACKAGE")
@@ -77,11 +77,12 @@ ELSE()
 	message("ROOT cxx flags set to: ${ROOT_CXX_FLAGS}")
 ENDIF()
 
-set (CMAKE_SO_CXX_FLAGS " ${ROOT_CXX_FLAGS} ${GSL_LIBS} ${GSL_CXX_FLAGS} ${CMAKE_CXX_FLAGS} -w -Wno-deprecated-declarations")
-set (CMAKE_ACC_CXX_FLAGS "${CMAKE_GPU_CXX_FLAGS} ${CMAKE_SO_CXX_FLAGS} -g")
-set (CMAKE_PCC_CXX_FLAGS "-ta=multicore -Minfo=accel -acc -w ${CMAKE_SO_CXX_FLAGS}")
+#set (CMAKE_SO_CXX_FLAGS " ${ROOT_CXX_FLAGS} ${GSL_LIBS} ${GSL_CXX_FLAGS} ${CMAKE_CXX_FLAGS} -w -Wno-deprecated-declarations")
+#set (CMAKE_ACC_CXX_FLAGS "${CMAKE_GPU_CXX_FLAGS} ${CMAKE_SO_CXX_FLAGS} -g")
+#set (CMAKE_PCC_CXX_FLAGS "-ta=multicore -Minfo=accel -acc -w ${CMAKE_SO_CXX_FLAGS}")
 
-set (CMAKE_CXX_FLAGS "${CMAKE_ACC_CXX_FLAGS}")
+#set (CMAKE_CXX_FLAGS "${CMAKE_ACC_CXX_FLAGS}")
+set (CMAKE_CXX_FLAGS "${ROOT_CXX_FLAGS}")
 
 # Figure out correct library suffix
 if                          (APPLE)

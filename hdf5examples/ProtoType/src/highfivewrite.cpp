@@ -21,9 +21,17 @@
 #include <highfive/H5DataSet.hpp>
 #include <highfive/H5DataSpace.hpp>
 
-#include <TH1D.h>
-#include <TFile.h>
+//#include <TH1D.h>
+//#include <TFile.h>
 
+#include "params.h"
+#include "SBNconfig.h"
+#include "SBNchi.h"
+#include "SBNspec.h"
+#include "SBNosc.h"
+#include "SBNfit.h"
+#include "SBNcovariance.h"
+#include "SBNfeld.h"
 
 using namespace std;
 
@@ -57,6 +65,43 @@ struct Block
 };
 
 
+void singlePoint(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, int numUniverses) {
+    
+    NGrid mygrid;
+
+    mygrid.AddDimension("m4", -1.0, 1.1, 0.1);//0.1
+    mygrid.AddDimension("ue4", -2.3, 0.1, 0.05);//0.1
+    mygrid.AddFixedDimension("um4",0.0); //0.05
+    sbn::SBNfeld myfeld(mygrid,tag,xml);
+    std::cout<<"Begininning a full Feldman-Cousins analysis for tag : "<<tag<<std::endl;
+
+    myfeld.SetCoreSpectrum(tag+"_BKG_ONLY.SBNspec.root");
+    myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
+
+    double random_number_seed = -1;
+    std::cout<<"Setting random seed "<<random_number_seed<<std::endl;
+    myfeld.SetRandomSeed(random_number_seed);
+    std::cout<<"Loading precomputed spectra"<<std::endl;
+    myfeld.LoadPreOscillatedSpectra();
+    //std::cout <<"DONE loading precomputed spectra at : " << difftime(time(0), start_time)/60.0 << " Minutes.\n";
+    myfeld.LoadBackgroundSpectrum();
+
+    myfeld.SetNumUniverses(numUniverses);
+
+    std::cout<<"Calculating the necessary SBNchi objects"<<std::endl;
+    myfeld.CalcSBNchis();
+
+    //if(grid_pt ==-1){
+        //std::cout<<"Beginning to peform FullFeldmanCousins analysis"<<std::endl;
+        //myfeld.FullFeldmanCousins();
+    //}else if(grid_pt>=0){
+   std::cout<<"Beginning to peform Single Grid PointFeldmanCousins analysis on pt: "<<cp.gid()+5<<std::endl;
+   myfeld.PointFeldmanCousins((size_t) cp.gid()+5);
+   
+   // HERE we need something that purges myfeld of all root stuff.
+}
+
+
 void process_block(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, size_t nbins, bool verbose, HighFive::File* f_out, const vector<double> data, const vector<double> specdata)
 {
    HighFive::DataSet test = f_out->getDataSet("dataset");
@@ -80,6 +125,8 @@ int main(int argc, char* argv[])
     int nUniverses=1000;
     std::string out_file="test.hdf5";
     std::string in_file="";
+    std::string tag="";
+    std::string xml="";
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
@@ -89,6 +136,8 @@ int main(int argc, char* argv[])
     ops >> Option('n', "nbins",   nBins,   "Number of bins in 2d dataset");
     ops >> Option('o', "output",    out_file,  "Output filename.");
     ops >> Option('f', "fin",    in_file,  "Output filename.");
+    ops >> Option('t', "tag",    tag,  "Tag.");
+    ops >> Option('x', "xml",    xml,  "XML config.");
     bool verbose     = ops >> Present('v', "verbose", "verbose output");
     if (ops >> Present('h', "help", "Show help"))
     {
@@ -97,46 +146,30 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    if (world.rank() == 0) {
-       TFile* f = new TFile(in_file.c_str(), "read");
-       TH1D* h1 = (TH1D*) f->Get("nu_SBND_nue_fullosc");
-       double integral = h1->Integral("width");
-
-       fmt::print(stderr, "\n*** Integral: {} ***\n", integral);
-    }
-
-    //exit(1);
-
-    TH1D* h1 = new TH1D("test", "test", 50, 0, 50); 
     
     // Create hdf5 file structure here 
-    HighFive::File* f_out  = new HighFive::File(out_file,
-			HighFive::File::ReadWrite|HighFive::File::Create|HighFive::File::Truncate,
-			HighFive::MPIOFileDriver(MPI_COMM_WORLD,MPI_INFO_NULL));
+    //HighFive::File* f_out  = new HighFive::File(out_file,
+			//HighFive::File::ReadWrite|HighFive::File::Create|HighFive::File::Truncate,
+			//HighFive::MPIOFileDriver(MPI_COMM_WORLD,MPI_INFO_NULL));
 
 
-    std::vector<size_t> ds_dims(1);
-    ds_dims[0] = nPoints*nUniverses;
-    ds_dims[1] = 1;
-    f_out->createDataSet<double>("dataset", HighFive::DataSpace(ds_dims));
+    //std::vector<size_t> ds_dims(1);
+    //ds_dims[0] = nPoints*nUniverses;
+    //ds_dims[1] = 1;
+    //f_out->createDataSet<double>("dataset", HighFive::DataSpace(ds_dims));
 
-    std::vector<size_t> spec_dims(2);
-    spec_dims[0] = nPoints*nUniverses;
-    spec_dims[1] = nBins;
-    f_out->createDataSet<double>("dataset2d", HighFive::DataSpace(spec_dims));
+    //std::vector<size_t> spec_dims(2);
+    //spec_dims[0] = nPoints*nUniverses;
+    //spec_dims[1] = nBins;
+    //f_out->createDataSet<double>("dataset2d", HighFive::DataSpace(spec_dims));
 
-    std::vector<double> data;
-    data.push_back(world.rank());
-
-    std::vector<double> specdata;
-    for (size_t i=0; i<nBins;++i) { specdata.push_back(1.1*world.rank()); }
-    // diy initialization
-    int dim(1);
     
     size_t blocks;
-    if (nBlocks==0) blocks= nPoints*nUniverses;//world.size() * threads;
+    if (nBlocks==0) blocks= nPoints;//world.size() * threads;
     else blocks=nBlocks;
 
+
+    int dim =1;
     diy::FileStorage storage("./DIY.XXXXXX"); // used for blocks moved out of core
     Bounds domain;
     for (int i = 0; i < dim; ++i) {
@@ -159,8 +192,6 @@ int main(int argc, char* argv[])
     diy::Master master(world, 1, -1, &Block::create, &Block::destroy);
     diy::decompose(dim, world.rank(), domain, assigner, master);//, share_face, wrap, ghosts);
 
-    //AddBlock create(master);
-    //decomposer.decompose(world.rank(), assigner, create); 
 
     if( world.rank()==0 ) {
       fmt::print(stderr, "\n*** This is diy running highfivewrite ***\n");
@@ -173,10 +204,12 @@ int main(int argc, char* argv[])
     }
 
 
-    master.foreach([world, verbose, nBins, f_out, data, specdata](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {process_block(b, cp, world.size(), world.rank(), nBins, verbose, f_out, data, specdata); });
+    //master.foreach([world, verbose, nBins, f_out, data, specdata](Block* b, const diy::Master::ProxyWithLink& cp)
+                           //{process_block(b, cp, world.size(), world.rank(), nBins, verbose, f_out, data, specdata); });
+    master.foreach([world, tag, xml, nUniverses](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {singlePoint(b, cp, world.size(), world.rank(), tag, xml, nUniverses); });
 
-    delete f_out;
+    //delete f_out;
     return 0;
 }
 
