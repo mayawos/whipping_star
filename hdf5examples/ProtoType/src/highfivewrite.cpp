@@ -22,6 +22,7 @@
 #include <highfive/H5DataSpace.hpp>
 
 #include <TH1D.h>
+#include <TFile.h>
 
 
 using namespace std;
@@ -78,6 +79,7 @@ int main(int argc, char* argv[])
     int nPoints=1000;
     int nUniverses=1000;
     std::string out_file="test.hdf5";
+    std::string in_file="";
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
@@ -86,6 +88,7 @@ int main(int argc, char* argv[])
     ops >> Option('b', "nblocks",   nBlocks,   "Number of blocks");
     ops >> Option('n', "nbins",   nBins,   "Number of bins in 2d dataset");
     ops >> Option('o', "output",    out_file,  "Output filename.");
+    ops >> Option('f', "fin",    in_file,  "Output filename.");
     bool verbose     = ops >> Present('v', "verbose", "verbose output");
     if (ops >> Present('h', "help", "Show help"))
     {
@@ -93,6 +96,16 @@ int main(int argc, char* argv[])
         std::cout << ops;
         return 1;
     }
+
+    if (world.rank() == 0) {
+       TFile* f = new TFile(in_file.c_str(), "read");
+       TH1D* h1 = (TH1D*) f->Get("nu_SBND_nue_fullosc");
+       double integral = h1->Integral("width");
+
+       fmt::print(stderr, "\n*** Integral: {} ***\n", integral);
+    }
+
+    //exit(1);
 
     TH1D* h1 = new TH1D("test", "test", 50, 0, 50); 
     
