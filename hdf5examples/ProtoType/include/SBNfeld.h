@@ -87,9 +87,18 @@ namespace sbn{
         int PointFeldmanCousins(size_t);
         int GlobalScan();
         int RasterScan(); 
-        
+
+        bool statOnly() { return m_bool_stat_only; }
+        double seed() {return m_random_seed; }
+        TMatrixT<double> *  fullFracCovMat() { return m_full_fractional_covariance_matrix; }
+        TVectorT<double> *  bgSpectrum() { return m_tvec_background_spectrum; }
+        int bgBinsCompressed() { return m_background_spectrum->num_bins_total_compressed; } 
+
+
         int GenerateOscillatedSpectra();
         int LoadPreOscillatedSpectra();
+        //std::vector<double> LoadPreOscillatedSpectrum(size_t ipoint);
+        SBNspec* LoadPreOscillatedSpectrum(size_t ipoint);
 
         int SetRandomSeed(double);
 

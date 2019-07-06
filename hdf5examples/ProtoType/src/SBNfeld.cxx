@@ -141,7 +141,26 @@ int SBNfeld::LoadPreOscillatedSpectra(){
     return 0;
 }
 
+// Load a single grid points spectrum
+// This needs to be called somewhere    m_cv_spec_grid.resize(m_num_total_gridpoints);
+SBNspec* SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint){
 
+    //need to convert from this gridpoints to a neutrinoModel (Blarg, don't like this step but needed at the moment)
+    NeutrinoModel this_model = this->convert3p1(m_vec_grid[ipoint]); 
+
+    //And load thus model into our spectra. At this point its comuted all the necessary mass-splittins and which frequencies they are
+    m_core_spectrum->LoadModel(this_model);
+    m_core_spectrum->SetAppMode();
+
+    //And apply this oscillaion! Adding to it the bkgSpec that it was initilised with.
+    //NOTE we want to return the FULL spectrum, not compressed so we can calculate the covariance matrix, hense the false in this Oscilate
+    std::vector<double> ans = m_core_spectrum->Oscillate(this->tag, false);
+    //m_cv_spec_grid[ipoint] = new SBNspec(ans, m_core_spectrum->xmlname,t, false);
+    //m_cv_spec_grid[ipoint]->CollapseVector();
+    SBNspec* spec = new SBNspec(ans, m_core_spectrum->xmlname, ipoint, false);
+    spec->CollapseVector();
+    return spec;// std::move(spec->collapsed_vector); 
+}
 
 
 int SBNfeld::LoadBackgroundSpectrum(){
