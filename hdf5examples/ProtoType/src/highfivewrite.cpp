@@ -20,9 +20,8 @@
 #include <highfive/H5File.hpp>
 #include <highfive/H5DataSet.hpp>
 #include <highfive/H5DataSpace.hpp>
-
-//#include <TH1D.h>
-//#include <TFile.h>
+ 
+#include "TMatrixT.h"
 
 #include "params.h"
 #include "SBNconfig.h"
@@ -64,14 +63,164 @@ struct Block
     //int dsIndex(int uni, int pt) {
 };
 
+//
+//
+void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out) {
 
-void singlePoint(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, int numUniverses) {
+    sbn::SBNfeld myfeld(mygrid, tag, xml);
+
+    myfeld.SetCoreSpectrum(tag+"_BKG_ONLY.SBNspec.root");
+    //myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
+
+    double random_number_seed = -1;
+    myfeld.SetRandomSeed(random_number_seed);
+
+    sbn::SBNspec* myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
+    std::vector<double> full = myspec->full_vector;
+    std::vector<double> coll = myspec->collapsed_vector;
+
+    HighFive::DataSet spec = f_out->getDataSet("specfull");
+    spec.select(   {std::size_t(cp.gid()), 0}, {1, std::size_t(full.size())}).write(full);
+
+    HighFive::DataSet speccoll = f_out->getDataSet("speccoll");
+    speccoll.select(   {std::size_t(cp.gid()), 0}, {1, std::size_t(coll.size())}).write(coll);
     
-    NGrid mygrid;
+    delete myspec;
 
-    mygrid.AddDimension("m4", -1.0, 1.1, 0.1);//0.1
-    mygrid.AddDimension("ue4", -2.3, 0.1, 0.05);//0.1
-    mygrid.AddFixedDimension("um4",0.0); //0.05
+}
+
+// FC for single point
+// TODO: * seed, max #it, chi_min conv ---> block members?
+//       * some sort of progress report
+void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out, int num_universes) {
+    
+    sbn::SBNfeld myfeld(mygrid, tag, xml);
+
+    myfeld.SetCoreSpectrum(tag+"_BKG_ONLY.SBNspec.root");
+    myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
+
+    double random_number_seed = -1;
+    myfeld.SetRandomSeed(random_number_seed);
+    
+    sbn::SBNspec* myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
+
+    myfeld.LoadBackgroundSpectrum();
+    TMatrixT<double> stat_only_matrix(myfeld.num_bins_total, myfeld.num_bins_total);
+    stat_only_matrix.Zero();
+
+    sbn::SBNchi* mychi=NULL; 
+
+    if(myfeld.statOnly()){
+         mychi = new sbn::SBNchi(*myspec, stat_only_matrix, myfeld.xmlname, false, myfeld.seed());
+     }else{
+         mychi = new sbn::SBNchi(*myspec, *myfeld.fullFracCovMat(), myfeld.xmlname, false, myfeld.seed());
+     }
+    int nBinsFull = myspec->full_vector.size();
+    int nBinsColl = myspec->collapsed_vector.size();
+
+    // Single grid point multiuniverse FC
+    int max_number_iterations = 5;
+    double chi_min_convergance_tolerance = 0.001;
+
+    //Ok take the background only spectrum and form a background only covariance matrix. CalcCovarianceMatrix includes stats
+    TMatrixT<double> background_full_covariance_matrix = mychi->CalcCovarianceMatrix(myfeld.fullFracCovMat(), *myfeld.bgSpectrum());
+    TMatrixT<double> background_collapsed_covariance_matrix(myfeld.bgBinsCompressed(), myfeld.bgBinsCompressed());
+    mychi->CollapseModes(background_full_covariance_matrix, background_collapsed_covariance_matrix);    
+    TMatrixT<double> inverse_background_collapsed_covariance_matrix = mychi->InvertMatrix(background_collapsed_covariance_matrix);   
+
+    //fmt::print(stderr, "[{}] start FC\n", cp.gid());
+
+    // These HDF5 dataset have all the full/collapsed vector spectra as loaded in loadSpectrum
+    HighFive::DataSet g_specfull = f_out->getDataSet("specfull");
+    HighFive::DataSet g_speccoll = f_out->getDataSet("speccoll");
+
+    // These are for write out of FC results
+    HighFive::DataSet d_last_chi_min    = f_out->getDataSet("last_chi_min"   );
+    HighFive::DataSet d_delta_chi       = f_out->getDataSet("delta_chi"      );
+    HighFive::DataSet d_best_grid_point = f_out->getDataSet("best_grid_point");
+    HighFive::DataSet d_n_iter          = f_out->getDataSet("n_iter"         );
+
+    // This is for the fake data dump
+    HighFive::DataSet d_fakedata          = f_out->getDataSet("fakedata");
+      
+    // These are our work vectors, we will fill them with numbers from hdf5 as needed  
+    std::vector<double> specfull = {nBinsFull};
+    std::vector<double> speccoll = {nBinsColl};
+
+    sbn::SBNspec* true_spec = myspec; 
+    sbn::SBNchi * true_chi  = mychi; 
+
+    size_t offset = 0;
+    for(size_t i=0; i< num_universes; i++){
+        offset = i*mygrid.f_num_total_points;
+
+        //step 0. Make a fake-data-experimet for this point, drawn from covariance
+        std::vector<float> fake_data= true_chi->SampleCovariance(true_spec);
+        d_fakedata.select(   {offset + size_t(cp.gid()), 0}, {1, size_t(nBinsColl)}).write(fake_data);
+        float last_chi_min = FLT_MAX;
+        int best_grid_point = -99;
+
+        TMatrixT<double> inverse_current_collapsed_covariance_matrix = inverse_background_collapsed_covariance_matrix;  
+        size_t n_iter = 0;
+        for(n_iter = 0; n_iter < max_number_iterations; n_iter++){
+
+            //Step 1. What covariance matrix do we use?
+            //For first iteration, use the precalculated background only inverse covariance matrix.
+            //For all subsequent iterations what is the full covariance matrix? Use the last best grid point.
+            if(n_iter!=0){
+                //Calculate current full covariance matrix, collapse it, then Invert.
+                // Fill vector specfull with the full vector from hdf5 at position best_grid_point
+                g_specfull.select(   {best_grid_point, 0}, {1, nBinsFull}).read(specfull);
+                TMatrixT<double> current_full_covariance_matrix = true_chi->CalcCovarianceMatrix(myfeld.fullFracCovMat(), specfull);
+                TMatrixT<double> current_collapsed_covariance_matrix(myfeld.bgBinsCompressed(), myfeld.bgBinsCompressed());
+                true_chi->CollapseModes(current_full_covariance_matrix, current_collapsed_covariance_matrix);    
+                inverse_current_collapsed_covariance_matrix = true_chi->InvertMatrix(current_collapsed_covariance_matrix);   
+            }
+
+            //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
+            float chi_min = FLT_MAX;
+
+            for(size_t r =0; r < mygrid.f_num_total_points; r++){
+               // Load spectrum number r from HDF into speccoll
+                g_speccoll.select(   {r, 0}, {1, nBinsColl}).read(speccoll);
+                float chi_tmp = myfeld.CalcChi(fake_data, speccoll,  inverse_current_collapsed_covariance_matrix);
+                if(chi_tmp < chi_min){
+                    best_grid_point = r;
+                    chi_min = chi_tmp;
+                }
+            }
+
+            if(n_iter!=0){
+                //Step 3.0 Check to see if min_chi for this particular fake_data  has converged sufficiently
+                if(fabs(chi_min-last_chi_min)< chi_min_convergance_tolerance){
+                    last_chi_min = chi_min;
+                    break;
+                }
+            }
+            last_chi_min = chi_min;
+        } // End loop over iterations
+
+        //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
+        float this_chi = myfeld.CalcChi(fake_data, true_spec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
+
+        //step 4 calculate the delta_chi for this universe
+        // Write out numbers of interest
+        std::vector<double> v_last_chi_min    = { last_chi_min };
+        std::vector<double> v_delta_chi       = { this_chi-last_chi_min };
+        std::vector<int>    v_best_grid_point = { best_grid_point };
+        std::vector<int>    v_n_iter          = { n_iter };
+        d_last_chi_min.select(   {offset + size_t(cp.gid()), 0}, {1,1}).write( v_last_chi_min   );
+        d_delta_chi.select(      {offset + size_t(cp.gid()), 0}, {1,1}).write( v_delta_chi      );
+        d_best_grid_point.select({offset + size_t(cp.gid()), 0}, {1,1}).write( v_best_grid_point);
+        d_n_iter.select(         {offset + size_t(cp.gid()), 0}, {1,1}).write( v_n_iter         );
+    } // End loop over universes
+
+    delete mychi;
+    delete myspec;
+}
+
+void singlePoint(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, int numUniverses, NGrid mygrid) {
+    
     sbn::SBNfeld myfeld(mygrid,tag,xml);
     std::cout<<"Begininning a full Feldman-Cousins analysis for tag : "<<tag<<std::endl;
 
@@ -91,10 +240,6 @@ void singlePoint(Block* b, diy::Master::ProxyWithLink const& cp, int size, int r
     std::cout<<"Calculating the necessary SBNchi objects"<<std::endl;
     myfeld.CalcSBNchis();
 
-    //if(grid_pt ==-1){
-        //std::cout<<"Beginning to peform FullFeldmanCousins analysis"<<std::endl;
-        //myfeld.FullFeldmanCousins();
-    //}else if(grid_pt>=0){
    std::cout<<"Beginning to peform Single Grid PointFeldmanCousins analysis on pt: "<<cp.gid()+5<<std::endl;
    myfeld.PointFeldmanCousins((size_t) cp.gid()+5);
    
@@ -120,9 +265,10 @@ int main(int argc, char* argv[])
     diy::mpi::communicator world;
 
     size_t nBlocks = 0;
-    size_t nBins=10;
+    size_t nBins=246;
+    size_t nBinsC=90;
     int nPoints=1000;
-    int nUniverses=1000;
+    int nUniverses=1;
     std::string out_file="test.hdf5";
     std::string in_file="";
     std::string tag="";
@@ -130,10 +276,11 @@ int main(int argc, char* argv[])
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops >> Option('p', "npoints",   nPoints,   "Number of parameter points");
+    //ops >> Option('p', "npoints",   nPoints,   "Number of parameter points");
     ops >> Option('u', "nuniverse", nUniverses, "Number of universes");
     ops >> Option('b', "nblocks",   nBlocks,   "Number of blocks");
     ops >> Option('n', "nbins",   nBins,   "Number of bins in 2d dataset");
+    ops >> Option('n', "nbinsC",   nBinsC,   "Number of collapsed bins in 2d dataset");
     ops >> Option('o', "output",    out_file,  "Output filename.");
     ops >> Option('f', "fin",    in_file,  "Output filename.");
     ops >> Option('t', "tag",    tag,  "Tag.");
@@ -147,22 +294,32 @@ int main(int argc, char* argv[])
     }
 
     
+    NGrid mygrid;
+
+    mygrid.AddDimension("m4", -1.0, 1.1, 0.1);//0.1
+    mygrid.AddDimension("ue4", -2.3, 0.1, 0.05);//0.1
+    mygrid.AddFixedDimension("um4",0.0); //0.05
+
+    nPoints = mygrid.f_num_total_points;
+    
+    //std::vector<sbn::SBNspec*> g_cv_spec_grid(nPoints);
+    //g_cv_spec_grid.reserve(nPoints);
     // Create hdf5 file structure here 
-    //HighFive::File* f_out  = new HighFive::File(out_file,
-			//HighFive::File::ReadWrite|HighFive::File::Create|HighFive::File::Truncate,
-			//HighFive::MPIOFileDriver(MPI_COMM_WORLD,MPI_INFO_NULL));
+    HighFive::File* f_out  = new HighFive::File(out_file,
+                        HighFive::File::ReadWrite|HighFive::File::Create|HighFive::File::Truncate,
+                        HighFive::MPIOFileDriver(MPI_COMM_WORLD,MPI_INFO_NULL));
 
 
-    //std::vector<size_t> ds_dims(1);
-    //ds_dims[0] = nPoints*nUniverses;
-    //ds_dims[1] = 1;
-    //f_out->createDataSet<double>("dataset", HighFive::DataSpace(ds_dims));
 
-    //std::vector<size_t> spec_dims(2);
-    //spec_dims[0] = nPoints*nUniverses;
-    //spec_dims[1] = nBins;
-    //f_out->createDataSet<double>("dataset2d", HighFive::DataSpace(spec_dims));
+    f_out->createDataSet<double>("specfull", HighFive::DataSpace( { nPoints, nBins  }));
+    f_out->createDataSet<double>("speccoll", HighFive::DataSpace( { nPoints, nBinsC }));
 
+    f_out->createDataSet<double>("fakedata",     HighFive::DataSpace( { nPoints*nUniverses, nBinsC  }));
+   
+    f_out->createDataSet<double>("last_chi_min", HighFive::DataSpace( {nPoints*nUniverses, 1} ));
+    f_out->createDataSet<double>("delta_chi",    HighFive::DataSpace( {nPoints*nUniverses, 1} ));
+    f_out->createDataSet<int>("best_grid_point", HighFive::DataSpace( {nPoints*nUniverses, 1} ));
+    f_out->createDataSet<int>("n_iter",          HighFive::DataSpace( {nPoints*nUniverses, 1} ));
     
     size_t blocks;
     if (nBlocks==0) blocks= nPoints;//world.size() * threads;
@@ -206,8 +363,15 @@ int main(int argc, char* argv[])
 
     //master.foreach([world, verbose, nBins, f_out, data, specdata](Block* b, const diy::Master::ProxyWithLink& cp)
                            //{process_block(b, cp, world.size(), world.rank(), nBins, verbose, f_out, data, specdata); });
-    master.foreach([world, tag, xml, nUniverses](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {singlePoint(b, cp, world.size(), world.rank(), tag, xml, nUniverses); });
+
+    master.foreach([world, tag, xml, mygrid, f_out](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out); });
+
+    master.foreach([world, tag, xml, mygrid, f_out, nUniverses](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {doFC(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, nUniverses); });
+
+    //master.foreach([world, tag, xml, nUniverses, mygrid](Block* b, const diy::Master::ProxyWithLink& cp)
+                           //{singlePoint(b, cp, world.size(), world.rank(), tag, xml, nUniverses, mygrid); });
 
     //delete f_out;
     return 0;
