@@ -70,6 +70,24 @@ namespace sbn{
         std::string tag;
 
         public:
+        
+        SBNfeld(SBNfeld const&) = delete;
+        SBNfeld& operator=(SBNfeld const&) = delete;
+        
+        SBNfeld(SBNfeld &&) = delete;
+        SBNfeld& operator=(SBNfeld &&) = delete;
+
+        virtual ~SBNfeld() {
+          delete m_full_fractional_covariance_matrix;
+          delete m_core_spectrum;
+          delete m_background_spectrum;
+          delete m_background_chi;
+          delete m_tvec_background_spectrum;
+
+          for (auto x : m_cv_spec_grid)    delete x;
+          for (auto x : m_sbnchi_grid)  delete x;
+
+        } 
 
         SBNfeld(NGrid ingrid, std::string intag,  std::string inxmlname) : SBNconfig(inxmlname), m_grid(ingrid), tag(intag) {
             m_vec_grid = m_grid.GetGrid();

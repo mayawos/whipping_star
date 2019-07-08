@@ -51,7 +51,9 @@ class SBNconfig {
 	protected:
 	
 	public:
-	
+
+        virtual ~SBNconfig() = default; 
+
 	//Constructors
 	SBNconfig(std::string,bool);
 	SBNconfig(std::string);

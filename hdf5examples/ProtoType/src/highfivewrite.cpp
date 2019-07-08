@@ -101,9 +101,8 @@ void process_block(Block* b, diy::Master::ProxyWithLink const& cp, int size, int
    spec.select(   {std::size_t(    cp.gid()), 0}, {1, nbins}).write(specdata);
 }
 
-//
-//
-void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out) {
+
+unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid) {
 
     sbn::SBNfeld myfeld(mygrid, tag, xml);
 
@@ -112,7 +111,14 @@ void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int 
     double random_number_seed = -1;
     myfeld.SetRandomSeed(random_number_seed);
 
-    auto myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
+    return myfeld.LoadPreOscillatedSpectrum(i_uni);
+};
+
+void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out) {
+
+
+    //auto myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
+    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, xml, mygrid);
     std::vector<double> full = myspec->full_vector;
     std::vector<double> coll = myspec->collapsed_vector;
 

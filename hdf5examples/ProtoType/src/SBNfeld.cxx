@@ -101,6 +101,7 @@ int SBNfeld::LoadPreOscillatedSpectra(){
     //we have a core spectrum loaded on the start of the SBNfeld class. This is the fullosc+intrinsics...etc..
     // i.e m_cv_spec_grid;
 
+    for (auto x : m_cv_spec_grid)    delete x;
     m_cv_spec_grid.clear();
     std::cout<<"Beginining to Grab all oscillated spectra"<<std::endl;
     m_cv_spec_grid.resize(m_num_total_gridpoints);
@@ -128,6 +129,7 @@ int SBNfeld::LoadPreOscillatedSpectra(){
             //std::cout<<" "<<ans[p];
         //}
         //std::cout<<std::endl;
+        // FIXME this is bad. Call delete if it is already pointing to an SBNspec object.
         m_cv_spec_grid[t] = new SBNspec(ans, m_core_spectrum->xmlname,t, false);
         m_cv_spec_grid[t]->CollapseVector();
 
