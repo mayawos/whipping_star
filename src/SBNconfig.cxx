@@ -585,13 +585,12 @@ SBNconfig::SBNconfig(std::string whichxml, bool isverbose): xmlname(whichxml) {
 
 }//end constructor
 
-SBNconfig::SBNconfig(std::string whichxml): SBNconfig(whichxml, true) {}
+SBNconfig::SBNconfig(std::string whichxml): SBNconfig(whichxml, false) {}
 
 //Constructor to build a SBNspec from scratch, not reccomended often
 SBNconfig::SBNconfig(std::vector<std::string> modein, std::vector<std::string> detin, std::vector<std::string> chanin, std::vector<std::vector<std::string>> subchanin, std::vector<std::vector<double>> binin){
 
     otag = "SBNconfig::SBNconfig\t|| ";
-    is_verbose = true;
 
     num_detectors = detin.size();
     num_channels = chanin.size();

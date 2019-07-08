@@ -123,11 +123,11 @@ int SBNfeld::LoadPreOscillatedSpectra(){
         //And apply this oscillaion! Adding to it the bkgSpec that it was initilised with.
         //NOTE we want to return the FULL spectrum, not compressed so we can calculate the covariance matrix, hense the false in this Oscilate
         std::vector<double> ans = m_core_spectrum->Oscillate(this->tag, false);
-        std::cout<<"Spectrum: ";
-        for(int p=0; p<ans.size();p++){
-            std::cout<<" "<<ans[p];
-        }
-        std::cout<<std::endl;
+        //std::cout<<"Spectrum: ";
+        //for(int p=0; p<ans.size();p++){
+            //std::cout<<" "<<ans[p];
+        //}
+        //std::cout<<std::endl;
         m_cv_spec_grid[t] = new SBNspec(ans, m_core_spectrum->xmlname,t, false);
         m_cv_spec_grid[t]->CollapseVector();
 

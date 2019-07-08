@@ -284,6 +284,21 @@ int SBNspec::CollapseVector(){
 	collapsed_vector.clear();
 	CalcFullVector();
 
+	int reserve_size=0;
+        for(int im = 0; im < num_modes; im++){
+            for(int id =0; id < num_detectors; id++){
+                for(int ic = 0; ic < num_channels; ic++){
+                    for(int j=0; j< num_bins.at(ic); j++){
+                        for(int sc = 0; sc < num_subchannels.at(ic); sc++){
+                          reserve_size+=1;
+                        }
+                    }
+                }
+            }
+	}
+        collapsed_vector.reserve(reserve_size);
+
+
 	for(int im = 0; im < num_modes; im++){
 		for(int id =0; id < num_detectors; id++){
 			int edge = id*num_bins_detector_block + num_bins_mode_block*im; // This is the starting index for this detector

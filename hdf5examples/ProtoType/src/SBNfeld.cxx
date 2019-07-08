@@ -70,9 +70,9 @@ int SBNfeld::SetCoreSpectrum(std::string file){
 }
 
 int SBNfeld::SetFractionalCovarianceMatrix(std::string filename,std::string matrixname){
-    TFile * fsys = new TFile(filename.c_str(),"read");
-    m_full_fractional_covariance_matrix = (TMatrixD*)fsys->Get(matrixname.c_str());
-    fsys->Close();
+    TFile  fsys(filename.c_str(),"read");
+    m_full_fractional_covariance_matrix = (TMatrixD*)fsys.Get(matrixname.c_str());
+    fsys.Close();
 
     return 0;
 }
@@ -143,8 +143,8 @@ int SBNfeld::LoadPreOscillatedSpectra(){
 
 // Load a single grid points spectrum
 // This needs to be called somewhere    m_cv_spec_grid.resize(m_num_total_gridpoints);
-SBNspec* SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint){
-
+std::unique_ptr<SBNspec> SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint){
+    if (! m_cv_spec_grid.empty()) abort();
     //need to convert from this gridpoints to a neutrinoModel (Blarg, don't like this step but needed at the moment)
     NeutrinoModel this_model = this->convert3p1(m_vec_grid[ipoint]); 
 
@@ -157,7 +157,7 @@ SBNspec* SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint){
     std::vector<double> ans = m_core_spectrum->Oscillate(this->tag, false);
     //m_cv_spec_grid[ipoint] = new SBNspec(ans, m_core_spectrum->xmlname,t, false);
     //m_cv_spec_grid[ipoint]->CollapseVector();
-    SBNspec* spec = new SBNspec(ans, m_core_spectrum->xmlname, ipoint, false);
+    auto spec = std::make_unique<SBNspec>(ans, m_core_spectrum->xmlname, ipoint, false);
     spec->CollapseVector();
     return spec;// std::move(spec->collapsed_vector); 
 }

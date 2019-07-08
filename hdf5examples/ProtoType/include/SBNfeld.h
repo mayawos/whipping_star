@@ -1,6 +1,7 @@
 #ifndef SBNFELD_H_
 #define SBNFELD_H_
 
+#include <memory>
 #include <cmath>
 #include <vector>
 #include <iostream>
@@ -98,7 +99,7 @@ namespace sbn{
         int GenerateOscillatedSpectra();
         int LoadPreOscillatedSpectra();
         //std::vector<double> LoadPreOscillatedSpectrum(size_t ipoint);
-        SBNspec* LoadPreOscillatedSpectrum(size_t ipoint);
+        std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint);
 
         int SetRandomSeed(double);
 

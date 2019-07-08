@@ -112,7 +112,7 @@ void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int 
     double random_number_seed = -1;
     myfeld.SetRandomSeed(random_number_seed);
 
-    sbn::SBNspec* myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
+    auto myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
     std::vector<double> full = myspec->full_vector;
     std::vector<double> coll = myspec->collapsed_vector;
 
@@ -121,9 +121,6 @@ void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int 
 
     HighFive::DataSet speccoll = f_out->getDataSet("speccoll");
     speccoll.select(   {std::size_t(cp.gid()), 0}, {1, std::size_t(coll.size())}).write(coll);
-    
-    delete myspec;
-
 }
 
 //void loadSpectrum2(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out) {
@@ -181,7 +178,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
     double random_number_seed = -1;
     myfeld.SetRandomSeed(random_number_seed);
     
-    sbn::SBNspec* myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
+    auto myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
 
     myfeld.LoadBackgroundSpectrum();
     TMatrixT<double> stat_only_matrix(myfeld.num_bins_total, myfeld.num_bins_total);
@@ -226,7 +223,6 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
     std::vector<double> specfull = {nBinsFull};
     std::vector<double> speccoll = {nBinsColl};
 
-    sbn::SBNspec* true_spec = myspec; 
     sbn::SBNchi * true_chi  = mychi; 
 
     size_t offset = 0;
@@ -234,7 +230,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
         offset = i*mygrid.f_num_total_points;
 
         //step 0. Make a fake-data-experimet for this point, drawn from covariance
-        std::vector<float> fake_data= true_chi->SampleCovariance(true_spec);
+        std::vector<float> fake_data= true_chi->SampleCovariance(myspec.get());
         d_fakedata.select(   {offset + size_t(cp.gid()), 0}, {1, size_t(nBinsColl)}).write(fake_data);
         float last_chi_min = FLT_MAX;
         int best_grid_point = -99;
@@ -280,7 +276,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
         } // End loop over iterations
 
         //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
-        float this_chi = myfeld.CalcChi(fake_data, true_spec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
+        float this_chi = myfeld.CalcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
 
         //step 4 calculate the delta_chi for this universe
         // Write out numbers of interest
@@ -295,7 +291,6 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
     } // End loop over universes
 
     delete mychi;
-    delete myspec;
 }
 
 // This is doing one univere for one gridpoint
@@ -316,7 +311,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
     double random_number_seed = -1;
     myfeld.SetRandomSeed(random_number_seed);
     
-    sbn::SBNspec* myspec = myfeld.LoadPreOscillatedSpectrum(i_grid);
+    auto myspec = myfeld.LoadPreOscillatedSpectrum(i_grid);
 
     myfeld.LoadBackgroundSpectrum();
     TMatrixT<double> stat_only_matrix(myfeld.num_bins_total, myfeld.num_bins_total);
@@ -378,7 +373,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
    }
 
 
-    sbn::SBNspec* true_spec = myspec; 
+    //sbn::SBNspec* true_spec = myspec; 
     sbn::SBNchi * true_chi  = mychi; 
 
     //HighFive::DataSet d_invcollcov          = f_out->getDataSet("invcollcov");
@@ -386,7 +381,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
     //c_flat.reserve(myfeld.bgBinsCompressed()*myfeld.bgBinsCompressed());
 
      //step 0. Make a fake-data-experimet for this point, drawn from covariance
-     std::vector<float> fake_data= true_chi->SampleCovariance(true_spec);
+     std::vector<float> fake_data= true_chi->SampleCovariance(myspec.get());
      d_fakedata.select(   {size_t(cp.gid()), 0}, {1, size_t(nBinsColl)}).write(fake_data);
      float last_chi_min = FLT_MAX;
      int best_grid_point = -99;
@@ -444,7 +439,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
      } // End loop over iterations
 
      //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
-     float this_chi = myfeld.CalcChi(fake_data, true_spec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
+     float this_chi = myfeld.CalcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
 
      //step 4 calculate the delta_chi for this universe
      // Write out numbers of interest
@@ -462,7 +457,6 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
      d_i_univ.select(         {size_t(cp.gid()), 0}, {1,1}).write( v_i_univ         );
 
     delete mychi;
-    delete myspec;
     endtime   = MPI_Wtime(); 
     if (rank==0) fmt::print(stderr, "[{}] gridp {} univ {} iteration {}  took {} seconds, chi2min: {}\n",cp.gid(), i_grid, i_univ, n_iter, endtime-starttime, last_chi_min);
 }
