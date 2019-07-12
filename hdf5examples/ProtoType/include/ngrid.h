@@ -16,60 +16,47 @@ struct NGridDimension{
     double f_step;
     double f_fixed_value;
     bool f_is_fixed;
-    int f_N;
-
+    std::size_t f_N;
     std::vector<double> f_points;
 
-    NGridDimension(std::string name, double min, double max, double step) : f_name(name), f_min(min), f_max(max), f_step(step) {
-        f_N = ceil(fabs(f_min-f_max)/step);
-        f_points.resize(f_N);
+    NGridDimension(std::string const & name, double min, double max, double step) : 
+      f_name(name), f_min(min), f_max(max), f_step(step), f_fixed_value(0), f_is_fixed(false), f_N(ceil(fabs(f_min-f_max)/step)), f_points(f_N) {
         this->CalcGrid();
-        f_is_fixed = false;
     };
 
-    NGridDimension(std::string name, double val) : f_name(name), f_fixed_value(val), f_is_fixed(true){
-        f_N = 1;
-        f_step = 0.0;
-        f_max = f_fixed_value;
-        f_min = f_fixed_value;
-        f_points.resize(f_N);
+    NGridDimension(std::string const & name, double val) :
+      f_name(name), f_min(val), f_max(val), f_step(0), f_fixed_value(val), f_is_fixed(true), f_N(1), f_points(f_N) {
         this->CalcGrid();
     }
+
+    void CalcGrid(){
+      for(int i=0; i<f_N; i++){
+        f_points[i]= f_min + i*f_step;
+      }
+    }
+    
 
     int GetNPoints(){return f_N;};
 
-    void CalcGrid(){
-        for(int i=0; i<f_N; i++){
-            f_points[i]= f_min + i*f_step;
-        }
-        return;
-    }
     double GetPoint(int n){ return f_points[n];    };
 
 };
 
 struct NGrid{
-    int f_num_dimensions;
-    int f_num_total_points;
+    int f_num_dimensions   = 0;
+    int f_num_total_points = 1; // TODO why 1 and not 0 ???
 
     std::vector<NGridDimension> f_dimensions;
 
-    NGrid(){
-        f_num_dimensions=0;
-        f_num_total_points=1;
-    }
-
-    void AddDimension(std::string name, double min, double max, double step ){
-        f_dimensions.emplace_back( NGridDimension(name,min,max,step));
-        f_num_dimensions++;
+    void AddDimension(std::string const & name, double min, double max, double step ){
+        f_dimensions.emplace_back( name, min, max, step );
+        ++f_num_dimensions;
         f_num_total_points *= f_dimensions.back().GetNPoints();
-        return;
     }
 
-    void AddFixedDimension(std::string name, double val){
-        f_dimensions.emplace_back(NGridDimension(name,val));
-        f_num_dimensions++;
-        return;
+    void AddFixedDimension(std::string const & name, double val){
+        f_dimensions.emplace_back(name, val);
+        ++f_num_dimensions;
     }
 
     std::vector<std::vector<double>> GetGrid(){
