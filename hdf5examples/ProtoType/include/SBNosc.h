@@ -18,7 +18,6 @@ namespace sbn{
 
 
 class SBNosc : public SBNspec{
-	protected:
 	public:
 	//this is the structure contains 3+N oscillation parameters (find in prob.h)
 	struct NeutrinoModel working_model;	
@@ -29,7 +28,7 @@ class SBNosc : public SBNspec{
 
 	SBNosc(std::string, std::string); //constructor
 	SBNosc(std::string, std::string, NeutrinoModel); //constructor
-    SBNosc(SBNspec & specin);
+        SBNosc(SBNspec & specin);
 
 	//find all the frequencies! Needs to know if a frequency corresponds to 41 51 54..etc.. so thats the int
 	std::vector< std::pair <double, int>> mass_splittings;	
@@ -37,8 +36,8 @@ class SBNosc : public SBNspec{
 	//Oscillate the contained std::vector<TH1D> hists 
 	int OscillateThis(std::string);	
 	// Or just oscillate a copy and return the ompressed vector
-    std::vector<double> Oscillate(std::string,bool compress); 
-    std::vector<double> Oscillate(std::string);
+        std::vector<double> Oscillate(std::string,bool compress); 
+        std::vector<double> Oscillate(std::string);
 	std::vector<double> Oscillate(std::string, double);
 	//std::vector<double> OscillateWithAmp(double amp, double amp_sq);
 
