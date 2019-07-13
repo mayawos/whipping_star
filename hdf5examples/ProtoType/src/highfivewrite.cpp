@@ -39,6 +39,19 @@ using namespace std;
 typedef diy::DiscreteBounds Bounds;
 
 
+float calcChi(std::vector<float> const & data, std::vector<double> const & prediction, TMatrixT<double> const & C_inv ){
+    float tchi = 0;
+
+    for(int i =0; i<data.size(); i++){
+        for(int j =0; j<data.size(); j++){
+            tchi += (data[i]-prediction[i]) * C_inv[i][j] * (data[j]-prediction[j]);
+        }
+    }
+    return tchi;
+}
+
+
+
 struct Block
 {
     static void*    create()            { return new Block; }
@@ -109,7 +122,14 @@ unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag
     myfeld.SetCoreSpectrum(tag+"_BKG_ONLY.SBNspec.root");
 
     double random_number_seed = -1;
+    std::cout<<"Setting random seed "<<random_number_seed<<std::endl;
     myfeld.SetRandomSeed(random_number_seed);
+    std::cout<<"Loading precomputed spectra"<<std::endl;
+    //std::cout <<"DONE loading precomputed spectra at : " << difftime(time(0), start_time)/60.0 << " Minutes.\n";
+
+    // FIXME the dtor of SBNfeld only works when these functions are called :(
+    myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
+    myfeld.LoadBackgroundSpectrum();
 
     return myfeld.LoadPreOscillatedSpectrum(i_uni);
 };
@@ -264,7 +284,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
             for(size_t r =0; r < mygrid.f_num_total_points; r++){
                // Load spectrum number r from HDF into speccoll
                 g_speccoll.select(   {r, 0}, {1, nBinsColl}).read(speccoll);
-                float chi_tmp = myfeld.CalcChi(fake_data, speccoll,  inverse_current_collapsed_covariance_matrix);
+                float chi_tmp = calcChi(fake_data, speccoll,  inverse_current_collapsed_covariance_matrix);
                 if(chi_tmp < chi_min){
                     best_grid_point = r;
                     chi_min = chi_tmp;
@@ -282,7 +302,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
         } // End loop over iterations
 
         //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
-        float this_chi = myfeld.CalcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
+        float this_chi = calcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
 
         //step 4 calculate the delta_chi for this universe
         // Write out numbers of interest
@@ -427,7 +447,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
             // Load spectrum number r from HDF into speccoll
              //g_speccoll.select(   {r, 0}, {1, nBinsColl}).read(speccoll);
              //float chi_tmp = myfeld.CalcChi(fake_data, speccoll,  inverse_current_collapsed_covariance_matrix);
-             float chi_tmp = myfeld.CalcChi(fake_data, allColl[r],  inverse_current_collapsed_covariance_matrix);
+             float chi_tmp = calcChi(fake_data, allColl[r],  inverse_current_collapsed_covariance_matrix);
              if(chi_tmp < chi_min){
                  best_grid_point = r;
                  chi_min = chi_tmp;
@@ -445,7 +465,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
      } // End loop over iterations
 
      //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
-     float this_chi = myfeld.CalcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
+     float this_chi = calcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
 
      //step 4 calculate the delta_chi for this universe
      // Write out numbers of interest
@@ -484,6 +504,12 @@ int main(int argc, char* argv[])
     std::string in_file="";
     std::string tag="";
     std::string xml="";
+    double xmin(-1.0);
+    double xmax(1.1);
+    double xwidth(0.1);
+    double ymin(-2.3);
+    double ymax(0.1);
+    double ywidth(0.05);
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
@@ -496,6 +522,12 @@ int main(int argc, char* argv[])
     ops >> Option('f', "fin",    in_file,  "Output filename.");
     ops >> Option('t', "tag",    tag,  "Tag.");
     ops >> Option('x', "xml",    xml,  "XML config.");
+    ops >> Option("xmin",    xmin,   "xmin");
+    ops >> Option("xmax",    xmax,   "xmax");
+    ops >> Option("xwidth",  xwidth, "xwidth");
+    ops >> Option("ymin",    ymin,   "ymin");
+    ops >> Option("ymax",    ymax,   "ymax");
+    ops >> Option("ywidth",  ywidth, "ywidth");
     bool verbose     = ops >> Present('v', "verbose", "verbose output");
     if (ops >> Present('h', "help", "Show help"))
     {
@@ -507,8 +539,8 @@ int main(int argc, char* argv[])
     
     NGrid mygrid;
 
-    mygrid.AddDimension("m4", -1.0, 1.1, 0.1);//0.1
-    mygrid.AddDimension("ue4", -2.3, 0.1, 0.05);//0.1
+    mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1
+    mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1
     mygrid.AddFixedDimension("um4",0.0); //0.05
 
     
