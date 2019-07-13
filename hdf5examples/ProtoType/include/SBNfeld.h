@@ -47,7 +47,6 @@ namespace sbn{
 
 
         NGrid m_grid;
-        int m_num_total_gridpoints;
 
         std::vector<std::vector<double>> m_vec_grid;
         std::vector<SBNspec*> m_cv_spec_grid;
@@ -55,19 +54,20 @@ namespace sbn{
 
         TMatrixT<double> * m_full_fractional_covariance_matrix;
 
-        SBNosc *m_core_spectrum;
-        SBNosc *m_background_spectrum;
-        SBNchi* m_background_chi;
-        TVectorT<double> * m_tvec_background_spectrum;
+        std::unique_ptr<SBNosc>            m_core_spectrum;
+        std::unique_ptr<SBNosc>            m_background_spectrum;
+        std::unique_ptr<SBNchi>            m_background_chi;
+        std::unique_ptr<TVectorT<double> > m_tvec_background_spectrum;
 
-        bool m_bool_core_spectrum_set;
-        bool m_bool_background_spectrum_set;
+//        bool m_bool_core_spectrum_set;
         bool m_bool_stat_only;
         bool m_bool_print_comparasons;
 
         int m_num_universes;
         double m_random_seed;
         std::string tag;
+
+        int nGridPoints() const { return m_grid.f_num_total_points;}
 
         public:
         
@@ -79,21 +79,14 @@ namespace sbn{
 
         virtual ~SBNfeld() {
           delete m_full_fractional_covariance_matrix;
-          delete m_core_spectrum;
-          delete m_background_spectrum;
-          delete m_background_chi;
-          delete m_tvec_background_spectrum;
 
           for (auto x : m_cv_spec_grid)    delete x;
           for (auto x : m_sbnchi_grid)  delete x;
 
         } 
 
-        SBNfeld(NGrid ingrid, std::string intag,  std::string inxmlname) : SBNconfig(inxmlname), m_grid(ingrid), tag(intag) {
+        SBNfeld(NGrid const & ingrid, std::string const & intag,  std::string const & inxmlname) : SBNconfig(inxmlname), m_grid(ingrid), tag(intag) {
             m_vec_grid = m_grid.GetGrid();
-            m_num_total_gridpoints = m_grid.f_num_total_points;
-            m_bool_core_spectrum_set = false;
-            m_bool_background_spectrum_set = false;
             m_bool_stat_only = false;
             m_num_universes = 2500;
             m_bool_print_comparasons = false;;
@@ -110,7 +103,7 @@ namespace sbn{
         bool statOnly() { return m_bool_stat_only; }
         double seed() {return m_random_seed; }
         TMatrixT<double> *  fullFracCovMat() { return m_full_fractional_covariance_matrix; }
-        TVectorT<double> *  bgSpectrum() { return m_tvec_background_spectrum; }
+        TVectorT<double> *  bgSpectrum() { return m_tvec_background_spectrum.get(); }
         int bgBinsCompressed() { return m_background_spectrum->num_bins_total_compressed; } 
 
 
@@ -126,7 +119,7 @@ namespace sbn{
 
         int CalcSBNchis();
 
-        int SetCoreSpectrum(std::string);
+        int SetCoreSpectrum(std::string const &);
         int SetFractionalCovarianceMatrix(TMatrixT<double> *);
         int SetFractionalCovarianceMatrix(std::string, std::string);
         int SetEmptyFractionalCovarianceMatrix();
