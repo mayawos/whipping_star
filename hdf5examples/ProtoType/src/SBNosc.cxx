@@ -1,11 +1,23 @@
 #include "SBNosc.h"
 using namespace sbn;
 
+SBNosc::SBNosc(std::vector<TH1D> bghist, const char* xmldata) : SBNspec(bghist, xmldata) {
+	working_model.zero();
+	mass_step_size = 0.04;
+	which_mode = BOTH_ONLY;
+}
+SBNosc::SBNosc(std::string name, const char* xmldata) : SBNspec(name, xmldata) {
+	working_model.zero();
+	mass_step_size = 0.04;
+	which_mode = BOTH_ONLY;
+}
+
 SBNosc::SBNosc(std::string name, std::string whichxml) : SBNspec(name, whichxml) {
 	working_model.zero();
 	mass_step_size = 0.04;
 	which_mode = BOTH_ONLY;
 }
+
 SBNosc::SBNosc(SBNspec & specin): SBNspec(specin){
 	working_model.zero();
 	which_mode = BOTH_ONLY;
@@ -295,9 +307,156 @@ std::vector<double> SBNosc::OscillateWithAmp(double amp, double amp_sq){
 */
 
 std::vector<double> SBNosc::Oscillate(std::string tag){
-
     return this->Oscillate(tag,true);
 }
+
+
+std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, const char * xmldata) {
+
+    this->CalcFullVector();
+    this->CollapseVector();
+    calcMassSplittings();
+    std::vector<double> temp;
+    
+    if (return_compressed) {
+        temp = collapsed_vector;
+    }
+    else {
+        temp = full_vector;
+    }
+
+    for (auto ms: mass_splittings) {
+
+
+              std::string name_sinsq = tag +"_SINSQ_dm_"+working_model.mass_tag+".SBNspec.root";
+              std::string name_sin = tag +"_SIN_dm_"+working_model.mass_tag+".SBNspec.root";
+
+              SBNspec single_frequency(name_sin , xmldata , false);
+              SBNspec single_frequency_square(name_sinsq , xmldata ,false);
+
+              if(has_been_scaled){
+                  single_frequency.Scale(scale_hist_name, scale_hist_val);
+                  single_frequency_square.Scale(scale_hist_name, scale_hist_val);
+              }
+
+              single_frequency.CalcFullVector();
+              single_frequency_square.CalcFullVector();
+
+
+              double prob_mumu, prob_ee, prob_mue, prob_mue_sq, prob_muebar, prob_muebar_sq;
+
+              int which_dm = ms.second;
+
+              switch (which_mode)
+                    {
+                            case APP_ONLY: //Strictly nu_e app only
+                                    prob_mumu =0;
+                                    prob_ee   =0;
+                                    prob_mue = working_model.oscAmp(2,1,which_dm,1);
+                                    prob_mue_sq = working_model.oscAmp(2,1,which_dm,2);
+                                    prob_muebar = working_model.oscAmp(-2,-1,which_dm,1);
+                                    prob_muebar_sq = working_model.oscAmp(-2,-1,which_dm,2);
+                                    break;
+                            case DIS_ONLY: //Strictly nu_mu dis only
+                                    prob_mumu = working_model.oscAmp(2,2,which_dm,2);
+                                    prob_ee = 0;
+                                    prob_mue = 0;
+                                    prob_mue_sq =0;
+                                    prob_muebar =0;
+                                    prob_muebar_sq =0;
+                                    break;
+                            case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
+                                    prob_mumu = working_model.oscAmp(2,2,which_dm,2);
+                                    prob_ee = working_model.oscAmp(1,1,which_dm,2);
+                                    prob_mue = working_model.oscAmp(2,1,which_dm,1);
+                                    prob_mue_sq = working_model.oscAmp(2,1,which_dm,2);
+                                    prob_muebar = working_model.oscAmp(-2,-1,which_dm,1);
+                                    prob_muebar_sq = working_model.oscAmp(-2,-1,which_dm,2);
+                                    break;
+                            case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
+                                    prob_mumu =working_model.oscAmp(2,2,which_dm,2);
+                                    prob_ee = 0.0;
+                                    prob_mue = working_model.oscAmp(2,1,which_dm,1);
+                                    prob_mue_sq = working_model.oscAmp(2,1,which_dm,2);
+                                    prob_muebar = working_model.oscAmp(-2,-1,which_dm,1);
+                                    prob_muebar_sq = working_model.oscAmp(-2,-1,which_dm,2);
+                                    break;
+                            case DISE_ONLY: // A strange version where nu_e can appear but not disapear
+                                    prob_mumu = 0.0;
+                                    prob_ee = working_model.oscAmp(1,1,which_dm,2);
+                                    prob_mue = 0;
+                                    prob_mue_sq = 0;
+                                    prob_muebar = 0;
+                                    prob_muebar_sq = 0;
+                                    break;
+
+                    }
+
+
+			for(int i=0; i<num_channels; i++){
+				for(int j=0; j<num_subchannels.at(i); j++){
+					int osc_pattern = subchannel_osc_patterns.at(i).at(j);
+					double osc_amp = 0;
+					double osc_amp_sq = 0;
+					switch(osc_pattern){
+						case 11:
+							osc_amp_sq = prob_ee;
+							break;
+						case -11:
+							osc_amp_sq = prob_ee;
+							break;
+						case 22:
+							osc_amp_sq = prob_mumu;
+							break;
+						case -22:
+							osc_amp_sq = prob_mumu;
+							break;
+						case 21:
+							osc_amp = prob_mue;
+							osc_amp_sq = prob_mue_sq;
+							break;
+						case -21:
+							osc_amp = prob_muebar;
+							osc_amp_sq = prob_muebar_sq;
+							break;
+						case 0:
+						default:
+							break;
+					}
+
+					single_frequency.Scale(channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp);
+					single_frequency_square.Scale(channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp_sq );
+				}
+			}
+
+			single_frequency.CalcFullVector();
+			single_frequency.CollapseVector();
+
+			single_frequency_square.CalcFullVector();
+			single_frequency_square.CollapseVector();
+
+           if(return_compressed){ 
+			for(int i=0;i<temp.size(); i++){
+				temp[i] += single_frequency.collapsed_vector[i];
+				temp[i] += single_frequency_square.collapsed_vector[i];
+			}
+
+           }else{
+        	for(int i=0;i<temp.size(); i++){
+				temp[i] += single_frequency.full_vector[i];
+				temp[i] += single_frequency_square.full_vector[i];
+			}
+
+
+
+           }
+
+	}//Done looping over
+
+	return temp;
+};
+
+
 std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed){
 
 		this->CalcFullVector();

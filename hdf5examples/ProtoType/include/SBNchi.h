@@ -49,7 +49,10 @@ class SBNchi : public SBNconfig{
 	SBNchi(SBNspec,TMatrixT<double>);
 	SBNchi(SBNspec,TMatrixT<double>,bool);
 	SBNchi(SBNspec,TMatrixT<double>,std::string, bool);
-	SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed);
+
+	SBNchi(SBNspec, TMatrixT<double>, const char *, bool);
+	
+        SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed);
 
     //Initialise a stat_only one;
 	SBNchi(SBNspec, bool is_stat_only);

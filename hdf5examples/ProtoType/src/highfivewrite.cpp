@@ -22,6 +22,7 @@
 #include <highfive/H5DataSpace.hpp>
  
 #include "TMatrixT.h"
+#include "TH1D.h"
 
 #include "params.h"
 #include "SBNconfig.h"
@@ -37,6 +38,20 @@ using namespace std;
 #include "opts.h"
 
 typedef diy::DiscreteBounds Bounds;
+
+
+std::vector<TH1D> readBG(std::string rootfile, std::vector<string> fullnames) {
+     std::vector<TH1D > hist;
+     //Contruct from a prexisting histograms that exist in a rootfile
+     TFile f(rootfile.c_str(),"read");
+
+     //Loop over all filenames that should be there, and load up the histograms.
+     for(auto fn: fullnames) hist.push_back(*((TH1D*)f.Get(fn.c_str())));
+     f.Close();
+
+     return hist;
+}
+
 
 
 float calcChi(std::vector<float> const & data, std::vector<double> const & prediction, TMatrixT<double> const & C_inv ){
@@ -115,11 +130,12 @@ void process_block(Block* b, diy::Master::ProxyWithLink const& cp, int size, int
 }
 
 
-unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid) {
+unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid, const char * xmldata, std::vector<TH1D> bghist) {
 
-    sbn::SBNfeld myfeld(mygrid, tag, xml);
+    sbn::SBNfeld myfeld(mygrid, tag, xmldata);
 
-    myfeld.SetCoreSpectrum(tag+"_BKG_ONLY.SBNspec.root");
+    myfeld.SetCoreSpectrum(bghist, xmldata);
+    //myfeld.SetCoreSpectrum(tag+"_BKG_ONLY.SBNspec.root", xmldata);
 
     double random_number_seed = -1;
     std::cout<<"Setting random seed "<<random_number_seed<<std::endl;
@@ -128,17 +144,16 @@ unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag
     //std::cout <<"DONE loading precomputed spectra at : " << difftime(time(0), start_time)/60.0 << " Minutes.\n";
 
     // FIXME the dtor of SBNfeld only works when these functions are called :(
-    myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
-    myfeld.LoadBackgroundSpectrum();
-
-    return myfeld.LoadPreOscillatedSpectrum(i_uni);
+    myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance"); // FIXME pass the TMatrix directly!!!
+    myfeld.LoadBackgroundSpectrum(xmldata);
+    return myfeld.LoadPreOscillatedSpectrum(i_uni, xmldata);
 };
 
-void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out) {
+void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out, const char * xmldata, std::vector<TH1D> bghist) {
 
 
     //auto myspec = myfeld.LoadPreOscillatedSpectrum(cp.gid());
-    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, xml, mygrid);
+    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, xml, mygrid, xmldata, bghist);
     std::vector<double> full = myspec->full_vector;
     std::vector<double> coll = myspec->collapsed_vector;
 
@@ -320,7 +335,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
 }
 
 // This is doing one univere for one gridpoint
-void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out, int num_universes, bool dry) {
+void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out, int num_universes, bool dry, const char * xmldata, std::vector<TH1D> bghist) {
     // Some arithmetic to figure out the gridpoint and universe from cp.gid
     int i_grid = cp.gid() % mygrid.f_num_total_points;
     int i_univ = floor(cp.gid()/mygrid.f_num_total_points);
@@ -329,26 +344,26 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
 
     double starttime, endtime;
     starttime = MPI_Wtime();
-    sbn::SBNfeld myfeld(mygrid, tag, xml);
-    myfeld.SetCoreSpectrum(tag+"_BKG_ONLY.SBNspec.root");
+    sbn::SBNfeld myfeld(mygrid, tag, xmldata);
+    myfeld.SetCoreSpectrum(bghist, xmldata);
     myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
 
     // TODO: Setting the seed to cp.gid()???
     double random_number_seed = -1;
     myfeld.SetRandomSeed(random_number_seed);
     
-    auto myspec = myfeld.LoadPreOscillatedSpectrum(i_grid);
+    auto myspec = myfeld.LoadPreOscillatedSpectrum(i_grid, xmldata);
 
-    myfeld.LoadBackgroundSpectrum();
+    myfeld.LoadBackgroundSpectrum(xmldata);
     TMatrixT<double> stat_only_matrix(myfeld.num_bins_total, myfeld.num_bins_total);
     stat_only_matrix.Zero();
 
     sbn::SBNchi* mychi = nullptr; 
 
     if(myfeld.statOnly()){
-         mychi = new sbn::SBNchi(*myspec, stat_only_matrix, myfeld.xmlname, false, myfeld.seed());
+         mychi = new sbn::SBNchi(*myspec, stat_only_matrix, xmldata, false);//, myfeld.seed());
      }else{
-         mychi = new sbn::SBNchi(*myspec, *myfeld.fullFracCovMat(), myfeld.xmlname, false, myfeld.seed());
+         mychi = new sbn::SBNchi(*myspec, *myfeld.fullFracCovMat(), xmldata, false);//, myfeld.seed());
      }
     int nBinsFull = myspec->full_vector.size();
     int nBinsColl = myspec->collapsed_vector.size();
@@ -506,6 +521,7 @@ int main(int argc, char* argv[])
     int nUniverses=1;
     std::string out_file="test.hdf5";
     std::string in_file="";
+    std::string f_BG="BOTHv2_BKG_ONLY.SBNspec.root";
     std::string tag="";
     std::string xml="";
     double xmin(-1.0);
@@ -523,6 +539,7 @@ int main(int argc, char* argv[])
     ops >> Option('n', "nbins",   nBins,   "Number of bins in 2d dataset");
     ops >> Option('n', "nbinsC",   nBinsC,   "Number of collapsed bins in 2d dataset");
     ops >> Option('o', "output",    out_file,  "Output filename.");
+    ops >> Option('g', "background",    f_BG,  "Backgrounds filename.");
     ops >> Option('f', "fin",    in_file,  "Output filename.");
     ops >> Option('t', "tag",    tag,  "Tag.");
     ops >> Option('x', "xml",    xml,  "XML config.");
@@ -550,6 +567,15 @@ int main(int argc, char* argv[])
 
     
     nPoints = mygrid.f_num_total_points;
+
+    std::string line,text;
+    std::ifstream in(xml);
+    while(std::getline(in, line))  text += line + "\n";
+    const char* xmldata = text.c_str();
+
+    sbn::SBNconfig myconf(xmldata, false);
+
+    std::vector<TH1D> bghist = readBG(f_BG, myconf.fullnames);
 
     
     if( world.rank()==0 ) {
@@ -614,8 +640,8 @@ int main(int argc, char* argv[])
 
     double starttime, endtime;
     starttime = MPI_Wtime();
-    master.foreach([world, tag, xml, mygrid, f_out](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out); });
+    master.foreach([world, tag, xml, mygrid, f_out, xmldata, bghist](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, xmldata, bghist); });
     endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra took {} seconds\n",world.rank(), endtime-starttime);
 
@@ -634,8 +660,8 @@ int main(int argc, char* argv[])
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);//, share_face, wrap, ghosts);
 
     starttime = MPI_Wtime();
-    fc_master.foreach([world, tag, xml, mygrid, f_out, nUniverses, dryrun](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {doFCsmart(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, nUniverses, dryrun); });
+    fc_master.foreach([world, tag, xml, mygrid, f_out, nUniverses, dryrun, xmldata, bghist](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {doFCsmart(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, nUniverses, dryrun, xmldata, bghist); });
     endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
     return 0;

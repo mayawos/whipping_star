@@ -92,6 +92,14 @@ namespace sbn{
             m_bool_print_comparasons = false;;
             m_random_seed = -1;
         }
+        
+        SBNfeld(NGrid const & ingrid, std::string const & intag,  const char * xmldata) : SBNconfig(xmldata, true), m_grid(ingrid), tag(intag) {
+            m_vec_grid = m_grid.GetGrid();
+            m_bool_stat_only = false;
+            m_num_universes = 2500;
+            m_bool_print_comparasons = false;;
+            m_random_seed = -1;
+        }
 
 
         //Member Functions
@@ -111,15 +119,20 @@ namespace sbn{
         int LoadPreOscillatedSpectra();
         //std::vector<double> LoadPreOscillatedSpectrum(size_t ipoint);
         std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint);
+        std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint, const char * xmldata);
 
         int SetRandomSeed(double);
 
         int GenerateBackgroundSpectrum(); 
         int LoadBackgroundSpectrum();
+        int LoadBackgroundSpectrum(const char *);
 
         int CalcSBNchis();
 
         int SetCoreSpectrum(std::string const &);
+        int SetCoreSpectrum(std::string const &, const char *);
+        int SetCoreSpectrum(std::vector<TH1D> histbg, const char * xmldata);
+
         int SetFractionalCovarianceMatrix(TMatrixT<double> *);
         int SetFractionalCovarianceMatrix(std::string, std::string);
         int SetEmptyFractionalCovarianceMatrix();

@@ -56,13 +56,21 @@ namespace sbn{
 			SBNspec(std::string); //Load in config file EMPTY hists
 			SBNspec(std::string, int); //Load in config file, create EMPTY hists, with optional numbering (e.g for multisims!) 
 			SBNspec(std::string, int, bool); //Load in config file, create EMPTY hists, with optional numbering (e.g for multisims!) 
+			SBNspec(const char *, int, bool); //Load in config file, create EMPTY hists, with optional numbering (e.g for multisims!) 
 
 			SBNspec(std::string, std::string);
+			SBNspec(std::string, const char *);
+			SBNspec(std::string, const char *, bool);
 			SBNspec(std::string, std::string, bool);
+			
+                        SBNspec(std::vector<TH1D> bghist, const char *);
+			SBNspec(std::vector<TH1D> bghist, const char *, bool);
+
 
 			SBNspec(std::vector<double> input_full_vec, std::string whichxml);
 			SBNspec(std::vector<double> input_full_vec, std::string whichxml, bool isverbose);
-            SBNspec(std::vector<double> input_full_vec, std::string whichxml, int universe, bool isverbose);
+                        SBNspec(std::vector<double> input_full_vec, std::string whichxml, int universe, bool isverbose);
+                        SBNspec(std::vector<double> input_full_vec, const char * xmldata, int universe, bool isverbose);
 
 
 

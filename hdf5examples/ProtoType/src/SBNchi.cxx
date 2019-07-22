@@ -16,7 +16,33 @@ using namespace sbn;
 SBNchi::SBNchi(std::string xml) : SBNconfig(xml,false){};
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNchi(in,matrix_systematicsin,false){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, bool is_verbose) : SBNchi(in,matrix_systematicsin,in.xmlname, is_verbose){}
+
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose) : SBNchi(in, matrix_systematicsin, inxml,  is_verbose,-1){}
+
+SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, const char* xmldata, bool is_verbose) : SBNconfig(xmldata, is_verbose), core_spectrum(in){
+
+    last_calculated_chi = -9999999;
+    is_stat_only= false;
+
+    matrix_collapsed.ResizeTo(num_bins_total_compressed, num_bins_total_compressed);
+    matrix_systematics.ResizeTo(num_bins_total, num_bins_total);
+    matrix_fractional_covariance.ResizeTo(num_bins_total, num_bins_total);
+
+    TMatrixD m = matrix_systematicsin;
+    for (int i = 0; i < used_bins.size(); i++){
+        TMatrixDColumn(m,i) = TMatrixDColumn(m,used_bins.at(i));
+        m.ResizeTo(used_bins.size(),matrix_systematicsin.GetNcols());
+    }
+
+    matrix_fractional_covariance = m;
+    matrix_systematics.Zero();
+    max_sample_chi_val =150.0;
+
+    this->InitRandomNumberSeeds(-1);
+    this->ReloadCoreSpectrum(&core_spectrum);
+}
+
+
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed) : SBNconfig(inxml, is_verbose), core_spectrum(in){
 
     last_calculated_chi = -9999999;
@@ -1087,6 +1113,8 @@ int SBNchi::PerformCholoskyDecomposition(SBNspec *specin){
         }
     }
 
+    delete chol;
+
     //cholosky_performed = true;	
     return 0;
 }
@@ -1163,8 +1191,11 @@ TH1D SBNchi::SampleCovarianceVaryInput(SBNspec *specin, int num_MC, std::vector<
     //  float collapsed[38];
 
     //We will need a uniform dist and a Gaussian
+    //std::uniform_int_distribution<size_t> dist_int(0, 4294967296); // 2^32
+    //std::normal_distribution<float> dist_normal(0, 1);
     std::uniform_int_distribution<int> dist_int(0,pow(2,32));
     std::normal_distribution<float> dist_normal(0,1);
+
 
 #ifdef USE_GPU
     unsigned long long seed[num_MC];

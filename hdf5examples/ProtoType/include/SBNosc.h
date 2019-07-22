@@ -26,6 +26,8 @@ class SBNosc : public SBNspec{
 	int which_mode;
 	double mass_step_size;	//has to be 0.04 for now
 
+	SBNosc(std::vector<TH1D> bghist, const char *); //constructor
+	SBNosc(std::string, const char *); //constructor
 	SBNosc(std::string, std::string); //constructor
 	SBNosc(std::string, std::string, NeutrinoModel); //constructor
         SBNosc(SBNspec & specin);
@@ -36,6 +38,7 @@ class SBNosc : public SBNspec{
 	//Oscillate the contained std::vector<TH1D> hists 
 	int OscillateThis(std::string);	
 	// Or just oscillate a copy and return the ompressed vector
+        std::vector<double> Oscillate(std::string, bool compress, const char * xmldata); 
         std::vector<double> Oscillate(std::string,bool compress); 
         std::vector<double> Oscillate(std::string);
 	std::vector<double> Oscillate(std::string, double);

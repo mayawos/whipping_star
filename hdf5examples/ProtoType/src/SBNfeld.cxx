@@ -67,6 +67,16 @@ int SBNfeld::SetCoreSpectrum(std::string const & file){
     return 0;
 }
 
+int SBNfeld::SetCoreSpectrum(std::string const & file, const char * xmldata){
+    m_core_spectrum.reset(new SBNosc(file, xmldata));
+    return 0;
+}
+
+int SBNfeld::SetCoreSpectrum(std::vector<TH1D> histbg, const char * xmldata){
+    m_core_spectrum.reset(new SBNosc(histbg, xmldata));
+    return 0;
+}
+
 int SBNfeld::SetFractionalCovarianceMatrix(std::string filename,std::string matrixname){
     TFile  fsys(filename.c_str(),"read");
     m_full_fractional_covariance_matrix = (TMatrixD*)fsys.Get(matrixname.c_str());
@@ -162,6 +172,25 @@ std::unique_ptr<SBNspec> SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint){
     return spec;// std::move(spec->collapsed_vector); 
 }
 
+std::unique_ptr<SBNspec> SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint, const char * xmldata){
+    if (! m_cv_spec_grid.empty()) abort();
+    //need to convert from this gridpoints to a neutrinoModel (Blarg, don't like this step but needed at the moment)
+    NeutrinoModel this_model = this->convert3p1(m_vec_grid[ipoint]); 
+
+    //And load thus model into our spectra. At this point its comuted all the necessary mass-splittins and which frequencies they are
+    m_core_spectrum->LoadModel(this_model);
+    m_core_spectrum->SetAppMode();
+
+    //And apply this oscillaion! Adding to it the bkgSpec that it was initilised with.
+    //NOTE we want to return the FULL spectrum, not compressed so we can calculate the covariance matrix, hense the false in this Oscilate
+    std::vector<double> ans = m_core_spectrum->Oscillate(this->tag, false, xmldata);
+    //m_cv_spec_grid[ipoint] = new SBNspec(ans, m_core_spectrum->xmlname,t, false);
+    //m_cv_spec_grid[ipoint]->CollapseVector();
+    auto spec = std::make_unique<SBNspec>(ans, xmldata, ipoint, false);
+    spec->CollapseVector();
+    return spec;// std::move(spec->collapsed_vector); 
+}
+
 
 int SBNfeld::LoadBackgroundSpectrum(){
     m_background_spectrum.reset(new SBNosc(this->tag+"_BKG_ONLY.SBNspec.root", this->xmlname));
@@ -169,6 +198,15 @@ int SBNfeld::LoadBackgroundSpectrum(){
     m_background_spectrum->CollapseVector();
     m_tvec_background_spectrum.reset(new TVectorT<double>(m_background_spectrum->full_vector.size(), &(m_background_spectrum->full_vector)[0]));
     m_background_chi.reset(new SBNchi(*m_background_spectrum, *m_full_fractional_covariance_matrix, this->xmlname, false));
+    return 0;
+}
+
+int SBNfeld::LoadBackgroundSpectrum(const char * xmldata){
+    m_background_spectrum.reset(new SBNosc(this->tag+"_BKG_ONLY.SBNspec.root", xmldata));
+
+    m_background_spectrum->CollapseVector();
+    m_tvec_background_spectrum.reset(new TVectorT<double>(m_background_spectrum->full_vector.size(), &(m_background_spectrum->full_vector)[0]));
+    m_background_chi.reset(new SBNchi(*m_background_spectrum, *m_full_fractional_covariance_matrix, xmldata, false));
     return 0;
 }
 

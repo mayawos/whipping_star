@@ -2,41 +2,92 @@
 #include <cassert>
 using namespace sbn;
 
+SBNspec::SBNspec(const char * xmldata, int which_universe, bool isverbose) : SBNconfig(xmldata, isverbose){
+    //Initialise all the things
+    //for every multisim, create a vector of histograms, one for every subchannel we want
+    int ctr=0;
+    for(auto fn: fullnames){
+        for(int c=0; c<channel_names.size(); c++){
+            if(fn.find("_"+channel_names[c]+"_")!=std::string::npos){
+                double * tbins =&bin_edges[c][0];
+                std::string thisname;
+                if(which_universe<0){
+                        thisname = fn;
+                }else{
+                        thisname = fn+"_MS"+std::to_string(which_universe);
+                }
+                //TH1D thischan(thisname.c_str(),"",num_bins[c], tbins );i
+                hist.emplace_back(TH1D(thisname.c_str(), thisname.c_str(), num_bins[c], tbins ));
+                //auto it = hist.begin()+ctr;
+                //map_hist[fn] = &(*it);
+                map_hist[fn] = ctr;
+
+                ctr++;
+            }
+        }
+    }
+    has_been_scaled = false;
+    this->CollapseVector();
+}
+
+
 SBNspec::SBNspec(std::string whichxml, int which_universe, bool isverbose) : SBNconfig(whichxml,isverbose){
+    //Initialise all the things
+    //for every multisim, create a vector of histograms, one for every subchannel we want
+    int ctr=0;
+    for(auto fn: fullnames){
+        for(int c=0; c<channel_names.size(); c++){
+            if(fn.find("_"+channel_names[c]+"_")!=std::string::npos){
+                double * tbins =&bin_edges[c][0];
+                std::string thisname;
+                if(which_universe<0){
+                        thisname = fn;
+                }else{
+                        thisname = fn+"_MS"+std::to_string(which_universe);
+                }
+                //TH1D thischan(thisname.c_str(),"",num_bins[c], tbins );i
+                hist.emplace_back(TH1D(thisname.c_str(), thisname.c_str(), num_bins[c], tbins ));
+                //auto it = hist.begin()+ctr;
+                //map_hist[fn] = &(*it);
+                map_hist[fn] = ctr;
 
-	//Initialise all the things
-	//for every multisim, create a vector of histograms, one for every subchannel we want
-	int ctr=0;
-	for(auto fn: fullnames){
-		for(int c=0; c<channel_names.size(); c++){
-			if(fn.find("_"+channel_names[c]+"_")!=std::string::npos){
-				double * tbins =&bin_edges[c][0];
-				std::string thisname;
-				if(which_universe<0){
-					thisname = fn;
-				}else{
-					thisname = fn+"_MS"+std::to_string(which_universe);
-				}
-				//TH1D thischan(thisname.c_str(),"",num_bins[c], tbins );i
-				hist.emplace_back(TH1D(thisname.c_str(), thisname.c_str(), num_bins[c], tbins ));
-				//auto it = hist.begin()+ctr;
-				//map_hist[fn] = &(*it);
-				map_hist[fn] = ctr;
-
-				ctr++;
-			}
-		}
-	}
-
-	has_been_scaled = false;
-	this->CollapseVector();
-
+                ctr++;
+            }
+        }
+    }
+    has_been_scaled = false;
+    this->CollapseVector();
 }
 
 SBNspec::SBNspec(std::string whichxml): SBNspec(whichxml,-1,true){}
 SBNspec::SBNspec(std::string whichxml, int which_universe): SBNspec(whichxml,which_universe, true){}
 
 SBNspec::SBNspec(std::string rootfile, std::string whichxml) : SBNspec(rootfile, whichxml, true){}
+
+
+SBNspec::SBNspec(std::vector<TH1D> bghist, const char * xmldata) : SBNspec(bghist, xmldata, true) {}
+SBNspec::SBNspec(std::vector<TH1D> bghist, const char * xmldata, bool isverbose) : SBNconfig(xmldata, isverbose) {
+    hist = bghist;
+}
+
+
+SBNspec::SBNspec(std::string rootfile, const char * xmldata) : SBNspec(rootfile, xmldata, true) {}
+SBNspec::SBNspec(std::string rootfile, const char * xmldata, bool isverbose) : SBNconfig(xmldata, isverbose) {
+	//Contruct from a prexisting histograms that exist in a rootfile
+	TFile f(rootfile.c_str(),"read");
+
+	//Loop over all filenames that should be there, and load up the histograms.
+	int n=0;
+	for(auto fn: fullnames){
+              hist.push_back(*((TH1D*)f.Get(fn.c_str())));
+              map_hist[fn] = n;
+              n++;
+	}
+	has_been_scaled=false;
+	f.Close();
+}
+
+
 SBNspec::SBNspec(std::string rootfile, std::string whichxml, bool isverbose) : SBNconfig(whichxml, isverbose) {
 	//Contruct from a prexisting histograms that exist in a rootfile
 	TFile *f = new TFile(rootfile.c_str(),"read");
@@ -59,24 +110,26 @@ SBNspec::SBNspec(std::string rootfile, std::string whichxml, bool isverbose) : S
 
 SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml) : SBNspec(input_full_vec, whichxml, false){ };
 SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml, bool isverbose) : SBNspec(input_full_vec,whichxml,-1,isverbose){};
+
 SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml, int universe, bool isverbose) : SBNspec(whichxml,universe,isverbose){
-
-	for(int i=0; i< input_full_vec.size(); i++){
-
-		int which_hist = GetHistNumber(i);
-
-		int exact_bin = i;
-		for(int b=0; b<which_hist; b++){
-			exact_bin -= hist.at(b).GetNbinsX();
-		}
-		hist.at(which_hist).SetBinContent(exact_bin+1, input_full_vec.at(i));
-
-	}
-
-
-	this->CalcFullVector();
+    for(int i=0; i< input_full_vec.size(); i++){
+        int which_hist = GetHistNumber(i);
+        int exact_bin = i;
+        for(int b=0; b<which_hist; b++) exact_bin -= hist.at(b).GetNbinsX();
+        hist.at(which_hist).SetBinContent(exact_bin+1, input_full_vec.at(i));
+    }
+    this->CalcFullVector();
 }
 
+SBNspec::SBNspec(std::vector<double> input_full_vec, const char * xmldata, int universe, bool isverbose) : SBNspec(xmldata, universe, isverbose){
+    for(int i=0; i< input_full_vec.size(); i++){
+        int which_hist = GetHistNumber(i);
+        int exact_bin = i;
+        for(int b=0; b<which_hist; b++) exact_bin -= hist.at(b).GetNbinsX();
+        hist.at(which_hist).SetBinContent(exact_bin+1, input_full_vec.at(i));
+    }
+    this->CalcFullVector();
+}
 
 
 
