@@ -55,6 +55,8 @@ class SBNconfig {
         virtual ~SBNconfig() = default; 
 
 	//Constructors
+	SBNconfig(const char* filedata,bool);
+
 	SBNconfig(std::string,bool);
 	SBNconfig(std::string);
 	SBNconfig(){};
