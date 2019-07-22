@@ -34,6 +34,13 @@ class SBNchi : public SBNconfig{
 
 	public:
 
+        ~SBNchi() {
+          delete  rangen_twister;
+          delete  rangen_linear;
+          delete  rangen_carry;
+          delete  rangen;
+        };
+
 	//Either initilize from a SBNspec (and use its .xml file)
 	SBNchi(SBNspec);
 	//Either initilize from a SBNspec and another xml file
