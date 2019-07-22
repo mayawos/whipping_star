@@ -320,7 +320,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, st
 }
 
 // This is doing one univere for one gridpoint
-void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out, int num_universes) {
+void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid mygrid, HighFive::File* f_out, int num_universes, bool dry) {
     // Some arithmetic to figure out the gridpoint and universe from cp.gid
     int i_grid = cp.gid() % mygrid.f_num_total_points;
     int i_univ = floor(cp.gid()/mygrid.f_num_total_points);
@@ -343,7 +343,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
     TMatrixT<double> stat_only_matrix(myfeld.num_bins_total, myfeld.num_bins_total);
     stat_only_matrix.Zero();
 
-    sbn::SBNchi* mychi=NULL; 
+    sbn::SBNchi* mychi = nullptr; 
 
     if(myfeld.statOnly()){
          mychi = new sbn::SBNchi(*myspec, stat_only_matrix, myfeld.xmlname, false, myfeld.seed());
@@ -414,75 +414,79 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
 
      TMatrixT<double> inverse_current_collapsed_covariance_matrix = inverse_background_collapsed_covariance_matrix;  
      size_t n_iter = 0;
-     for(n_iter = 0; n_iter < max_number_iterations; n_iter++){
 
-         //Step 1. What covariance matrix do we use?
-         //For first iteration, use the precalculated background only inverse covariance matrix.
-         //For all subsequent iterations what is the full covariance matrix? Use the last best grid point.
-         if(n_iter!=0){
-             //Calculate current full covariance matrix, collapse it, then Invert.
-             // Fill vector specfull with the full vector from hdf5 at position best_grid_point
-             g_specfull.select(   {best_grid_point, 0}, {1, nBinsFull}).read(specfull);
-             TMatrixT<double> current_full_covariance_matrix = true_chi->CalcCovarianceMatrix(myfeld.fullFracCovMat(), specfull);
-             TMatrixT<double> current_collapsed_covariance_matrix(myfeld.bgBinsCompressed(), myfeld.bgBinsCompressed());
-             true_chi->CollapseModes(current_full_covariance_matrix, current_collapsed_covariance_matrix);    
-             inverse_current_collapsed_covariance_matrix = true_chi->InvertMatrix(current_collapsed_covariance_matrix);
-             //d_invcollcov.select(   {best_grid_point, 0}, {1, myfeld.bgBinsCompressed()*myfeld.bgBinsCompressed()}).read(c_flat);
-             //int vpos=0;
-             //for (int i=0; i<myfeld.bgBinsCompressed();i++) {
-                //for (int j=0; j<myfeld.bgBinsCompressed();j++) {
-                   //inverse_current_collapsed_covariance_matrix[i][j] = c_flat[vpos];
-                   //vpos++;
+     if (!dry) {
+        for(n_iter = 0; n_iter < max_number_iterations; n_iter++){
+
+            //Step 1. What covariance matrix do we use?
+            //For first iteration, use the precalculated background only inverse covariance matrix.
+            //For all subsequent iterations what is the full covariance matrix? Use the last best grid point.
+            if(n_iter!=0){
+                //Calculate current full covariance matrix, collapse it, then Invert.
+                // Fill vector specfull with the full vector from hdf5 at position best_grid_point
+                g_specfull.select(   {best_grid_point, 0}, {1, nBinsFull}).read(specfull);
+                TMatrixT<double> current_full_covariance_matrix = true_chi->CalcCovarianceMatrix(myfeld.fullFracCovMat(), specfull);
+                TMatrixT<double> current_collapsed_covariance_matrix(myfeld.bgBinsCompressed(), myfeld.bgBinsCompressed());
+                true_chi->CollapseModes(current_full_covariance_matrix, current_collapsed_covariance_matrix);    
+                inverse_current_collapsed_covariance_matrix = true_chi->InvertMatrix(current_collapsed_covariance_matrix);
+                //d_invcollcov.select(   {best_grid_point, 0}, {1, myfeld.bgBinsCompressed()*myfeld.bgBinsCompressed()}).read(c_flat);
+                //int vpos=0;
+                //for (int i=0; i<myfeld.bgBinsCompressed();i++) {
+                   //for (int j=0; j<myfeld.bgBinsCompressed();j++) {
+                      //inverse_current_collapsed_covariance_matrix[i][j] = c_flat[vpos];
+                      //vpos++;
+                   //}
                 //}
-             //}
 
-             
+                
 
-         }
+            }
 
-         //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
-         float chi_min = FLT_MAX;
+            //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
+            float chi_min = FLT_MAX;
 
-         for(size_t r =0; r < mygrid.f_num_total_points; r++){
-            // Load spectrum number r from HDF into speccoll
-             //g_speccoll.select(   {r, 0}, {1, nBinsColl}).read(speccoll);
-             //float chi_tmp = myfeld.CalcChi(fake_data, speccoll,  inverse_current_collapsed_covariance_matrix);
-             float chi_tmp = calcChi(fake_data, allColl[r],  inverse_current_collapsed_covariance_matrix);
-             if(chi_tmp < chi_min){
-                 best_grid_point = r;
-                 chi_min = chi_tmp;
-             }
-         }
+            for(size_t r =0; r < mygrid.f_num_total_points; r++){
+               // Load spectrum number r from HDF into speccoll
+                //g_speccoll.select(   {r, 0}, {1, nBinsColl}).read(speccoll);
+                //float chi_tmp = myfeld.CalcChi(fake_data, speccoll,  inverse_current_collapsed_covariance_matrix);
+                float chi_tmp = calcChi(fake_data, allColl[r],  inverse_current_collapsed_covariance_matrix);
+                if(chi_tmp < chi_min){
+                    best_grid_point = r;
+                    chi_min = chi_tmp;
+                }
+            }
 
-         if(n_iter!=0){
-             //Step 3.0 Check to see if min_chi for this particular fake_data  has converged sufficiently
-             if(fabs(chi_min-last_chi_min)< chi_min_convergance_tolerance){
-                 last_chi_min = chi_min;
-                 break;
-             }
-         }
-         last_chi_min = chi_min;
-     } // End loop over iterations
+            if(n_iter!=0){
+                //Step 3.0 Check to see if min_chi for this particular fake_data  has converged sufficiently
+                if(fabs(chi_min-last_chi_min)< chi_min_convergance_tolerance){
+                    last_chi_min = chi_min;
+                    break;
+                }
+            }
+            last_chi_min = chi_min;
+        } // End loop over iterations
 
-     //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
-     float this_chi = calcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
+        //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
+        float this_chi = calcChi(fake_data, myspec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
 
-     //step 4 calculate the delta_chi for this universe
-     // Write out numbers of interest
-     std::vector<double> v_last_chi_min    = { last_chi_min };
-     std::vector<double> v_delta_chi       = { this_chi-last_chi_min };
-     std::vector<int>    v_best_grid_point = { best_grid_point };
-     std::vector<int>    v_n_iter          = { n_iter };
-     std::vector<int>    v_i_grid          = { i_grid };
-     std::vector<int>    v_i_univ          = { i_univ };
-     d_last_chi_min.select(   {size_t(cp.gid()), 0}, {1,1}).write( v_last_chi_min   );
-     d_delta_chi.select(      {size_t(cp.gid()), 0}, {1,1}).write( v_delta_chi      );
-     d_best_grid_point.select({size_t(cp.gid()), 0}, {1,1}).write( v_best_grid_point);
-     d_n_iter.select(         {size_t(cp.gid()), 0}, {1,1}).write( v_n_iter         );
-     d_i_grid.select(         {size_t(cp.gid()), 0}, {1,1}).write( v_i_grid         );
-     d_i_univ.select(         {size_t(cp.gid()), 0}, {1,1}).write( v_i_univ         );
+        //step 4 calculate the delta_chi for this universe
+        // Write out numbers of interest
+        std::vector<double> v_last_chi_min    = { last_chi_min };
+        std::vector<double> v_delta_chi       = { this_chi-last_chi_min };
+        std::vector<int>    v_best_grid_point = { best_grid_point };
+        std::vector<int>    v_n_iter          = { n_iter };
+        std::vector<int>    v_i_grid          = { i_grid };
+        std::vector<int>    v_i_univ          = { i_univ };
+        d_last_chi_min.select(   {size_t(cp.gid()), 0}, {1,1}).write( v_last_chi_min   );
+        d_delta_chi.select(      {size_t(cp.gid()), 0}, {1,1}).write( v_delta_chi      );
+        d_best_grid_point.select({size_t(cp.gid()), 0}, {1,1}).write( v_best_grid_point);
+        d_n_iter.select(         {size_t(cp.gid()), 0}, {1,1}).write( v_n_iter         );
+        d_i_grid.select(         {size_t(cp.gid()), 0}, {1,1}).write( v_i_grid         );
+        d_i_univ.select(         {size_t(cp.gid()), 0}, {1,1}).write( v_i_univ         );
+     }
 
     delete mychi;
+    //delete true_chi; 
     endtime   = MPI_Wtime(); 
     if (rank==0) fmt::print(stderr, "[{}] gridp {} univ {} iteration {}  took {} seconds, chi2min: {}\n",cp.gid(), i_grid, i_univ, n_iter, endtime-starttime, last_chi_min);
 }
@@ -529,6 +533,7 @@ int main(int argc, char* argv[])
     ops >> Option("ymax",    ymax,   "ymax");
     ops >> Option("ywidth",  ywidth, "ywidth");
     bool verbose     = ops >> Present('v', "verbose", "verbose output");
+    bool dryrun     = ops >> Present("dry", "dry run");
     if (ops >> Present('h', "help", "Show help"))
     {
         std::cout << "Usage:  [OPTIONS]\n";
@@ -629,8 +634,8 @@ int main(int argc, char* argv[])
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);//, share_face, wrap, ghosts);
 
     starttime = MPI_Wtime();
-    fc_master.foreach([world, tag, xml, mygrid, f_out, nUniverses](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {doFCsmart(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, nUniverses); });
+    fc_master.foreach([world, tag, xml, mygrid, f_out, nUniverses, dryrun](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {doFCsmart(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, nUniverses, dryrun); });
     endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
     return 0;
