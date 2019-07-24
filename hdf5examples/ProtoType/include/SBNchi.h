@@ -52,7 +52,7 @@ class SBNchi : public SBNconfig{
 
 	SBNchi(SBNspec, TMatrixT<double>, const char *, bool);
 	
-        SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed);
+        SBNchi(SBNspec const & in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed);
 
     //Initialise a stat_only one;
 	SBNchi(SBNspec, bool is_stat_only);
@@ -94,7 +94,7 @@ class SBNchi : public SBNconfig{
 	/*********************************** Member Functions ********************************/	
 
 
-	int ReloadCoreSpectrum(SBNspec *bkgin);
+	int ReloadCoreSpectrum(SBNspec const & bkgin);
 
 	//load up systematic covariabnce matrix from a rootfile, location in xml
 	//These are pretty obsolete.
@@ -113,8 +113,8 @@ class SBNchi : public SBNconfig{
 	void CollapseModes(TMatrixT <double> & M, TMatrixT <double> & Mc);
 
     TMatrixT<double> InvertMatrix(TMatrixT<double> &M);
-    TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec);
-    TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec);
+    TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double> const & M, TVectorT<double>& spec);
+    TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double> const & M, std::vector<double> const & spec);
 
 
 	TMatrixT<double> * GetCollapsedMatrix();

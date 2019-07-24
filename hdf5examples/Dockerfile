@@ -21,4 +21,5 @@ RUN make install
 WORKDIR /data
 COPY sbn_gpvm_example.tar.gz sbn_gpvm_example.tar.gz
 RUN tar xzf sbn_gpvm_example.tar.gz
+COPY small.xml /data/small.xml
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"

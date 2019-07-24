@@ -2,7 +2,7 @@
 using namespace sbn;
 
 
-NeutrinoModel SBNfeld::convert3p1(std::vector<double> ingrid){
+NeutrinoModel SBNfeld::convert3p1(std::vector<double> const & ingrid){
     if(ingrid.size()!=3){
         std::cout<<"ERROR: Currently must have a 3-grid, for Dm ue4 and um4. grid.size(): "<<ingrid.size()<<std::endl;
         exit(EXIT_FAILURE);
@@ -78,29 +78,36 @@ int SBNfeld::SetCoreSpectrum(std::vector<TH1D> histbg, const char * xmldata){
 }
 
 int SBNfeld::SetFractionalCovarianceMatrix(std::string filename,std::string matrixname){
+    m_full_fractional_covariance_matrix.ResizeTo(num_bins_total,num_bins_total); // Resize necessary to avoid matrices incompatible error
     TFile  fsys(filename.c_str(),"read");
-    m_full_fractional_covariance_matrix = (TMatrixD*)fsys.Get(matrixname.c_str());
+    m_full_fractional_covariance_matrix =  *(TMatrixD*)fsys.Get(matrixname.c_str());
     fsys.Close();
 
     return 0;
 }
 
-int SBNfeld::SetFractionalCovarianceMatrix(TMatrixT<double> * in){
-
+int SBNfeld::SetFractionalCovarianceMatrix(TMatrixT<double> const & in){
+    m_full_fractional_covariance_matrix.ResizeTo(num_bins_total,num_bins_total); // Resize necessary to avoid matrices incompatible error
     m_full_fractional_covariance_matrix = in;
     return 0;
 }
 
+//int SBNfeld::SetFractionalCovarianceMatrix(TMatrixT<double> * in){
+
+    //m_full_fractional_covariance_matrix = in;
+    //return 0;
+//}
+
 int SBNfeld::SetEmptyFractionalCovarianceMatrix(){
 
-    m_full_fractional_covariance_matrix = new TMatrixT<double>(num_bins_total,num_bins_total);
-    m_full_fractional_covariance_matrix->Zero();
+    m_full_fractional_covariance_matrix.ResizeTo(num_bins_total,num_bins_total); // Resize necessary to avoid matrices incompatible error
+    m_full_fractional_covariance_matrix.Zero();
     return 0;
 }
 
 int SBNfeld::SetRandomSeed(double sin){
     m_random_seed = sin;
-    std::cout<<"SBNfeld::SetRandomSeed()\t\t||\t\tSetting random seed to: "<<sin<<std::endl;
+    //std::cout<<"SBNfeld::SetRandomSeed()\t\t||\t\tSetting random seed to: "<<sin<<std::endl;
     return 0;
 }
 
@@ -197,7 +204,7 @@ int SBNfeld::LoadBackgroundSpectrum(){
 
     m_background_spectrum->CollapseVector();
     m_tvec_background_spectrum.reset(new TVectorT<double>(m_background_spectrum->full_vector.size(), &(m_background_spectrum->full_vector)[0]));
-    m_background_chi.reset(new SBNchi(*m_background_spectrum, *m_full_fractional_covariance_matrix, this->xmlname, false));
+    m_background_chi.reset(new SBNchi(*m_background_spectrum, m_full_fractional_covariance_matrix, this->xmlname, false));
     return 0;
 }
 
@@ -206,7 +213,16 @@ int SBNfeld::LoadBackgroundSpectrum(const char * xmldata){
 
     m_background_spectrum->CollapseVector();
     m_tvec_background_spectrum.reset(new TVectorT<double>(m_background_spectrum->full_vector.size(), &(m_background_spectrum->full_vector)[0]));
-    m_background_chi.reset(new SBNchi(*m_background_spectrum, *m_full_fractional_covariance_matrix, xmldata, false));
+    m_background_chi.reset(new SBNchi(*m_background_spectrum, m_full_fractional_covariance_matrix, xmldata, false));
+    return 0;
+}
+
+int SBNfeld::LoadBackgroundSpectrum(const char * xmldata, std::vector<TH1D> const & bghist){
+    m_background_spectrum.reset(new SBNosc(bghist, xmldata));
+
+    m_background_spectrum->CollapseVector();
+    m_tvec_background_spectrum.reset(new TVectorT<double>(m_background_spectrum->full_vector.size(), &(m_background_spectrum->full_vector)[0]));
+    m_background_chi.reset(new SBNchi(*m_background_spectrum, m_full_fractional_covariance_matrix, xmldata, false));
     return 0;
 }
 
@@ -226,7 +242,7 @@ int SBNfeld::CalcSBNchis(){
             m_sbnchi_grid.push_back(new SBNchi(*m_cv_spec_grid.at(t), stat_only_matrix, this->xmlname, false, m_random_seed)) ;
 
         }else{
-            m_sbnchi_grid.push_back(new SBNchi(*m_cv_spec_grid.at(t), *m_full_fractional_covariance_matrix, this->xmlname, false, m_random_seed)) ;
+            m_sbnchi_grid.push_back(new SBNchi(*m_cv_spec_grid.at(t), m_full_fractional_covariance_matrix, this->xmlname, false, m_random_seed)) ;
         }
 
 

@@ -52,7 +52,7 @@ namespace sbn{
         std::vector<SBNspec*> m_cv_spec_grid;
         std::vector<SBNchi*> m_sbnchi_grid;
 
-        TMatrixT<double> * m_full_fractional_covariance_matrix;
+        TMatrixT<double>  m_full_fractional_covariance_matrix;
 
         std::unique_ptr<SBNosc>            m_core_spectrum;
         std::unique_ptr<SBNosc>            m_background_spectrum;
@@ -78,7 +78,7 @@ namespace sbn{
         SBNfeld& operator=(SBNfeld &&) = delete;
 
         virtual ~SBNfeld() {
-          delete m_full_fractional_covariance_matrix;
+          //delete m_full_fractional_covariance_matrix;
 
           for (auto x : m_cv_spec_grid)    delete x;
           for (auto x : m_sbnchi_grid)  delete x;
@@ -110,7 +110,7 @@ namespace sbn{
 
         bool statOnly() { return m_bool_stat_only; }
         double seed() {return m_random_seed; }
-        TMatrixT<double> *  fullFracCovMat() { return m_full_fractional_covariance_matrix; }
+        TMatrixT<double>   fullFracCovMat() { return m_full_fractional_covariance_matrix; }
         TVectorT<double> *  bgSpectrum() { return m_tvec_background_spectrum.get(); }
         int bgBinsCompressed() { return m_background_spectrum->num_bins_total_compressed; } 
 
@@ -126,6 +126,7 @@ namespace sbn{
         int GenerateBackgroundSpectrum(); 
         int LoadBackgroundSpectrum();
         int LoadBackgroundSpectrum(const char *);
+        int LoadBackgroundSpectrum(const char *, std::vector<TH1D> const &);
 
         int CalcSBNchis();
 
@@ -133,13 +134,14 @@ namespace sbn{
         int SetCoreSpectrum(std::string const &, const char *);
         int SetCoreSpectrum(std::vector<TH1D> histbg, const char * xmldata);
 
-        int SetFractionalCovarianceMatrix(TMatrixT<double> *);
+        //int SetFractionalCovarianceMatrix(TMatrixT<double> *);
+        int SetFractionalCovarianceMatrix(TMatrixT<double> const & in);
         int SetFractionalCovarianceMatrix(std::string, std::string);
         int SetEmptyFractionalCovarianceMatrix();
         int SetNumUniverses(int);
         int SetStatOnly();
 
-        NeutrinoModel convert3p1(std::vector<double> ingrid);
+        NeutrinoModel convert3p1(std::vector<double> const & ingrid);
 
 
         //This is a stopgap for better SBNchi integration.Hrump, need to fix that wierd float oddity. 

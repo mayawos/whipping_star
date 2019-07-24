@@ -8,8 +8,32 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_FLAGS "-Wall -ggdb -O3")# -fPermissive")
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
+set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
+#set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+## AddressSanitize
+#set(CMAKE_C_FLAGS_ASAN
+    #"-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+    #CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
+    #FORCE)
+#set(CMAKE_CXX_FLAGS_ASAN
+    #"-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+    #CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
+    #FORCE)
+
+# LeakSanitizer
+set(CMAKE_C_FLAGS_LSAN
+    "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
+    CACHE STRING "Flags used by the C compiler during LeakSanitizer builds."
+    FORCE)
+set(CMAKE_CXX_FLAGS_LSAN
+    "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
+    CACHE STRING "Flags used by the C++ compiler during LeakSanitizer builds."
+    FORCE)
+
+
 
 set(CMAKE_CXX_STANDARD 14)
 
