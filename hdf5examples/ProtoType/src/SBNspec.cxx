@@ -391,17 +391,17 @@ double SBNspec::GetTotalEvents(){
 
 int SBNspec::PrintFullVector(){
 	for(double d: full_vector){
-		std::cout<<d<<" ";
+		std::cerr<<d<<" ";
 	}
-	std::cout<<std::endl;
+	std::cerr<<std::endl;
 	return 0;
 }
 
 int SBNspec::PrintCollapsedVector(){
 	for(double d: collapsed_vector){
-		std::cout<<d<<" ";
+		std::cerr<<d<<" ";
 	}
-	std::cout<<std::endl;
+	std::cerr<<std::endl;
 	return 0;
 }
 
