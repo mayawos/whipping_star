@@ -19,7 +19,7 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, bool is_verbos
 
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose) : SBNchi(in, matrix_systematicsin, inxml,  is_verbose,-1){}
 
-SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, const char* xmldata, bool is_verbose) : SBNconfig(xmldata, is_verbose), core_spectrum(in){
+SBNchi::SBNchi(SBNspec const & in, TMatrixT<double> matrix_systematicsin, const char* xmldata, bool is_verbose) : SBNconfig(xmldata, is_verbose), core_spectrum(in){
 
     last_calculated_chi = -9999999;
     is_stat_only= false;
@@ -38,12 +38,12 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, const char* xm
     matrix_systematics.Zero();
     max_sample_chi_val =150.0;
 
-    this->InitRandomNumberSeeds(1234);
+    this->InitRandomNumberSeeds(-1);
     this->ReloadCoreSpectrum(core_spectrum);
 }
 
 
-SBNchi::SBNchi(SBNspec const & in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed) : SBNconfig(inxml, is_verbose), core_spectrum(in){
+SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed) : SBNconfig(inxml, is_verbose), core_spectrum(in){
 
     last_calculated_chi = -9999999;
     is_stat_only= false;
@@ -131,7 +131,7 @@ SBNchi::SBNchi(SBNspec in, bool is_is_stat_only): SBNconfig(in.xmlname), core_sp
  *		Rest for now
  * ********************************************/
 void SBNchi::InitRandomNumberSeeds(){
-    this->InitRandomNumberSeeds(1234);
+    this->InitRandomNumberSeeds(-1);
 }
     
 void SBNchi::InitRandomNumberSeeds(double seed){
@@ -274,9 +274,14 @@ int SBNchi::ReloadCoreSpectrum(SBNspec const & bkgin){
     if(is_verbose) std::cout<<otag<<" About to do a SVD decomposition"<<std::endl;
     TDecompSVD svd(Mctotal);
     if (!svd.Decompose()) {
-        std::cout <<otag<<"Decomposition failed, matrix not symetric?, has nans?" << std::endl;
-        std::cout<<otag<<"ERROR: The matrix to invert failed a SVD decomp!"<<std::endl;
+        std::cerr <<otag<<"Decomposition failed, matrix not symetric?, has nans?" << std::endl;
+        std::cerr<<otag<<"ERROR: The matrix to invert failed a SVD decomp!"<<std::endl;
         core_spectrum.PrintFullVector();
+        std::cerr << "AND NOW BG\n";
+        for ( auto b: bkgin.full_vector ) {
+          std::cerr << " " << b;
+        }
+        std::cerr << "\n";
 
         //for(int i=0; i< num_bins_total_compressed; i++){
             //for(int j=0; j< num_bins_total_compressed; j++){
