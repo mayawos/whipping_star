@@ -146,6 +146,15 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
     std::vector<double> specfull = {nBinsFull};
     g_specfull.select(   {i_grid, 0}, {1, nBinsFull}).read(specfull);
 
+
+    double sumf = std::accumulate(specfull.begin(), specfull.end(), 0.0);
+    if (sumf >1e10) {
+       std::cerr << "sum of specfull: " << sumf << "\n";
+       for (auto v : specfull ) std::cerr << " " << v;
+       std::cerr << "\n";
+       //abort();
+    }
+
     sbn::SBNspec myspec(specfull, xmldata, i_grid, false);
     
     double starttime, endtime;
@@ -184,6 +193,11 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
     //       * InvertMatrix --- make free function and DONT EXIT IN LIBRARY!!!
     //Ok take the background only spectrum and form a background only covariance matrix. CalcCovarianceMatrix includes stats
     //std::vector<double> test = flattenHistos(bghist);
+    //std::cerr << "bgvec size: " << bgvec.size() << "\n";
+    //for (auto b : bgvec ) {
+       //std::cerr << "  " << b;
+    //}
+    //std::cerr << "\n";
     TMatrixT<double> background_full_covariance_matrix = mychi->CalcCovarianceMatrix(covmat, bgvec);
     TMatrixT<double> background_collapsed_covariance_matrix(nBinsColl, nBinsColl);
     mychi->CollapseModes(background_full_covariance_matrix, background_collapsed_covariance_matrix);    
@@ -215,11 +229,22 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
         allColl.push_back(speccoll);
     }
     
-    sbn::SBNchi * true_chi  = mychi; 
+    //sbn::SBNchi * mychi  = mychi; 
 
 
     //step 0. Make a fake-data-experiment for this point, drawn from covariance
-    std::vector<float> fake_data= true_chi->SampleCovariance(&myspec);
+    std::vector<float> fake_data= mychi->SampleCovariance(&myspec);
+    double sum = std::accumulate(fake_data.begin(), fake_data.end(), 0.0);
+    if (sum <10) {
+       std::cerr << "sum of fakedata: " << sum << "\n";
+       myspec.PrintFullVector();
+       std::cerr << "\n";
+       myspec.PrintCollapsedVector();
+       abort();
+
+    }
+
+    
     d_fakedata.select(   {size_t(cp.gid()), 0}, {1, size_t(nBinsColl)}).write(fake_data);
     float last_chi_min = FLT_MAX;
     int best_grid_point = -99;
@@ -237,11 +262,11 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
                //Calculate current full covariance matrix, collapse it, then Invert.
                // Fill vector specfull with the full vector from hdf5 at position best_grid_point
                g_specfull.select(   {best_grid_point, 0}, {1, nBinsFull}).read(specfull);
-               TMatrixT<double> current_full_covariance_matrix = true_chi->CalcCovarianceMatrix(covmat, specfull);
+               TMatrixT<double> current_full_covariance_matrix = mychi->CalcCovarianceMatrix(covmat, specfull);
                TMatrixT<double> current_collapsed_covariance_matrix(nBinsColl, nBinsColl);
-               true_chi->CollapseModes(current_full_covariance_matrix, current_collapsed_covariance_matrix);
+               mychi->CollapseModes(current_full_covariance_matrix, current_collapsed_covariance_matrix);
 
-               inverse_current_collapsed_covariance_matrix = true_chi->InvertMatrix(current_collapsed_covariance_matrix);
+               inverse_current_collapsed_covariance_matrix = mychi->InvertMatrix(current_collapsed_covariance_matrix);
            }
     
            //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
@@ -376,7 +401,6 @@ int main(int argc, char* argv[])
     // Read the covariance matrix on every rank --- we'll think about broadcast later. Maybe Eigen?
     TMatrixD covmat = readFracCovMat(f_COV);
 
-    covmat.Print();
 
     nBins =  covmat.GetNcols();
 
