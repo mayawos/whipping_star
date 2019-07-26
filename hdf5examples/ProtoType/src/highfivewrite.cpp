@@ -122,6 +122,16 @@ void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int 
     auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, xml, mygrid, xmldata, bghist, cvhist, covmat);
     std::vector<double> full = myspec->full_vector;
     std::vector<double> coll = myspec->collapsed_vector;
+    
+    double sum = std::accumulate(full.begin(), full.end(), 0.0);
+    if (sum >1e10) {
+       std::cerr << "[" << cp.gid() <<"] sum of specfull: " << sum << "\n";
+       myspec->PrintFullVector();
+       std::cerr << "and the collapsed vector \n";
+       myspec->PrintCollapsedVector();
+       abort();
+
+    }
 
     HighFive::DataSet spec = f_out->getDataSet("specfull");
     spec.select(   {std::size_t(cp.gid()), 0}, {1, std::size_t(full.size())}).write(full);
