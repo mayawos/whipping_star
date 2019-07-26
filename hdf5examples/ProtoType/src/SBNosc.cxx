@@ -325,7 +325,16 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
         temp = full_vector;
     }
 
+    //double sum = std::accumulate(temp.begin(), temp.end(), 0.0);
+    //if (sum >1e10) {
+       //std::cerr << " sum of collapsed_vector aka temp: " << sum << "\n";
+       //for (auto  v : temp) std::cerr << " " << v << "\n";
+       //std::cerr << "\n";  
+       //abort();
+    //}
+
     for (auto ms: mass_splittings) {
+       //std::cerr << "MS: " << ms.second << " " << has_been_scaled<< "\n";  
 
 
               std::string name_sinsq = tag +"_SINSQ_dm_"+working_model.mass_tag+".SBNspec.root";
@@ -334,10 +343,10 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
               SBNspec single_frequency(name_sin , xmldata , false);
               SBNspec single_frequency_square(name_sinsq , xmldata ,false);
 
-              if(has_been_scaled){
-                  single_frequency.Scale(scale_hist_name, scale_hist_val);
-                  single_frequency_square.Scale(scale_hist_name, scale_hist_val);
-              }
+              //if (has_been_scaled){
+                  //single_frequency.Scale(scale_hist_name, scale_hist_val);
+                  //single_frequency_square.Scale(scale_hist_name, scale_hist_val);
+              //}
 
               single_frequency.CalcFullVector();
               single_frequency_square.CalcFullVector();
@@ -435,6 +444,8 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
 			single_frequency_square.CalcFullVector();
 			single_frequency_square.CollapseVector();
 
+
+
            if(return_compressed){ 
 			for(int i=0;i<temp.size(); i++){
 				temp[i] += single_frequency.collapsed_vector[i];
@@ -450,6 +461,20 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
 
 
            }
+    //double sum2 = std::accumulate(temp.begin(), temp.end(), 0.0);
+    //if (sum2 >1e10) {
+       //std::cerr << " sum of collapsed_vector aka temp after: " << sum2 << "\n";
+       //for (auto  v : temp)                                std::cerr << " " << v;
+       //std::cerr << "\n"; 
+       //std::cerr << " sff:\n";
+       //for (auto  v : single_frequency.full_vector)        std::cerr << " " << v;
+       //std::cerr << "\n";  
+       //std::cerr << " sfsqf:\n";
+       //for (auto  v : single_frequency_square.full_vector) std::cerr << " " << v;
+       //std::cerr << "\n";  
+
+       //abort();
+    //}
 
 	}//Done looping over
 
