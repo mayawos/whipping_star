@@ -1,3 +1,4 @@
+#pragma GCC optimize("O3","unroll-loops","inline")
 #include "SBNchi.h"
 
 #ifdef USE_GPU
