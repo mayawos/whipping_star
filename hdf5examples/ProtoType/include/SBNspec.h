@@ -70,7 +70,7 @@ namespace sbn{
 			SBNspec(std::vector<double> input_full_vec, std::string whichxml);
 			SBNspec(std::vector<double> input_full_vec, std::string whichxml, bool isverbose);
                         SBNspec(std::vector<double> input_full_vec, std::string whichxml, int universe, bool isverbose);
-                        SBNspec(std::vector<double> input_full_vec, const char * xmldata, int universe, bool isverbose);
+                        SBNspec(std::vector<double> const & input_full_vec, const char * xmldata, int universe, bool isverbose);
 
 
 
@@ -78,6 +78,11 @@ namespace sbn{
 			// The order of filling is the same as the order defined in xml file!
 			std::vector<TH1D > hist;
 			std::map<std::string, int> map_hist;
+
+                        void reset() {
+                          hist.clear();
+                          map_hist.clear();
+                        }
 
 			//This is the full concatanated vector (in xml order)	
 			std::vector<double > full_vector;
