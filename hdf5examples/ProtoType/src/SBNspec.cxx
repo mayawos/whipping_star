@@ -121,7 +121,7 @@ SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml, int u
     this->CalcFullVector();
 }
 
-SBNspec::SBNspec(std::vector<double> input_full_vec, const char * xmldata, int universe, bool isverbose) : SBNspec(xmldata, universe, isverbose){
+SBNspec::SBNspec(std::vector<double> const & input_full_vec, const char * xmldata, int universe, bool isverbose) : SBNspec(xmldata, universe, isverbose){
     for(int i=0; i< input_full_vec.size(); i++){
         int which_hist = GetHistNumber(i);
         int exact_bin = i;
