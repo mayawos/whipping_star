@@ -67,6 +67,11 @@ struct Block
     std::vector< std::vector<double> > spec_full, spec_coll, inv_cov;
 };
 
+void releaseVec(std::vector<double> & vec) {
+    vec.clear();
+    vec.shrink_to_fit();
+}
+
 void gatherSpectra(Block* b, const diy::ReduceProxy& rp, const diy::RegularMergePartners& partners,
          std::vector<std::vector<double> > & full_out,
          std::vector<std::vector<double> > & coll_out,
@@ -656,6 +661,7 @@ int main(int argc, char* argv[])
     // Set data of TMatrix
     covmat.ResizeTo(nBins, nBins);
     covmat.SetMatrixArray(v_covmat.data());
+    releaseVec(v_covmat);
 
     if( world.rank()==0 ) {
       fmt::print(stderr, "\n*** This is diy running highfivewrite ***\n");
@@ -724,11 +730,14 @@ int main(int argc, char* argv[])
 
     specFull = sliceVector(flatFull, nPoints);
     specColl = sliceVector(flatColl, nPoints);
+    releaseVec(flatFull);
+    releaseVec(flatColl);
     
     if (!onthefly) {
        if (world.rank()==0) flatCov  = asVector(invCov);
        diy::mpi::broadcast(world, flatCov, 0);
        invCov   = sliceVector(flatCov , nPoints);
+       releaseVec(flatCov);
     }
 
     // Reconstruct inverted covariance TMatrices from vector double
