@@ -34,7 +34,7 @@
 #include "SBNchi.h"
 #include "SBNspec.h"
 #include "SBNosc.h"
-#include "SBNfit.h"
+//#include "SBNfit.h"
 #include "SBNcovariance.h"
 #include "SBNfeld.h"
 
@@ -438,6 +438,14 @@ void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int 
     b->spec_coll.push_back(coll);
 }
 
+void updateInvCov(TMatrixT<double> & invcov, TMatrixD const & covmat, std::vector<double> const & spec_full, sbn::SBNconfig const & conf, int nBinsC) {
+    TMatrixT<double> _cov = calcCovarianceMatrix(covmat, spec_full);
+    TMatrixT<double> _covcol;
+    _covcol.ResizeTo(nBinsC, nBinsC);
+    collapseModes(_cov, _covcol, conf);
+    invcov = invertMatrix(_covcol);
+}
+
 void invertMatrix(Block* b, diy::Master::ProxyWithLink const& cp, TMatrixD const & covmat, int nBins, int nBinsC, sbn::SBNconfig const & conf) {
 
     TMatrixT<double> _cov;
@@ -457,23 +465,15 @@ void invertMatrix(Block* b, diy::Master::ProxyWithLink const& cp, TMatrixD const
 }
 
 // This is doing one univere for one gridpoint
-void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, NGrid mygrid, bool dry, TMatrix const & covmat, const char * xmldata, std::vector<TMatrixT<double> > const & INVCOV, std::vector< std::vector<double> > const & spectra, std::vector< std::vector<double> > const & allColl) {
+void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, NGrid mygrid, bool dry, bool onthefly, TMatrix const & covmat, const char * xmldata, std::vector<TMatrixT<double> > const & INVCOV, std::vector< std::vector<double> > const & spectra, std::vector< std::vector<double> > const & allColl, sbn::SBNconfig const & myconf) {
     // Some arithmetic to figure out the gridpoint and universe from cp.gid
     int i_grid = cp.gid() % mygrid.f_num_total_points;
     int i_univ = floor(cp.gid()/mygrid.f_num_total_points);
 
     int nBinsFull = spectra[0].size();
     std::vector<double> specfull = spectra[i_grid];
-
-    //double sumf = std::accumulate(specfull.begin(), specfull.end(), 0.0);
-    //if (sumf >1e10) {
-       //std::cerr << "sum of specfull: " << sumf << "\n";
-       //for (auto v : specfull ) std::cerr << " " << v;
-       //std::cerr << "\n";
-       //abort();
-    //}
-
     sbn::SBNspec myspec(specfull, xmldata, i_grid, false);
+    int nBinsColl = myspec.collapsed_vector.size();
     
     double starttime, endtime;
     starttime = MPI_Wtime();
@@ -486,14 +486,12 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
     stat_only_matrix.Zero();
 
     sbn::SBNchi* mychi = nullptr; 
-
     // TODO make statonly a CL option and pass
     //if(myfeld.statOnly()){
          //mychi = new sbn::SBNchi(myspec, stat_only_matrix, xmldata, false);//, myfeld.seed());
      //}else{
          mychi = new sbn::SBNchi(myspec, covmat, xmldata, false);//, myfeld.seed()); FIXME pass covmat directly???
      //}
-    int nBinsColl = myspec.collapsed_vector.size();
 
     // Single grid point multiuniverse FC
     int max_number_iterations = 5;
@@ -516,7 +514,8 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
            //For all subsequent iterations what is the full covariance matrix? Use the last best grid point.
            if(n_iter!=0){
                //Calculate current full covariance matrix, collapse it, then Invert.
-               inverse_current_collapsed_covariance_matrix = INVCOV[best_grid_point];
+               if (onthefly) updateInvCov(inverse_current_collapsed_covariance_matrix, covmat, spectra[best_grid_point], myconf, nBinsColl);
+               else inverse_current_collapsed_covariance_matrix = INVCOV[best_grid_point];
            }
     
            //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
@@ -538,7 +537,7 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
        } // End loop over iterations
 
        //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
-       float this_chi = calcChi(fake_data, myspec.collapsed_vector,inverse_current_collapsed_covariance_matrix);
+       float this_chi = calcChi(fake_data, myspec.collapsed_vector, inverse_current_collapsed_covariance_matrix);
     
        ////step 4 calculate the delta_chi for this universe
        b->last_chi_min.push_back( last_chi_min);
@@ -554,7 +553,6 @@ void doFCsmart(Block* b, diy::Master::ProxyWithLink const& cp, int size, int ran
     endtime   = MPI_Wtime(); 
     if (rank==0) fmt::print(stderr, "[{}] gridp {} univ {} iteration {}  took {} seconds, chi2min: {}\n",cp.gid(), i_grid, i_univ, n_iter, endtime-starttime, last_chi_min);
 }
-
 
 
 // --- main program ---//
@@ -603,22 +601,19 @@ int main(int argc, char* argv[])
     ops >> Option("ymax",    ymax,   "ymax");
     ops >> Option("ywidth",  ywidth, "ywidth");
     bool verbose     = ops >> Present('v', "verbose", "verbose output");
-    bool dryrun     = ops >> Present("dry", "dry run");
-    if (ops >> Present('h', "help", "Show help"))
-    {
+    bool dryrun      = ops >> Present("dry", "dry run");
+    bool onthefly    = ops >> Present("otf", "on the fly matrix inversion (saves memory)");
+    if (ops >> Present('h', "help", "Show help")) {
         std::cout << "Usage:  [OPTIONS]\n";
         std::cout << ops;
         return 1;
     }
 
-    
     NGrid mygrid;
-
     mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1
     mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1
     mygrid.AddFixedDimension("um4",0.0); //0.05
 
-    
     nPoints = mygrid.f_num_total_points;
 
     // Read the xml file on rank 0
@@ -645,8 +640,7 @@ int main(int argc, char* argv[])
     // Central values
     std::vector<TH1D> cvhist = readHistos(f_CV, myconf.fullnames);
 
-    // Read the covariance matrix on rank 0 --- broadcast and subsequently
-    // build from array.
+    // Read the covariance matrix on rank 0 --- broadcast and subsequently buid from array
     TMatrixD covmat;
     std::vector<double> v_covmat;
 
@@ -663,7 +657,6 @@ int main(int argc, char* argv[])
     covmat.ResizeTo(nBins, nBins);
     covmat.SetMatrixArray(v_covmat.data());
 
-    
     if( world.rank()==0 ) {
       fmt::print(stderr, "\n*** This is diy running highfivewrite ***\n");
       fmt::print(stderr, "\n    Output will be written to {}\n", out_file);
@@ -707,52 +700,59 @@ int main(int argc, char* argv[])
     endtime = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra took {} seconds\n",world.rank(), endtime-starttime);
 
-    starttime = MPI_Wtime();
-    master.foreach([covmat, nBins, nBinsC, myconf](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {invertMatrix(b, cp, covmat, nBins, nBinsC, myconf); });
-    endtime = MPI_Wtime();
-    if (world.rank()==0) fmt::print(stderr, "[{}] matrix inversions took {} seconds\n",world.rank(), endtime-starttime);
+    if (!onthefly) {
+       starttime = MPI_Wtime();
+       master.foreach([covmat, nBins, nBinsC, myconf](Block* b, const diy::Master::ProxyWithLink& cp)
+                              {invertMatrix(b, cp, covmat, nBins, nBinsC, myconf); });
+       endtime = MPI_Wtime();
+       if (world.rank()==0) fmt::print(stderr, "[{}] matrix inversions took {} seconds\n",world.rank(), endtime-starttime);
+    }
 
     std::vector< std::vector<double> > specFull, specColl, invCov;
     diy::reduce(master, assigner, partners,
         [&specFull, &specColl, &invCov, world, f_out](Block* b, const diy::ReduceProxy& rp, const diy::RegularMergePartners& partners){
         gatherSpectra(b, rp, partners, specFull, specColl, invCov, f_out); });
 
+    // TODO is there merit in deleting the blocks after the reduction???
+
     std::vector<double> flatFull, flatColl, flatCov;
     if (world.rank()==0) flatFull = asVector(specFull);
     if (world.rank()==0) flatColl = asVector(specColl);
-    if (world.rank()==0) flatCov  = asVector(invCov);
 
     diy::mpi::broadcast(world, flatFull, 0);
     diy::mpi::broadcast(world, flatColl, 0);
-    diy::mpi::broadcast(world, flatCov, 0);
 
     specFull = sliceVector(flatFull, nPoints);
     specColl = sliceVector(flatColl, nPoints);
-    invCov   = sliceVector(flatCov , nPoints);
+    
+    if (!onthefly) {
+       if (world.rank()==0) flatCov  = asVector(invCov);
+       diy::mpi::broadcast(world, flatCov, 0);
+       invCov   = sliceVector(flatCov , nPoints);
+    }
 
     // Reconstruct inverted covariance TMatrices from vector double
     starttime = MPI_Wtime();
     std::vector<TMatrixT<double> > INVCOV;
-    INVCOV.reserve(nPoints);
-    for (auto ic : invCov) {
-       TMatrixT<double> temp;
-       temp.ResizeTo(nBinsC, nBinsC);
-       temp.SetMatrixArray(ic.data());
-       INVCOV.push_back(temp);
+
+    if (!onthefly) {
+       INVCOV.reserve(nPoints);
+       for (auto ic : invCov) {
+          TMatrixT<double> temp;
+          temp.ResizeTo(nBinsC, nBinsC);
+          temp.SetMatrixArray(ic.data());
+          INVCOV.push_back(temp);
+       }
     }
 
     // Add the BG
-    TMatrixT<double> _cov, _covcol, _covcolinv;
-    _cov.ResizeTo(nBins, nBins);
+    TMatrixT<double> _cov = calcCovarianceMatrix(covmat, bgvec);
+    TMatrixT<double> _covcol;
     _covcol.ResizeTo(nBinsC, nBinsC);
-    _covcolinv.ResizeTo(nBinsC, nBinsC);
-    _cov = calcCovarianceMatrix(covmat, bgvec);
     collapseModes(_cov, _covcol, myconf);
-    _covcolinv = invertMatrix(_covcol);
-    INVCOV.push_back(_covcolinv);
+    INVCOV.push_back(invertMatrix(_covcol));
     endtime   = MPI_Wtime(); 
-    fmt::print(stderr, "[{}] matrix broadcast etc took {} seconds\n",world.rank(), endtime-starttime);
+    if (world.rank()==0) fmt::print(stderr, "[{}] matrix broadcast etc took {} seconds\n",world.rank(), endtime-starttime);
 
     //// Now more blocks as we have universes
     blocks = nPoints*nUniverses;
@@ -768,8 +768,8 @@ int main(int argc, char* argv[])
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);//, share_face, wrap, ghosts);
 
     starttime = MPI_Wtime();
-    fc_master.foreach([world,  mygrid, dryrun, covmat, xmldata, INVCOV, specFull, specColl](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {doFCsmart(b, cp, world.size(), world.rank(), mygrid, dryrun, covmat, xmldata, INVCOV, specFull, specColl); });
+    fc_master.foreach([world,  mygrid, dryrun, onthefly, covmat, xmldata, INVCOV, specFull, specColl, myconf](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {doFC(b, cp, world.size(), world.rank(), mygrid, dryrun, onthefly, covmat, xmldata, INVCOV, specFull, specColl, myconf); });
     endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
 
