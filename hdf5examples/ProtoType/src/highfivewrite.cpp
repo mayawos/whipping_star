@@ -37,8 +37,11 @@
 //#include "SBNfit.h"
 #include "SBNcovariance.h"
 #include "SBNfeld.h"
+#include <Eigen/Dense>
+
 
 using namespace std;
+//using namespace Eigen;
 
 #include "opts.h"
 
@@ -299,17 +302,35 @@ float calcChi(std::vector<float> const & data, std::vector<double> const & predi
     float tchi = 0;
 
     for(int i =0; i<data.size(); i++){
-        for(int j =0; j<data.size(); j++)  tchi += (data[i]-prediction[i]) * C_inv[i][j] * (data[j]-prediction[j]);
+        for(int j =0; j<data.size(); j++)  tchi += (data[i]-prediction[i]) * C_inv(i,j) * (data[j]-prediction[j]);
     }
     return tchi;
 }
+
+float calcChiEigen(std::vector<float> const & data, std::vector<double> const & prediction, TMatrixT<double> const & C_inv ) {
+    int n = data.size();
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > CINV(C_inv.GetMatrixArray(), n, n);
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > PRED(prediction.data(), n, 1);
+    // Massage data right now to convert from float to double.
+    std::vector<double> temp;
+    temp.assign(data.begin(), data.end());
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > DATA(temp.data(), n, 1);
+    Eigen::VectorXd DIFF = DATA-PRED;
+    return DIFF.transpose() * CINV * DIFF; 
+}
+
 
 // This effectively three-fold loop is a potential target for optimisation
 std::vector<double> universeChi2(std::vector<float> const & data, std::vector<std::vector<double> > const & predictions, TMatrixT<double> const & C_inv ) {
    std::vector<double> result;
    result.reserve(predictions.size());
 
-   for (auto p : predictions) result.push_back(calcChi(data, p, C_inv));
+   for (auto p : predictions) {
+      //result.push_back(calcChi(data, p, C_inv));
+      result.push_back(calcChiEigen(data, p, C_inv));
+      //std::cerr << "a: " << calcChi(data, p, C_inv) << " b: " << calcChi(data, p, C_inv) << "\n";
+   }
+   //abort();
 
    return result;
 }
