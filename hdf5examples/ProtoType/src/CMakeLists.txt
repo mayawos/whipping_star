@@ -11,7 +11,7 @@ install(FILES ${MY_PUBLIC_HEADERS}
 
 add_executable              (highfivewrite highfivewrite.cpp)
 
-target_link_libraries (highfivewrite LINK_PUBLIC ${libraries} ${GSL_LIBS} SBNfit)
+target_link_libraries (highfivewrite LINK_PUBLIC ${libraries} ${GSL_LIBS} SBNfit Eigen3::Eigen)
 install(TARGETS highfivewrite
     DESTINATION ${CMAKE_INSTALL_PREFIX/bin}
     RUNTIME DESTINATION bin

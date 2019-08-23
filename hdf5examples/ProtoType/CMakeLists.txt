@@ -33,6 +33,8 @@ set(CMAKE_CXX_FLAGS_LSAN
     CACHE STRING "Flags used by the C++ compiler during LeakSanitizer builds."
     FORCE)
 
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+
 
 
 set(CMAKE_CXX_STANDARD 14)
