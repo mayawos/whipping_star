@@ -38,6 +38,7 @@
 #include "SBNcovariance.h"
 #include "SBNfeld.h"
 #include <Eigen/Dense>
+#include <Eigen/SVD>
 
 
 using namespace std;
@@ -369,6 +370,29 @@ TMatrixT<double> invertMatrix(TMatrixT<double> &M){
     return McI;
 }
 
+// SVD --- slowest
+Eigen::MatrixXd invertMatrixEigen(TMatrixT<double> &M, double epsilon = std::numeric_limits<double>::epsilon()){
+    int n = M.GetNrows();
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > COV(M.GetMatrixArray(), n, n);
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(COV,Eigen::ComputeThinU|Eigen::ComputeThinV );
+    double tolerance = epsilon * std::max(COV.cols(), COV.rows()) *svd.singularValues().array().abs()(0);
+    return svd.matrixV() *  (svd.singularValues().array().abs() > tolerance).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().adjoint();
+}
+
+// LU decomposition
+Eigen::MatrixXd invertMatrixEigen2(TMatrixT<double> &M){
+    int n = M.GetNrows();
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > COV(M.GetMatrixArray(), n, n);
+    return COV.inverse();
+}
+
+// Cholesky decomposition and solve for inverted matrix --- fastest
+Eigen::MatrixXd invertMatrixEigen3(TMatrixT<double> &M){
+    int n = M.GetNrows();
+    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > COV(M.GetMatrixArray(), n, n);
+    return COV.llt().solve(Eigen::MatrixXd::Identity(n,n));
+}
+
 
 //This is the powerhouse, takes each detector matrix filled with num_channels channels of num_subchannels[i] subchannels, and collapses it.
 void collapseSubchannels(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBNconfig const & conf){
@@ -490,8 +514,33 @@ void updateInvCov(TMatrixT<double> & invcov, TMatrixD const & covmat, std::vecto
     TMatrixT<double> _covcol;
     _covcol.ResizeTo(nBinsC, nBinsC);
     collapseModes(_cov, _covcol, conf);
-    invcov = invertMatrix(_covcol);
+    //double starttime   = MPI_Wtime();
+    //invcov = invertMatrix(_covcol);
+    //double endtime   = MPI_Wtime();
+    //fmt::print(stderr, "ROOT took {} seconds\n", endtime-starttime);
+    //starttime   = MPI_Wtime();
+    //Eigen::MatrixXd bla = invertMatrixEigen(_covcol);
+    //endtime   = MPI_Wtime();
+    //fmt::print(stderr, "Eigen3 took {} seconds\n", endtime-starttime);
+    //starttime   = MPI_Wtime();
+    //Eigen::MatrixXd bla2 = invertMatrixEigen2(_covcol);
+    //endtime   = MPI_Wtime();
+    //fmt::print(stderr, "Eigen3 LU took {} seconds\n", endtime-starttime);
+    //starttime   = MPI_Wtime();
+    Eigen::MatrixXd bla3 = invertMatrixEigen3(_covcol);
+    //endtime   = MPI_Wtime();
+    //fmt::print(stderr, "Eigen3 CL took {} seconds\n", endtime-starttime);
+
+    invcov.SetMatrixArray(bla3.data());
 }
+
+//void updateInvCov(Eigen::MatrixXd & invcov, TMatrixD const & covmat, std::vector<double> const & spec_full, sbn::SBNconfig const & conf, int nBinsC) {
+    //TMatrixT<double> _cov = calcCovarianceMatrix(covmat, spec_full);
+    //TMatrixT<double> _covcol;
+    //_covcol.ResizeTo(nBinsC, nBinsC);
+    //collapseModes(_cov, _covcol, conf);
+    //invcov = invertMatrixEigen2(_covcol);
+//}
 
 void invertMatrix(Block* b, diy::Master::ProxyWithLink const& cp, TMatrixD const & covmat, int nBins, int nBinsC, sbn::SBNconfig const & conf) {
 
