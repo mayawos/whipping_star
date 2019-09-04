@@ -602,6 +602,7 @@ int main(int argc, char* argv[]) {
     bool verbose     = ops >> Present('v', "verbose", "verbose output");
     bool dryrun      = ops >> Present("dry", "dry run");
     bool onthefly    = ops >> Present("otf", "on the fly matrix inversion (saves memory)");
+    bool statonly    = ops >> Present("stat", "Statistical errors only");
     if (ops >> Present('h', "help", "Show help")) {
         std::cout << "Usage:  [OPTIONS]\n";
         std::cout << ops;
@@ -660,22 +661,30 @@ int main(int argc, char* argv[]) {
 
     // Read the covariance matrix on rank 0 --- broadcast and subsequently buid from array
     TMatrixD covmat;
-    std::vector<double> v_covmat;
-    size_t nBins(0);
 
-    if ( world.rank() == 0 ) {
-       TMatrixD temp = readFracCovMat(f_COV);
-       nBins = temp.GetNcols();
-       const double *pData = temp.GetMatrixArray();
-       v_covmat.assign(pData, pData + temp.GetNoElements());
+    size_t nBins(0);
+    if (!statonly) {
+       std::vector<double> v_covmat;
+
+       if ( world.rank() == 0 ) {
+          TMatrixD temp = readFracCovMat(f_COV);
+          nBins = temp.GetNcols();
+          const double *pData = temp.GetMatrixArray();
+          v_covmat.assign(pData, pData + temp.GetNoElements());
+       }
+       // broadcast
+       diy::mpi::broadcast(world, v_covmat, 0);
+       diy::mpi::broadcast(world, nBins,    0);
+       // Set data of TMatrix
+       covmat.ResizeTo(nBins, nBins);
+       covmat.SetMatrixArray(v_covmat.data());
+       releaseVec(v_covmat);
     }
-    // broadcast
-    diy::mpi::broadcast(world, v_covmat, 0);
-    diy::mpi::broadcast(world, nBins,    0);
-    // Set data of TMatrix
-    covmat.ResizeTo(nBins, nBins);
-    covmat.SetMatrixArray(v_covmat.data());
-    releaseVec(v_covmat);
+    else {
+       nBins=bgvec.size();
+       covmat.ResizeTo(nBins, nBins);
+       covmat.Zero();
+    }
 
     if( world.rank()==0 ) {
       fmt::print(stderr, "\n*** This is diy running highfivewrite ***\n");
@@ -688,6 +697,7 @@ int main(int argc, char* argv[]) {
       fmt::print(stderr, "\n    f_COV:  {}\n", f_COV);
       fmt::print(stderr, "\n    iter :  {}\n", iter);
       fmt::print(stderr, "\n    tol:    {}\n", tol);
+      if (statonly) fmt::print(stderr, "\n    S T A T  O N L Y \n");
       fmt::print(stderr, "\n    Total size of dataset:  {}\n", nPoints*nUniverses);
       fmt::print(stderr, "***********************************\n");
     }
