@@ -484,8 +484,9 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank,
       std::vector< std::vector<double> > const & allColl, 
       sbn::SBNconfig const & myconf, int nUniverses, 
       HighFive::File* file, std::vector<int> const & rankwork,
-      double tol, size_t iter)
+      double tol, size_t iter, bool debug)
 {
+
     double starttime, endtime;
     int nBinsFull = spectra[0].size();
     std::vector<float> fake_data;
@@ -505,19 +506,21 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank,
     
     for (int i_grid : rankwork) {
 
+       if (debug && i_grid!=0) return;
 
        std::vector<double> specfull = spectra[i_grid];
        sbn::SBNspec myspec(specfull, xmldata, i_grid, false);
-       myspec.CollapseVector(); // NOTE this is an important call, otherwise the collapsed vector used in
-                                // as the true spectrum when calculating delta_chi2 will be all zeros!
-       int nBinsColl = myspec.collapsed_vector.size();
+       
+       int nBinsColl = allColl[i_grid].size();
+
+       // NOTE: the true spectrum collapse is allColl[i_grid] --- no need to call myspec.Collapse as SampleCov uses the full spectrum
     
        sbn::SBNchi mychi(myspec, covmat, xmldata, false);//, myfeld.seed()); FIXME SEEED?
 
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
-          fake_data = mychi.SampleCovariance(&myspec);
-          results.push_back(coreFC(fake_data, myspec.collapsed_vector, spectra, allColl, INVCOV, covmat, myconf, nBinsColl, onthefly, tol, iter));
+          fake_data = mychi.SampleCovariance(&myspec); // YUCK this thing rebuilds the covariance matrix*spectrum all the time
+          results.push_back(coreFC(fake_data, allColl[i_grid], spectra, allColl, INVCOV, covmat, myconf, nBinsColl, onthefly, tol, iter));
           FD.push_back(fake_data);
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
@@ -606,6 +609,7 @@ int main(int argc, char* argv[]) {
     ops >> Option("ywidth",          ywidth,     "ywidth");
     ops >> Option("mock",            mockFactor, "Mockfactor");
     bool verbose     = ops >> Present('v', "verbose", "verbose output");
+    bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
     bool dryrun      = ops >> Present("dry", "dry run");
     bool onthefly    = ops >> Present("otf", "on the fly matrix inversion (saves memory)");
     bool statonly    = ops >> Present("stat", "Statistical errors only");
@@ -704,6 +708,7 @@ int main(int argc, char* argv[]) {
       fmt::print(stderr, "\n    iter :  {}\n", iter);
       fmt::print(stderr, "\n    tol:    {}\n", tol);
       if (statonly) fmt::print(stderr, "\n    S T A T  O N L Y \n");
+      if (debug) fmt::print(stderr, "\n    D E B U G \n");
       fmt::print(stderr, "\n    Total size of dataset:  {}\n", nPoints*nUniverses);
       fmt::print(stderr, "***********************************\n");
     }
@@ -816,8 +821,8 @@ int main(int argc, char* argv[]) {
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
 
     starttime = MPI_Wtime();
-    fc_master.foreach([world,  mygrid, dryrun, onthefly, covmat, xmldata, INVCOV, specFull, specColl, myconf, nUniverses, f_out, rankwork, tol, iter](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {doFC(b, cp, world.size(), world.rank(), mygrid, dryrun, onthefly, covmat, xmldata, INVCOV, specFull, specColl, myconf, nUniverses, f_out, rankwork, tol, iter); });
+    fc_master.foreach([world,  mygrid, dryrun, onthefly, covmat, xmldata, INVCOV, specFull, specColl, myconf, nUniverses, f_out, rankwork, tol, iter, debug](Block* b, const diy::Master::ProxyWithLink& cp)
+                           { doFC(b, cp, world.size(), world.rank(), mygrid, dryrun, onthefly, covmat, xmldata, INVCOV, specFull, specColl, myconf, nUniverses, f_out, rankwork, tol, iter, debug); });
     endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
 
