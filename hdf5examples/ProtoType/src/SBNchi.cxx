@@ -1,4 +1,3 @@
-#pragma GCC optimize("O3","unroll-loops","inline")
 #include "SBNchi.h"
 
 #ifdef USE_GPU
@@ -1123,13 +1122,13 @@ int SBNchi::PerformCholoskyDecomposition(SBNspec *specin){
     vec_matrix_lower_triangular.resize(n_t, std::vector<float>(n_t));
     for(int i=0; i< num_bins_total; i++){
         for(int j=0; j< num_bins_total; j++){
-            vec_matrix_lower_triangular[i][j] = matrix_lower_triangular[i][j];
+            vec_matrix_lower_triangular[i][j] = matrix_lower_triangular(i,j);//[i][j];
         }
     }
 
     delete chol;
 
-    //cholosky_performed = true;	
+    cholosky_performed = true;
     return 0;
 }
 
@@ -1421,7 +1420,7 @@ int SBNchi::CollapseVectorStandAlone(double* full_vector, double *collapsed_vect
 }
 
 
-
+// TODO: do the sampling without root and only use call to CollapseVectorStandAlone
 std::vector<float> SBNchi::SampleCovariance(SBNspec *specin){
     if(!cholosky_performed) this->PerformCholoskyDecomposition(specin); 
 
