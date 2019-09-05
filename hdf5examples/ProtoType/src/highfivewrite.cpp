@@ -159,6 +159,8 @@ void gatherSpectra(Block* b, const diy::ReduceProxy& rp, const diy::RegularMerge
 }
 
 void createDataSets(HighFive::File* file, size_t nPoints, size_t nBins, size_t nBinsC, size_t nUniverses) {
+   //HighFive::DataSetCreateProps props;
+   //props.add(HighFive::Deflate(4));
     file->createDataSet<double>("specfull",     HighFive::DataSpace( { nPoints           , nBins  } ));
     file->createDataSet<double>("speccoll",     HighFive::DataSpace( { nPoints           , nBinsC } ));
     file->createDataSet<double>("fakedata",     HighFive::DataSpace( { nPoints*nUniverses, nBinsC } ));
@@ -468,6 +470,7 @@ FitResult coreFC(std::vector<float> const & fake_data, std::vector<double> const
    } // End loop over iterations
 
    //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
+   // float this_chi = this->CalcChi(fake_data, true_spec->collapsed_vector,inverse_current_collapsed_covariance_matrix);
    float this_chi = calcChi(fake_data, v_coll, inv_cov);
 
    FitResult fr = {n_iter, best_grid_point, last_chi_min, this_chi-last_chi_min}; 
@@ -502,8 +505,11 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank,
     
     for (int i_grid : rankwork) {
 
+
        std::vector<double> specfull = spectra[i_grid];
        sbn::SBNspec myspec(specfull, xmldata, i_grid, false);
+       myspec.CollapseVector(); // NOTE this is an important call, otherwise the collapsed vector used in
+                                // as the true spectrum when calculating delta_chi2 will be all zeros!
        int nBinsColl = myspec.collapsed_vector.size();
     
        sbn::SBNchi mychi(myspec, covmat, xmldata, false);//, myfeld.seed()); FIXME SEEED?
