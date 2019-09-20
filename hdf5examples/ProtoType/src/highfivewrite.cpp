@@ -1,4 +1,4 @@
-#pragma GCC optimize("O3","unroll-loops","inline")
+#pragma GCC optimize("O3","unroll-loops","inline", "peel-loops")
 
 #include <cmath>
 #include <vector>
@@ -34,6 +34,7 @@
 #include "SBNfeld.h"
 #include <Eigen/Dense>
 #include <Eigen/SVD>
+//#include "nomad.hpp"
 
 
 using namespace std;
@@ -84,6 +85,13 @@ std::vector<double> asVector(std::vector<std::vector<double> > v_in) {
     return allSpectra;
 }
 
+std::vector<double> asVector(TMatrixT<double> const & M) {
+    const double *pData = M.GetMatrixArray();
+    std::vector<double> vData;
+    vData.assign(pData, pData + M.GetNoElements());
+    return vData;
+}
+
 template<typename T>
 std::vector<T> myslice(std::vector<T> const &v, int m, int n)
 {
@@ -119,7 +127,8 @@ void gatherSpectra(Block* b, const diy::ReduceProxy& rp, const diy::RegularMerge
          std::vector<std::vector<double> > & full_out,
          std::vector<std::vector<double> > & coll_out,
          std::vector<std::vector<double> > & invcov_out,
-         HighFive::File* file) {
+         HighFive::File* file,
+         bool otf) {
     unsigned round = rp.round();
     // step 1: dequeue and merge
     for (int i = 0; i < rp.in_link().size(); ++i) {
@@ -128,10 +137,10 @@ void gatherSpectra(Block* b, const diy::ReduceProxy& rp, const diy::RegularMerge
         std::vector< std::vector<double> > in_vals_spec_full, in_vals_spec_coll, in_vals_inv_cov;
         rp.dequeue(nbr_gid, in_vals_spec_full);
         rp.dequeue(nbr_gid, in_vals_spec_coll);
-        rp.dequeue(nbr_gid, in_vals_inv_cov);
+        if (!otf) rp.dequeue(nbr_gid, in_vals_inv_cov);
         for (size_t j=0; j<in_vals_spec_full.size(); ++j) (b->spec_full).push_back(in_vals_spec_full[j]);
         for (size_t j=0; j<in_vals_spec_coll.size(); ++j) (b->spec_coll).push_back(in_vals_spec_coll[j]);
-        for (size_t j=0; j<in_vals_inv_cov.size();   ++j) (b->inv_cov  ).push_back(in_vals_inv_cov[j]);
+        if (!otf) {for (size_t j=0; j<in_vals_inv_cov.size();   ++j) (b->inv_cov  ).push_back(in_vals_inv_cov[j]);}
     }
 
     // step 2: enqueue
@@ -139,7 +148,7 @@ void gatherSpectra(Block* b, const diy::ReduceProxy& rp, const diy::RegularMerge
         // only send to root of group, but not self
         if (rp.out_link().target(i).gid != rp.gid()) rp.enqueue(rp.out_link().target(i), b->spec_full);
         if (rp.out_link().target(i).gid != rp.gid()) rp.enqueue(rp.out_link().target(i), b->spec_coll);
-        if (rp.out_link().target(i).gid != rp.gid()) rp.enqueue(rp.out_link().target(i), b->inv_cov);
+        if (!otf) {if (rp.out_link().target(i).gid != rp.gid()) rp.enqueue(rp.out_link().target(i), b->inv_cov);}
     }
 
     // step 3: write out
@@ -153,8 +162,13 @@ void gatherSpectra(Block* b, const diy::ReduceProxy& rp, const diy::RegularMerge
        for (auto ff : b->spec_full) full_out.push_back(ff);
        coll_out.reserve(b->spec_coll.size());
        for (auto ff : b->spec_coll) coll_out.push_back(ff);
-       invcov_out.reserve(b->inv_cov.size());
-       for (auto ff : b->inv_cov) invcov_out.push_back(ff);
+       if (!otf) {
+          HighFive::DataSet invc = file->getDataSet("invcov");
+          invc.select(         {0, 0}, {size_t(b->inv_cov.size()),   size_t(b->inv_cov[0].size())}).write(b->inv_cov);
+          invcov_out.reserve(b->inv_cov.size());
+          for (auto ff : b->inv_cov) invcov_out.push_back(ff);
+       }
+
     }
 }
 
@@ -163,6 +177,7 @@ void createDataSets(HighFive::File* file, size_t nPoints, size_t nBins, size_t n
    //props.add(HighFive::Deflate(4));
     file->createDataSet<double>("specfull",     HighFive::DataSpace( { nPoints           , nBins  } ));
     file->createDataSet<double>("speccoll",     HighFive::DataSpace( { nPoints           , nBinsC } ));
+    file->createDataSet<double>("invcov",       HighFive::DataSpace( { nPoints+1         , nBinsC*nBinsC } ));
     file->createDataSet<double>("fakedata",     HighFive::DataSpace( { nPoints*nUniverses, nBinsC } ));
     file->createDataSet<double>("last_chi_min", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
     file->createDataSet<double>("delta_chi",    HighFive::DataSpace( { nPoints*nUniverses,       1} ));
@@ -187,6 +202,12 @@ void writeGrid(HighFive::File* file, std::vector<std::vector<double> > const & c
     HighFive::DataSet d_gridy          = file->getDataSet("gridy");
     d_gridx.select(   {0, 0}, {xcoord.size(), 1}).write(xcoord);
     d_gridy.select(   {0, 0}, {ycoord.size(), 1}).write(ycoord);
+}
+
+void writeInvCovBG(HighFive::File* file, TMatrixT<double> const & M, size_t pos) {
+    std::vector<double> vInvCovBG = asVector(M);
+    HighFive::DataSet invc = file->getDataSet("invcov");
+    invc.select(     {size_t(pos), 0}, {1, size_t(vInvCovBG.size())}).write(vInvCovBG);
 }
 
 //
@@ -216,6 +237,14 @@ std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
    }
    return temp;
 }
+//std::vector<TH1D> vectToHist(std::vector<double> const & flat) {
+   //std::vector<TH1D> ret;
+   //ret.resize(flat.size());
+   //for (auto vec : flat) {
+      //TH1D temp();
+      //ret.push_back(temp):
+   //}
+//}
 
 float calcChi(std::vector<float> const & data, std::vector<double> const & prediction, TMatrixT<double> const & C_inv ) {
     int n = data.size();
@@ -229,17 +258,126 @@ float calcChi(std::vector<float> const & data, std::vector<double> const & predi
     return DIFF.transpose() * CINV * DIFF; 
 }
 
+inline size_t grid_to_index(size_t ix, size_t iy) {
+   // Total grid size static for now ( number of y-values in this 2D case)
+   size_t NY(48);
+   return ix*NY + iy;
+}
+
+
+//class My_Evaluator : public NOMAD::Evaluator {
+//public:
+  //My_Evaluator  ( const NOMAD::Parameters & p, std::vector<float> const & data, std::vector<std::vector<double> > const & predictions, TMatrixT<double> const & C_inv  ) :
+    //NOMAD::Evaluator ( p ) {_data = data; _predictions=predictions;_C_inv.ResizeTo(C_inv.GetNcols(), C_inv.GetNcols());_C_inv=C_inv;}
+
+  //~My_Evaluator ( void ) {}
+
+  //bool eval_x ( NOMAD::Eval_Point   & x          ,
+		//const NOMAD::Double & h_max      ,
+		//bool                & count_eval   ) const
+  //{
+
+     //int ix = x[0].round();
+     //int iy = x[1].round();
+     ////std::cerr << x[0] << " " << x[1] << " becomes " << ix << " " << iy << " ###\n";
+     //float val = calcChi(_data, _predictions[grid_to_index(ix, iy)], _C_inv);
+     ////std::cerr << x[0] << " " << x[1] << " becomes " << ix << " " << iy <<  " with val " << val << " ###\n";
+
+    //x.set_bb_output  ( 0 , val  ); // objective value
+
+    //count_eval = true; // count a black-box evaluation
+
+    //return true;       // the evaluation succeeded
+  //}
+
+  //std::vector<float>  _data;
+  //std::vector<std::vector<double> >  _predictions;
+  //TMatrixT<double>  _C_inv;
+	
+	
+//};
+
 // Calculate all chi2 for this universe
 std::vector<double> universeChi2(std::vector<float> const & data, std::vector<std::vector<double> > const & predictions, TMatrixT<double> const & C_inv ) {
    std::vector<double> result;
+   //std::vector<double> result2;
    result.reserve(predictions.size());
+   //result2.reserve(predictions.size());
 
+   //double starttime, endtime;
+   //starttime = MPI_Wtime();
    for (auto p : predictions) {
       result.push_back(calcChi(data, p, C_inv));
    }
 
    return result;
 }
+   //float chi_min = *std::min_element(result.begin(), result.end());
+   //int  best_grid_point = std::min_element(result.begin(), result.end()) - result.begin();
+   //std::cerr << "BEST GLOBAL: " << chi_min << " at " << best_grid_point << "\n";
+   //endtime   = MPI_Wtime(); 
+   //fmt::print(stderr, "standard took {} seconds\n", endtime-starttime);
+   //NOMAD::Display out ( std::cout );
+   //out.precision ( NOMAD::DISPLAY_PRECISION_STD );
+   ////NOMAD::begin (0, wtf);
+
+   //// parameters creation:
+   //NOMAD::Parameters p ( out );
+
+   //p.set_DIMENSION (2);             // number of variables
+
+   //vector<NOMAD::bb_output_type> bbot (3); // definition of
+   //bbot[0] = NOMAD::OBJ;                   // output types
+   //bbot[1] = NOMAD::PB;
+   //bbot[2] = NOMAD::EB;
+   //p.set_BB_OUTPUT_TYPE ( bbot );
+
+////   p.set_DISPLAY_ALL_EVAL(true);   // displays all evaluations.
+   //p.set_DISPLAY_STATS ( "bbe ( sol ) obj" );
+   //p.set_BB_INPUT_TYPE ( 0 , NOMAD::INTEGER );
+   //p.set_BB_INPUT_TYPE ( 1 , NOMAD::INTEGER );
+   //p.set_LOWER_BOUND ( NOMAD::Point ( 2 , 0 ) );
+   //NOMAD::Point ub ( 2 );
+   //ub[0]=20;
+   //ub[1]=47;
+
+   //p.set_UPPER_BOUND ( ub );
+
+   //p.set_X0 ( NOMAD::Point(2 , 5) );  // starting point
+
+   //p.set_MAX_BB_EVAL (100);     // the algorithm terminates after
+                                //// 100 black-box evaluations
+   //p.set_DISPLAY_DEGREE(2);
+   ////p.set_SOLUTION_FILE("sol.txt");
+
+   //// parameters validation:
+   //p.check();
+
+   //// custom evaluator creation:
+   //My_Evaluator ev   ( p,  data, predictions, C_inv);
+
+   //starttime = MPI_Wtime();
+   //// algorithm creation and execution:
+   //NOMAD::Mads mads ( p , &ev );
+   //mads.run();
+   //endtime   = MPI_Wtime(); 
+   //const NOMAD::Eval_Point * sol = mads.get_best_feasible();
+   //int sol_x = sol->value(0);
+   //int sol_y = sol->value(1);
+   ////delete sol;
+   //fmt::print(stderr, "MADS took {} seconds: {}  {}  {}  {}\n", endtime-starttime, sol_x, sol_y, grid_to_index(sol_x, sol_y), sol->get_f());
+
+
+   ////exit(1);
+   ////for (size_t ix=0;ix<21;++ix) {
+      ////for (size_t iy=0;iy<48;++iy) result2.push_back(calcChi(data, predictions[grid_to_index(ix, iy)], C_inv));
+   ////}
+
+   ////for (size_t i=0;i<result.size(); ++i) std::cerr << result[i] << " vs " << result2[i] << " : " << result[i] - result2[i] << "\n";
+
+
+   //return result;
+//}
 
 TMatrixT<double> calcCovarianceMatrix(TMatrixT<double> const & M, std::vector<double> const & spec){
     TMatrixT<double> Mout( M.GetNcols(), M.GetNcols() );
@@ -314,18 +452,23 @@ void collapseSubchannels(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBN
     int mrow = 0.0;
     int mcol = 0.0;
 
-    for(int ic = 0; ic < conf.num_channels; ic++){ 	 //Loop over all rows
-        for(int jc =0; jc < conf.num_channels; jc++){ //Loop over all columns
+    for(int ic = 0; ic < conf.num_channels; ic++){ 	 // Loop over all rows
+        for(int jc =0; jc < conf.num_channels; jc++){    // Loop over all columns
             for(int m=0; m < conf.num_subchannels[ic]; m++){
-                for(int n=0; n< conf.num_subchannels[jc]; n++){ //For each big block, loop over all subchannels summing toGether
-                    Summed[ic][jc] +=  M.GetSub(mrow+n*conf.num_bins[jc] ,mrow + n*conf.num_bins[jc]+conf.num_bins[jc]-1, mcol + m*conf.num_bins[ic], mcol+ m*conf.num_bins[ic]+conf.num_bins[ic]-1 );
+                for(int n=0; n< conf.num_subchannels[jc]; n++){ //For each big block, loop over all subchannels summing together
+                   int a, b, c, d;
+                   a=mrow + n*conf.num_bins[jc];
+                   b=mrow + n*conf.num_bins[jc] + conf.num_bins[jc]-1;
+                   c=mcol + m*conf.num_bins[ic];
+                   d=mcol + m*conf.num_bins[ic] + conf.num_bins[ic]-1;
+                   Summed[ic][jc] +=  M.GetSub(a,b,c,d);
                 }
             }
-            mrow += conf.num_subchannels[jc]*conf.num_bins[jc];//As we work our way left in columns, add on that many bins
-        }//end of column loop
+            mrow += conf.num_subchannels[jc]*conf.num_bins[jc]; // As we work our way left in columns, add on that many bins
+        } // end of column loop
         mrow = 0; // as we end this row, reSet row count, but jump down 1 column
         mcol += conf.num_subchannels[ic]*conf.num_bins[ic];
-    }//end of row loop
+    } // end of row loop
 
     ///********************************* And put them back toGether! ************************//
     Mc.Zero();
@@ -335,7 +478,7 @@ void collapseSubchannels(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBN
     //Repeat again for Contracted matrix
     for(int ic = 0; ic < conf.num_channels; ic++){
         for(int jc =0; jc < conf.num_channels; jc++){
-            Mc.SetSub(mrow,mcol,Summed[ic][jc]);
+            Mc.SetSub(mrow, mcol, Summed[ic][jc]);
             mrow += conf.num_bins[jc];
         }
         mrow = 0;
@@ -374,18 +517,20 @@ void collapseModes(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBNconfig
     }
 }
 
-unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid, const char * xmldata, std::vector<TH1D> const & bghist,  std::vector<TH1D> const & cvhist, TMatrixD const & covmat) {
+//unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid, const char * xmldata, std::vector<TH1D> const & bghist,  std::vector<TH1D> const & cvhist, TMatrixD const & covmat) {
+unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid, const char * xmldata, std::vector<TH1D> const & cvhist) {
     sbn::SBNfeld myfeld(mygrid, tag, xmldata);
     myfeld.SetCoreSpectrum(cvhist, xmldata);
     myfeld.SetRandomSeed(-1);
-    // FIXME the dtor of SBNfeld only works when these functions are called :(
-    myfeld.SetFractionalCovarianceMatrix(covmat);
-    myfeld.LoadBackgroundSpectrum(xmldata, bghist);
+    // FIXME the dtor of SBNfeld only works when these functions are called :( -- NOTE this no longer seems to be the case
+    //myfeld.SetFractionalCovarianceMatrix(covmat);
+    //myfeld.LoadBackgroundSpectrum(xmldata, bghist);
     return myfeld.LoadPreOscillatedSpectrum(i_uni, xmldata);
 };
 
-void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid const & mygrid, HighFive::File* f_out, const char * xmldata, std::vector<TH1D> const & bghist,  std::vector<TH1D> const & cvhist,TMatrixD const & covmat) {
-    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, xml, mygrid, xmldata, bghist, cvhist, covmat);
+//void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid const & mygrid, HighFive::File* f_out, const char * xmldata, std::vector<TH1D> const & bghist,  std::vector<TH1D> const & cvhist,TMatrixD const & covmat) {
+void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid const & mygrid, HighFive::File* f_out, const char * xmldata,  std::vector<TH1D> const & cvhist) {
+    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, xml, mygrid, xmldata, cvhist);
     std::vector<double> full = myspec->full_vector;
     std::vector<double> coll = myspec->collapsed_vector;
     
@@ -519,11 +664,19 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank,
 
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
+          // OK this is indeed stupid, the 
+          //double t1 = MPI_Wtime();
           fake_data = mychi.SampleCovariance(&myspec); // YUCK this thing rebuilds the covariance matrix*spectrum all the time
+          //double t2 = MPI_Wtime();
           results.push_back(coreFC(fake_data, allColl[i_grid], spectra, allColl, INVCOV, covmat, myconf, nBinsColl, onthefly, tol, iter));
+          //double t3 = MPI_Wtime();
           FD.push_back(fake_data);
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
+          //double t4 = MPI_Wtime();
+          //if (rank==0) fmt::print(stderr, "[{}] gridp {}/{} sampling took {} seconds\n",cp.gid(), i_grid, rankwork.size(), t2-t1);
+          //if (rank==0) fmt::print(stderr, "[{}] gridp {}/{} coreFC took {} seconds\n",cp.gid(), i_grid, rankwork.size(), t3-t2);
+          //if (rank==0) fmt::print(stderr, "[{}] gridp {}/{} rest took {} seconds\n",cp.gid(), i_grid, rankwork.size(), t4-t3);
        }
        endtime   = MPI_Wtime(); 
        if (rank==0) fmt::print(stderr, "[{}] gridp {}/{} ({} universes) took {} seconds\n",cp.gid(), i_grid, rankwork.size(), nUniverses, endtime-starttime);
@@ -613,18 +766,24 @@ int main(int argc, char* argv[]) {
     bool dryrun      = ops >> Present("dry", "dry run");
     bool onthefly    = ops >> Present("otf", "on the fly matrix inversion (saves memory)");
     bool statonly    = ops >> Present("stat", "Statistical errors only");
+    //bool storeINVCOV = ops >> Present("storeinvcov", "Write inverted covariance matrices to hdf5");
     if (ops >> Present('h', "help", "Show help")) {
         std::cout << "Usage:  [OPTIONS]\n";
         std::cout << ops;
         return 1;
     }
+    
+    if( world.rank()==0 ) {
+      fmt::print(stderr, "\n*** This is diy running highfivewrite ***\n");
+    }
 
     NGrid mygrid;
-    mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1
-    mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1
-    mygrid.AddFixedDimension("um4",0.0); //0.05
+    mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1 --- can't change easily --- sterile mass
+    mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1 --- arbirtrarily dense! mixing angle nu_e --- can change ywidth. Try 20^6
+    mygrid.AddFixedDimension("um4", 0.0); //0.05
 
     nPoints = mygrid.f_num_total_points;
+
 
     // Whole bunch of tests
     if ( world.rank() == 0 ) {
@@ -661,12 +820,17 @@ int main(int argc, char* argv[]) {
     sbn::SBNconfig myconf(xmldata, false);
 
     // Background
-    std::vector<TH1D> bghist = readHistos(f_BG, myconf.fullnames);
     std::vector<double> bgvec;
-    if (world.rank() == 0) bgvec = flattenHistos(bghist);
+    if (world.rank() == 0) {
+       std::vector<TH1D> bghist  = readHistos(f_BG, myconf.fullnames);
+       bgvec = flattenHistos(bghist);
+       bghist.clear();
+       bghist.shrink_to_fit();
+    }
     diy::mpi::broadcast(world, bgvec, 0);
 
     // Central values
+    // FIXME is this done on every rank?
     std::vector<TH1D> cvhist = readHistos(f_CV, myconf.fullnames);
 
     // Read the covariance matrix on rank 0 --- broadcast and subsequently buid from array
@@ -738,8 +902,10 @@ int main(int argc, char* argv[]) {
 
     double starttime, endtime;
     starttime = MPI_Wtime();
-    master.foreach([world, tag, xml, mygrid, f_out, xmldata, bghist, cvhist, covmat](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, xmldata, bghist, cvhist, covmat); });
+    //master.foreach([world, tag, xml, mygrid, f_out, xmldata, bghist, cvhist, covmat](Block* b, const diy::Master::ProxyWithLink& cp)
+                           //{loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, xmldata, bghist, cvhist, covmat); });
+    master.foreach([world, tag, xml, mygrid, f_out, xmldata, cvhist](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, xmldata, cvhist); });
     endtime = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra took {} seconds\n",world.rank(), endtime-starttime);
 
@@ -753,8 +919,8 @@ int main(int argc, char* argv[]) {
 
     std::vector< std::vector<double> > specFull, specColl, invCov;
     diy::reduce(master, assigner, partners,
-        [&specFull, &specColl, &invCov, world, f_out](Block* b, const diy::ReduceProxy& rp, const diy::RegularMergePartners& partners){
-        gatherSpectra(b, rp, partners, specFull, specColl, invCov, f_out); });
+        [&specFull, &specColl, &invCov, world, f_out, onthefly](Block* b, const diy::ReduceProxy& rp, const diy::RegularMergePartners& partners){
+        gatherSpectra(b, rp, partners, specFull, specColl, invCov, f_out, onthefly); });
 
     // TODO is there merit in deleting the blocks after the reduction???
 
@@ -793,12 +959,37 @@ int main(int argc, char* argv[]) {
        }
     }
 
+    //std::vector<double> bla;
+    //for (auto x : bgvec) bla.push_back(1.0);
+    //TMatrixT<double> _temp = calcCovarianceMatrix(covmat,bla);
+    //TMatrixT<double> _tempcol;
+    //_tempcol.ResizeTo(nBinsC, nBinsC);
+    //starttime = MPI_Wtime();
+    //for (int i=0;i<1000;++i) {
+       //collapseModes(_temp, _tempcol, myconf);
+    //}
+    //endtime = MPI_Wtime();
+    //if (world.rank()==0) fmt::print(stderr, "[{}] 1000 collapse operations took {} seconds\n",world.rank(), endtime-starttime);
+    //if (world.rank()==0) {
+       //TFile* f = new TFile("bla.root", "RECREATE");
+       //_temp.Write("annoyingcrap");
+       //f->Close();
+       //delete f;
+    //}
+
+
+
+    
     // Add the BG
     TMatrixT<double> _cov = calcCovarianceMatrix(covmat, bgvec);
     TMatrixT<double> _covcol;
     _covcol.ResizeTo(nBinsC, nBinsC);
     collapseModes(_cov, _covcol, myconf);
     INVCOV.push_back(invertMatrix(_covcol));
+    //std::vector<double> vInvCovBG = asVector(INVCOV.back());
+    writeInvCovBG(f_out, INVCOV.back(), size_t(nPoints));
+    //HighFive::DataSet invcc = f_out->getDataSet("invcov");
+    //invc.select(     {size_t(nPoints), 0}, {1, size_t(vInvCovBG.size())}).write(vInvCovBG);
     endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] matrix broadcast etc took {} seconds\n",world.rank(), endtime-starttime);
 
