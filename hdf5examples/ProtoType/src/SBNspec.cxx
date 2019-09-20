@@ -1,3 +1,4 @@
+#pragma GCC optimize("O3","unroll-loops","inline")
 #include "SBNspec.h"
 #include <cassert>
 using namespace sbn;
@@ -65,8 +66,8 @@ SBNspec::SBNspec(std::string whichxml, int which_universe): SBNspec(whichxml,whi
 SBNspec::SBNspec(std::string rootfile, std::string whichxml) : SBNspec(rootfile, whichxml, true){}
 
 
-SBNspec::SBNspec(std::vector<TH1D> bghist, const char * xmldata) : SBNspec(bghist, xmldata, true) {}
-SBNspec::SBNspec(std::vector<TH1D> bghist, const char * xmldata, bool isverbose) : SBNconfig(xmldata, isverbose) {
+SBNspec::SBNspec(std::vector<TH1D> const & bghist, const char * xmldata) : SBNspec(bghist, xmldata, true) {}
+SBNspec::SBNspec(std::vector<TH1D> const & bghist, const char * xmldata, bool isverbose) : SBNconfig(xmldata, isverbose) {
     hist = bghist;
 }
 

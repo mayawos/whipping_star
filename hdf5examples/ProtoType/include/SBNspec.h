@@ -63,8 +63,8 @@ namespace sbn{
 			SBNspec(std::string, const char *, bool);
 			SBNspec(std::string, std::string, bool);
 			
-                        SBNspec(std::vector<TH1D> bghist, const char *);
-			SBNspec(std::vector<TH1D> bghist, const char *, bool);
+                        SBNspec(std::vector<TH1D> const & bghist, const char *);
+			SBNspec(std::vector<TH1D> const & bghist, const char *, bool);
 
 
 			SBNspec(std::vector<double> input_full_vec, std::string whichxml);
