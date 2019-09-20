@@ -19,7 +19,7 @@ struct NGridDimension{
     std::size_t f_N;
     std::vector<double> f_points;
 
-    NGridDimension(std::string const & name, double min, double max, double step) : 
+    NGridDimension(std::string const & name, double min, double max, double step) :
       f_name(name), f_min(min), f_max(max), f_step(step), f_fixed_value(0), f_is_fixed(false), f_N(ceil(fabs(f_min-f_max)/step)), f_points(f_N) {
         this->CalcGrid();
     };
@@ -34,7 +34,7 @@ struct NGridDimension{
         f_points[i]= f_min + i*f_step;
       }
     }
-    
+
 
     int GetNPoints(){return f_N;};
 
@@ -48,6 +48,7 @@ struct NGrid{
 
     std::vector<NGridDimension> f_dimensions;
 
+
     void AddDimension(std::string const & name, double min, double max, double step ){
         f_dimensions.emplace_back( name, min, max, step );
         ++f_num_dimensions;
@@ -60,7 +61,7 @@ struct NGrid{
     }
 
     std::vector<std::vector<double>> GetGrid(){
-        std::vector<std::vector<double>> grid;            
+        std::vector<std::vector<double>> grid;
 
         //count from 0 to f_num_total_points
         for(int i=0; i<f_num_total_points; i++){
@@ -69,6 +70,7 @@ struct NGrid{
 
             //were going to take each number and write each digit in base K where K is that vectors length
             int divisor=1;
+
             for(int j =f_num_dimensions-1 ;j>=0; j--){
 
                 int this_index =  (i/divisor)%f_dimensions[j].GetNPoints();
@@ -101,7 +103,7 @@ struct NGrid{
             }
         }
         std::cout<<"We have "<<grid.size()<< " points with : "<<grid[0].size()<<" dimensions"<<std::endl;
-       
+
         /*
         for(int i=0; i< grid.size(); i++){
             std::cout<<i;
