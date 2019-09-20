@@ -26,7 +26,7 @@ class SBNosc : public SBNspec{
 	int which_mode;
 	double mass_step_size;	//has to be 0.04 for now
 
-	SBNosc(std::vector<TH1D> bghist, const char *); //constructor
+	SBNosc(std::vector<TH1D> const & bghist, const char *); //constructor
 	SBNosc(std::string, const char *); //constructor
 	SBNosc(std::string, std::string); //constructor
 	SBNosc(std::string, std::string, NeutrinoModel); //constructor

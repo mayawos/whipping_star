@@ -1,7 +1,8 @@
+#pragma GCC optimize("O3","unroll-loops","inline")
 #include "SBNosc.h"
 using namespace sbn;
 
-SBNosc::SBNosc(std::vector<TH1D> bghist, const char* xmldata) : SBNspec(bghist, xmldata) {
+SBNosc::SBNosc(std::vector<TH1D> const & bghist, const char* xmldata) : SBNspec(bghist, xmldata) {
 	working_model.zero();
 	mass_step_size = 0.04;
 	which_mode = BOTH_ONLY;
@@ -312,30 +313,17 @@ std::vector<double> SBNosc::Oscillate(std::string tag){
 
 
 std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, const char * xmldata) {
-
     this->CalcFullVector();
     this->CollapseVector();
     calcMassSplittings();
     std::vector<double> temp;
     
-    if (return_compressed) {
-        temp = collapsed_vector;
-    }
-    else {
-        temp = full_vector;
-    }
+    if (return_compressed)  temp = collapsed_vector;
+    else temp = full_vector;
 
-    //double sum = std::accumulate(temp.begin(), temp.end(), 0.0);
-    //if (sum >1e10) {
-       //std::cerr << " sum of collapsed_vector aka temp: " << sum << "\n";
-       //for (auto  v : temp) std::cerr << " " << v << "\n";
-       //std::cerr << "\n";  
-       //abort();
-    //}
+    //std::cerr << "Oscillate will open " << mass_splittings.size()*2 << " ROOT files\n";
 
     for (auto ms: mass_splittings) {
-       //std::cerr << "MS: " << ms.second << " " << has_been_scaled<< "\n";  
-
 
               std::string name_sinsq = tag +"_SINSQ_dm_"+working_model.mass_tag+".SBNspec.root";
               std::string name_sin = tag +"_SIN_dm_"+working_model.mass_tag+".SBNspec.root";
@@ -343,14 +331,8 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
               SBNspec single_frequency(name_sin , xmldata , false);
               SBNspec single_frequency_square(name_sinsq , xmldata ,false);
 
-              //if (has_been_scaled){
-                  //single_frequency.Scale(scale_hist_name, scale_hist_val);
-                  //single_frequency_square.Scale(scale_hist_name, scale_hist_val);
-              //}
-
               single_frequency.CalcFullVector();
               single_frequency_square.CalcFullVector();
-
 
               double prob_mumu, prob_ee, prob_mue, prob_mue_sq, prob_muebar, prob_muebar_sq;
 
@@ -457,27 +439,8 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
 				temp[i] += single_frequency.full_vector[i];
 				temp[i] += single_frequency_square.full_vector[i];
 			}
-
-
-
            }
-    //double sum2 = std::accumulate(temp.begin(), temp.end(), 0.0);
-    //if (sum2 >1e10) {
-       //std::cerr << " sum of collapsed_vector aka temp after: " << sum2 << "\n";
-       //for (auto  v : temp)                                std::cerr << " " << v;
-       //std::cerr << "\n"; 
-       //std::cerr << " sff:\n";
-       //for (auto  v : single_frequency.full_vector)        std::cerr << " " << v;
-       //std::cerr << "\n";  
-       //std::cerr << " sfsqf:\n";
-       //for (auto  v : single_frequency_square.full_vector) std::cerr << " " << v;
-       //std::cerr << "\n";  
-
-       //abort();
-    //}
-
 	}//Done looping over
-
 	return temp;
 };
 
