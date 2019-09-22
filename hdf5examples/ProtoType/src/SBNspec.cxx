@@ -8,7 +8,7 @@ SBNspec::SBNspec(const char * xmldata, int which_universe, bool isverbose) : SBN
     //for every multisim, create a vector of histograms, one for every subchannel we want
     int ctr=0;
     for(auto fn: fullnames){
-        for(int c=0; c<channel_names.size(); c++){
+        for(size_t c=0; c<channel_names.size(); c++){
             if(fn.find("_"+channel_names[c]+"_")!=std::string::npos){
                 double * tbins =&bin_edges[c][0];
                 std::string thisname;
@@ -37,7 +37,7 @@ SBNspec::SBNspec(std::string whichxml, int which_universe, bool isverbose) : SBN
     //for every multisim, create a vector of histograms, one for every subchannel we want
     int ctr=0;
     for(auto fn: fullnames){
-        for(int c=0; c<channel_names.size(); c++){
+        for(size_t c=0; c<channel_names.size(); c++){
             if(fn.find("_"+channel_names[c]+"_")!=std::string::npos){
                 double * tbins =&bin_edges[c][0];
                 std::string thisname;
@@ -113,20 +113,20 @@ SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml) : SBN
 SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml, bool isverbose) : SBNspec(input_full_vec,whichxml,-1,isverbose){};
 
 SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml, int universe, bool isverbose) : SBNspec(whichxml,universe,isverbose){
-    for(int i=0; i< input_full_vec.size(); i++){
-        int which_hist = GetHistNumber(i);
+    for(size_t i=0; i< input_full_vec.size(); i++){
+        size_t which_hist = GetHistNumber(i);
         int exact_bin = i;
-        for(int b=0; b<which_hist; b++) exact_bin -= hist.at(b).GetNbinsX();
+        for(size_t b=0; b<which_hist; b++) exact_bin -= hist.at(b).GetNbinsX();
         hist.at(which_hist).SetBinContent(exact_bin+1, input_full_vec.at(i));
     }
     this->CalcFullVector();
 }
 
 SBNspec::SBNspec(std::vector<double> const & input_full_vec, const char * xmldata, int universe, bool isverbose) : SBNspec(xmldata, universe, isverbose){
-    for(int i=0; i< input_full_vec.size(); i++){
-        int which_hist = GetHistNumber(i);
+    for(size_t i=0; i< input_full_vec.size(); i++){
+        size_t which_hist = GetHistNumber(i);
         int exact_bin = i;
-        for(int b=0; b<which_hist; b++) exact_bin -= hist.at(b).GetNbinsX();
+        for(size_t b=0; b<which_hist; b++) exact_bin -= hist.at(b).GetNbinsX();
         hist.at(which_hist).SetBinContent(exact_bin+1, input_full_vec.at(i));
     }
     this->CalcFullVector();
@@ -174,7 +174,7 @@ int SBNspec::Add(SBNspec *in){
 	//Addes all hists toGether
 	if(xmlname != in->xmlname){ std::cout<<"ERROR: SBNspec::Add, trying to add differently configured SBNspecs!"<<std::endl; exit(EXIT_FAILURE);}
 
-	for(int i=0; i< hist.size(); i++){
+	for(size_t i=0; i< hist.size(); i++){
 		hist[i].Add( &(in->hist[i]));
 	}
 
@@ -182,17 +182,17 @@ int SBNspec::Add(SBNspec *in){
 	return 0;
 }
 
-int SBNspec::SetAsGaussian(double mean, double sigma, int ngen){
-	TRandom3 *seedGetter = new TRandom3(0);
-	int seed = seedGetter->Integer(1000000);
+int SBNspec::SetAsGaussian(double mean, double sigma, size_t ngen){
+	TRandom3 seedGetter(0);
+	int seed = seedGetter.Integer(1000000);
 
 	for(auto &h: hist){
-		TRandom3 *rangen = new TRandom3(seed);
-		h.Reset();
-		for(int i=0; i<ngen; i++){
-			double eve = rangen->Gaus(mean,sigma);
-			h.Fill( eve );
-		}
+            TRandom3 rangen(seed);
+            h.Reset();
+            for(size_t i=0; i<ngen; i++){
+                double eve = rangen.Gaus(mean,sigma);
+                h.Fill( eve );
+            }
 	}
 
 	return 0;
@@ -316,20 +316,16 @@ int SBNspec::Norm(std::string name, double val){
 
 int SBNspec::CalcFullVector(){
   full_vector.clear();
-
   full_vector.resize(num_bins_total);
 
   int hoffset = 0;
   for(size_t hid=0; hid<hist.size(); ++hid) {
-    const auto& h =  hist[hid];
-    for(int i = 1; i < (h.GetSize()-1); ++i){
-      full_vector[hoffset + i - 1] = h.GetBinContent(i);
-    }
-    hoffset += (h.GetSize()-2);
+      const auto& h =  hist[hid];
+      for (size_t i=1; i<(h.GetSize()-1); ++i) full_vector[hoffset + i - 1] = h.GetBinContent(i);
+      hoffset += (h.GetSize()-2);
   }
     
   assert (hoffset == num_bins_total);
-
   return 0;
 }
 
@@ -352,27 +348,20 @@ int SBNspec::CollapseVector(){
         collapsed_vector.reserve(reserve_size);
 
 	for(int im = 0; im < num_modes; im++){
-		for(int id =0; id < num_detectors; id++){
-			int edge = id*num_bins_detector_block + num_bins_mode_block*im; // This is the starting index for this detector
-
-			for(int ic = 0; ic < num_channels; ic++){
-				int corner=edge;
-
-				for(int j=0; j< num_bins.at(ic); j++){
-
-					double tempval=0;
-
-					for(int sc = 0; sc < num_subchannels.at(ic); sc++){
-
-						//std::cout<<im<<"/"<<num_modes<<" "<<id<<"/"<<num_detectors<<" "<<ic<<"/"<<num_channels<<" "<<j<<"/"<<num_bins[ic]<<" "<<sc<<"/"<<num_subchannels[ic]<<std::endl;
-						tempval += full_vector.at(j+sc*num_bins.at(ic)+corner);
-						edge +=1;	//when your done with a channel, add on every bin you just summed
-					}
-					//we can size this vector beforehand and get rid of all push_back()
-					collapsed_vector.push_back(tempval);
-				}
-			}
-		}
+            for(int id =0; id < num_detectors; id++){
+                int edge = id*num_bins_detector_block + num_bins_mode_block*im; // This is the starting index for this detector
+                for(int ic = 0; ic < num_channels; ic++){
+                    int corner=edge;
+                    for(int j=0; j< num_bins.at(ic); j++){
+                        double tempval=0;
+                        for(int sc = 0; sc < num_subchannels.at(ic); sc++){
+                                tempval += full_vector.at(j+sc*num_bins.at(ic)+corner);
+                                edge +=1;	// When your done with a channel, add on every bin you just summed
+                        }
+                        collapsed_vector.push_back(tempval);
+                    }
+                }
+            }
 	}
 	return 0;
 }

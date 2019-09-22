@@ -106,7 +106,7 @@ namespace sbn{
 			int ScalePoisson(TRandom3*); //Scales every histogram by a poissonian random number
 
 
-			int SetAsGaussian(double mean, double sigma, int n);
+			int SetAsGaussian(double mean, double sigma, size_t n);
 			int SetAsFlat(double val);
 
 			//Scales all vectors in hist by double
