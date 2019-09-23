@@ -5,6 +5,7 @@
 #include <cmath>
 #include <vector>
 #include <iostream>
+#include <unordered_map>
 #include "SBNspec.h"
 #include "SBNosc.h"
 #include "SBNchi.h"
@@ -120,6 +121,9 @@ namespace sbn{
         //std::vector<double> LoadPreOscillatedSpectrum(size_t ipoint);
         std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint);
         std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint, const char * xmldata);
+        std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint, const char * xmldata,
+            std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
+            std::unordered_map <std::string, std::vector<TH1D> > const & sinmap);
 
         int SetRandomSeed(double);
 
