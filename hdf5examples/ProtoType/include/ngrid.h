@@ -30,9 +30,7 @@ struct NGridDimension{
     }
 
     void CalcGrid(){
-      for(int i=0; i<f_N; i++){
-        f_points[i]= f_min + i*f_step;
-      }
+        for (size_t i=0; i<f_N; i++) f_points[i]= f_min + i*f_step;
     }
 
 
