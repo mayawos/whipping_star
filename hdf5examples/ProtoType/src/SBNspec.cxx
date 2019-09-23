@@ -199,12 +199,12 @@ int SBNspec::SetAsGaussian(double mean, double sigma, size_t ngen){
 
 }
 
+// FIXME void!
 int SBNspec::SetAsFlat(double val){
-	for(auto &h: hist){
-		for(int i=0; i<h.GetSize(); i++){
-			h.SetBinContent(i, val );
-		}
-	}
+    for (auto &h: hist){
+        for (int i=0; i<h.GetSize(); i++) h.SetBinContent(i, val );
+    }
+    return 0;
 }
 
 
@@ -321,7 +321,7 @@ int SBNspec::CalcFullVector(){
   int hoffset = 0;
   for(size_t hid=0; hid<hist.size(); ++hid) {
       const auto& h =  hist[hid];
-      for (size_t i=1; i<(h.GetSize()-1); ++i) full_vector[hoffset + i - 1] = h.GetBinContent(i);
+      for (int i=1; i<(h.GetSize()-1); ++i) full_vector[hoffset + i - 1] = h.GetBinContent(i);
       hoffset += (h.GetSize()-2);
   }
     
@@ -417,9 +417,9 @@ int SBNspec::WriteOut(std::string tag){
 	std::vector<TH1D> temp_hists = hist;
 
 
-	for(int im = 0; im <mode_names.size(); im++){
-		for(int id = 0; id <detector_names.size(); id++){
-			for(int ic = 0; ic <channel_names.size(); ic++){
+	for(size_t im = 0; im <mode_names.size(); im++){
+		for(size_t id = 0; id <detector_names.size(); id++){
+			for(size_t ic = 0; ic <channel_names.size(); ic++){
 
 
 				std::string canvas_name = mode_names.at(im)+"_"+detector_names.at(id)+"_"+channel_names.at(ic);
@@ -552,7 +552,7 @@ int SBNspec::CompareSBNspecs(SBNspec * compsec, std::string tag){
 	std::vector<TH1D> temp = hist;
 	std::vector<TH1D> temp_comp = compsec->hist;
 
-	for(int k=0; k< fullnames.size(); k++){
+	for (size_t k=0; k< fullnames.size(); k++){
 		TCanvas *ctmp = new TCanvas((tag+"_"+std::to_string(k)+"_"+fullnames.at(k)).c_str(), (std::to_string(k)+"_"+fullnames.at(k)).c_str(),1200,1200);
 		ctmp->cd();
 		TH1D * h1 = (TH1D*) temp.at(map_hist[fullnames.at(k)]).Clone((std::to_string(k)+fullnames.at(k)+"_1").c_str());
