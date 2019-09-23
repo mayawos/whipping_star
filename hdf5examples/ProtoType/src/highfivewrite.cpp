@@ -7,6 +7,7 @@
 #include <functional>
 #include <numeric>
 #include <stdexcept>
+#include <unordered_map>
 
 #include <diy/master.hpp>
 #include <diy/reduce.hpp>
@@ -48,6 +49,10 @@ struct FitResult {
    int best_grid_point;
    double last_chi_min, delta_chi;
 };
+
+
+
+
 
 
 struct Block
@@ -109,7 +114,7 @@ std::vector< std::vector<double> > sliceVector(std::vector<double> const & input
    std::vector<double> work;
    work.reserve(nBins);
 
-   for (size_t i=0;i<nPoints;++i) {
+   for (int i=0;i<nPoints;++i) {
       work=myslice(input, i*nBins, (i+1)*nBins-1);
       test.push_back(work);
    }
@@ -129,7 +134,6 @@ void gatherSpectra(Block* b, const diy::ReduceProxy& rp, const diy::RegularMerge
          std::vector<std::vector<double> > & invcov_out,
          HighFive::File* file,
          bool otf) {
-    unsigned round = rp.round();
     // step 1: dequeue and merge
     for (int i = 0; i < rp.in_link().size(); ++i) {
         int nbr_gid = rp.in_link().target(i).gid;
@@ -194,7 +198,7 @@ void writeGrid(HighFive::File* file, std::vector<std::vector<double> > const & c
     std::vector<double> xcoord;
     std::vector<double> ycoord;
 
-    for (int i=0; i< coords.size(); i++) {
+    for (size_t i=0; i< coords.size(); i++) {
        xcoord.push_back(coords[i][0]);
        ycoord.push_back(coords[i][1]);
     }
@@ -227,11 +231,27 @@ std::vector<TH1D> readHistos(std::string const & rootfile, std::vector<string> c
     return hist;
 }
 
+std::unordered_map <std::string, std::vector<TH1D> > mkHistoMap(std::string const & prefix, std::vector<string> const & fullnames) {
+   // TODO can we have all spectra in a single file or something?
+   std::string mass_tag = "";
+   std::unordered_map <std::string, std::vector<TH1D> > hmap;
+   float dm(-2.0);
+   while( dm < 2.3) {
+      std::ostringstream out;
+      out <<std::fixed<< std::setprecision(4) << dm;
+      mass_tag = out.str();
+      dm+=0.2;
+      std::string fname = prefix+mass_tag+".SBNspec.root";
+      hmap[mass_tag] = readHistos(fname, fullnames);
+   }
+   return hmap;
+}
+
 // Assume order is correct
 std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
    std::vector<double> temp;
    for (auto hist : v_hist) {
-      for (size_t i=1; i< (hist.GetNbinsX()+1); ++i) {
+      for (int i=1; i< (hist.GetNbinsX()+1); ++i) {
          temp.push_back(hist.GetBinContent(i));
       }
    }
@@ -395,7 +415,6 @@ TMatrixT<double> calcCovarianceMatrix(TMatrixT<double> const & M, std::vector<do
 
 // Only used for covariance matrix a very beginning, just being lazy here
 TMatrixT<double> invertMatrix(TMatrixT<double> &M){
-    double invdet=0;
     TMatrixT<double> McI(M.GetNrows(),M.GetNrows());
     McI.Zero();
     TDecompSVD svd(M);
@@ -518,19 +537,49 @@ void collapseModes(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBNconfig
 }
 
 //unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid, const char * xmldata, std::vector<TH1D> const & bghist,  std::vector<TH1D> const & cvhist, TMatrixD const & covmat) {
-unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_uni, string const & tag, string const & xml, NGrid const & mygrid, const char * xmldata, std::vector<TH1D> const & cvhist) {
+unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(int i_grid, string const & tag, NGrid const & mygrid, const char * xmldata, std::vector<TH1D> const & cvhist) {
     sbn::SBNfeld myfeld(mygrid, tag, xmldata);
     myfeld.SetCoreSpectrum(cvhist, xmldata);
     myfeld.SetRandomSeed(-1);
-    // FIXME the dtor of SBNfeld only works when these functions are called :( -- NOTE this no longer seems to be the case
-    //myfeld.SetFractionalCovarianceMatrix(covmat);
-    //myfeld.LoadBackgroundSpectrum(xmldata, bghist);
-    return myfeld.LoadPreOscillatedSpectrum(i_uni, xmldata);
+    return myfeld.LoadPreOscillatedSpectrum(i_grid, xmldata);
+};
+
+unique_ptr<sbn::SBNspec> loadPreOscillatedSpectrum(
+      int i_grid, string const & tag, NGrid const & mygrid, const char * xmldata,
+      std::vector<TH1D> const & cvhist,
+      std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
+      std::unordered_map <std::string, std::vector<TH1D> > const & sinmap) {
+
+    sbn::SBNfeld myfeld(mygrid, tag, xmldata);
+    myfeld.SetCoreSpectrum(cvhist, xmldata);
+    myfeld.SetRandomSeed(-1);
+    return myfeld.LoadPreOscillatedSpectrum(i_grid, xmldata, sinsqmap, sinmap);
 };
 
 //void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid const & mygrid, HighFive::File* f_out, const char * xmldata, std::vector<TH1D> const & bghist,  std::vector<TH1D> const & cvhist,TMatrixD const & covmat) {
-void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, string xml, NGrid const & mygrid, HighFive::File* f_out, const char * xmldata,  std::vector<TH1D> const & cvhist) {
-    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, xml, mygrid, xmldata, cvhist);
+void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank,
+      string tag, NGrid const & mygrid, HighFive::File* f_out, const char * xmldata,
+      std::vector<TH1D> const & cvhist,
+      std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
+      std::unordered_map <std::string, std::vector<TH1D> > const & sinmap) {
+
+    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, mygrid, xmldata, cvhist, sinsqmap, sinmap);
+    std::vector<double> full = myspec->full_vector;
+    std::vector<double> coll = myspec->collapsed_vector;
+    
+    double sum = std::accumulate(full.begin(), full.end(), 0.0);
+    if (sum >1e10 || sum <10) {
+       std::cerr << "[" << cp.gid() <<"] sum of specfull: " << sum << "\n";
+       myspec->PrintFullVector();
+       std::cerr << "and the collapsed vector \n";
+       myspec->PrintCollapsedVector();
+       abort();
+    }
+    b->spec_full.push_back(full);
+    b->spec_coll.push_back(coll);
+}
+void loadSpectrum(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank, string tag, NGrid const & mygrid, HighFive::File* f_out, const char * xmldata,  std::vector<TH1D> const & cvhist) {
+    auto myspec = loadPreOscillatedSpectrum(cp.gid(), tag, mygrid, xmldata, cvhist);
     std::vector<double> full = myspec->full_vector;
     std::vector<double> coll = myspec->collapsed_vector;
     
@@ -633,7 +682,6 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int size, int rank,
 {
 
     double starttime, endtime;
-    int nBinsFull = spectra[0].size();
     std::vector<float> fake_data;
     std::vector<std::vector<float> > FD;
     FD.reserve(rankwork.size()*nUniverses);
@@ -761,7 +809,6 @@ int main(int argc, char* argv[]) {
     ops >> Option("ymax",            ymax,       "ymax");
     ops >> Option("ywidth",          ywidth,     "ywidth");
     ops >> Option("mock",            mockFactor, "Mockfactor");
-    bool verbose     = ops >> Present('v', "verbose", "verbose output");
     bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
     bool dryrun      = ops >> Present("dry", "dry run");
     bool onthefly    = ops >> Present("otf", "on the fly matrix inversion (saves memory)");
@@ -819,6 +866,13 @@ int main(int argc, char* argv[]) {
     const char* xmldata = text.c_str();
     sbn::SBNconfig myconf(xmldata, false);
 
+    // TODO find a way to serialize and reconstruct TH1D that is not too painful
+    double time0 = MPI_Wtime();
+    std::unordered_map <std::string, std::vector<TH1D> > sinsqmap = mkHistoMap(tag+"_SINSQ_dm_", myconf.fullnames);
+    std::unordered_map <std::string, std::vector<TH1D> > sinmap   = mkHistoMap(tag+"_SIN_dm_",   myconf.fullnames);
+    double time1 = MPI_Wtime();
+    if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra the new way took {} seconds\n",world.rank(), time1 - time0);
+
     // Background
     std::vector<double> bgvec;
     if (world.rank() == 0) {
@@ -861,7 +915,6 @@ int main(int argc, char* argv[]) {
     }
 
     if( world.rank()==0 ) {
-      fmt::print(stderr, "\n*** This is diy running highfivewrite ***\n");
       fmt::print(stderr, "\n    Output will be written to {}\n", out_file);
       fmt::print(stderr, "\n    Points:  {}\n", nPoints);
       fmt::print(stderr, "\n    nBins:  {}\n", nBins);
@@ -888,7 +941,7 @@ int main(int argc, char* argv[]) {
     // First rank also writes the grid so we know what the poins actually are
     if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid());
 
-    // First diy setup to load specra 
+    // First diy setup to load spectra
     size_t blocks = nPoints;
     Bounds domain(1);
     domain.min[0] = 0;
@@ -904,8 +957,10 @@ int main(int argc, char* argv[]) {
     starttime = MPI_Wtime();
     //master.foreach([world, tag, xml, mygrid, f_out, xmldata, bghist, cvhist, covmat](Block* b, const diy::Master::ProxyWithLink& cp)
                            //{loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, xmldata, bghist, cvhist, covmat); });
-    master.foreach([world, tag, xml, mygrid, f_out, xmldata, cvhist](Block* b, const diy::Master::ProxyWithLink& cp)
-                           {loadSpectrum(b, cp, world.size(), world.rank(), tag, xml, mygrid, f_out, xmldata, cvhist); });
+    //master.foreach([world, tag, mygrid, f_out, xmldata, cvhist](Block* b, const diy::Master::ProxyWithLink& cp)
+                           //{loadSpectrum(b, cp, world.size(), world.rank(), tag, mygrid, f_out, xmldata, cvhist); });
+    master.foreach([world, tag, mygrid, f_out, xmldata, cvhist, sinsqmap, sinmap](Block* b, const diy::Master::ProxyWithLink& cp)
+                           {loadSpectrum(b, cp, world.size(), world.rank(), tag, mygrid, f_out, xmldata, cvhist, sinsqmap, sinmap); });
     endtime = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra took {} seconds\n",world.rank(), endtime-starttime);
 
