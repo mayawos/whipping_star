@@ -13,6 +13,12 @@ set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-point
 #set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
+#find_package(OpenMP)
+#if(OpenMP_CXX_FOUND)
+  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+#endif()
+
+
 ## AddressSanitize
 #set(CMAKE_C_FLAGS_ASAN
     #"-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
@@ -70,11 +76,14 @@ find_package                (MPI REQUIRED)
 
 #find_package                (HDF5)
 set                     (libraries ${libraries} ${HDF5_C_LIBRARIES})
+#set                     (libraries ${libraries} ${HDF5_C_LIBRARIES} ${NOMAD_INCLUDE_DIRS}/../lib/libnomad.so)
 
 
 add_definitions         (-DDIY_NO_THREADS)
 # DIY
 find_path                   (DIY_INCLUDE_DIRS diy/types.h)
+#find_path                   (NOMAD_INCLUDE_DIRS nomad.hpp)
+#find_path                   (SGTE_INCLUDE_DIRS sgtelib.hpp)
 
 set (MY_PUBLIC_HEADERS 
     ${CMAKE_CURRENT_SOURCE_DIR}/include/GenericBlock.hpp
@@ -86,9 +95,11 @@ set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${DIY_INCLUDE_DIRS}
                             ${HDF5_INCLUDE_DIRS}
+                            #${SGTE_INCLUDE_DIRS}
                             ${HIGHFIVE_DIR}/include 
                             SYSTEM ${MPI_INCLUDE_PATH}
                             )
+                            #${NOMAD_INCLUDE_DIRS}
                         
                         #FIND_PACKAGE(ROOT COMPONENTS MathCore MathMore)# COMPONENTS Core Cint RIO Net Hist Graf Graf3d Gpad Tree Rint Postscript Matrix Physics MathCore Thread)
 
@@ -118,7 +129,8 @@ message("GSL_CXX_FLAGS: ${GSL_CXX_FLAGS}")
 #set (CMAKE_PCC_CXX_FLAGS "-ta=multicore -Minfo=accel -acc -w ${CMAKE_SO_CXX_FLAGS}")
 
 #set (CMAKE_CXX_FLAGS "${CMAKE_ACC_CXX_FLAGS}")
-set (CMAKE_CXX_FLAGS "${ROOT_CXX_FLAGS} ${GSL_CXX_FLAGS}")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ROOT_CXX_FLAGS} ${GSL_CXX_FLAGS}")
+message("CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 
 # Figure out correct library suffix
 if                          (APPLE)
