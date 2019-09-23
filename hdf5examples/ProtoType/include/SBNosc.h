@@ -6,6 +6,7 @@
 #include "params.h"
 #include <string>
 #include <utility>
+#include <unordered_map>
 
 /**********************************************
  *	This is a less general 3+N osc spectrum
@@ -38,7 +39,10 @@ class SBNosc : public SBNspec{
 	//Oscillate the contained std::vector<TH1D> hists 
 	int OscillateThis(std::string);	
 	// Or just oscillate a copy and return the ompressed vector
-        std::vector<double> Oscillate(std::string, bool compress, const char * xmldata); 
+        std::vector<double> Oscillate(std::string, bool compress, const char * xmldata);
+        std::vector<double> Oscillate(std::string, bool compress, const char * xmldata,
+          std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
+          std::unordered_map <std::string, std::vector<TH1D> > const & sinmap);
         std::vector<double> Oscillate(std::string,bool compress); 
         std::vector<double> Oscillate(std::string);
 	std::vector<double> Oscillate(std::string, double);
