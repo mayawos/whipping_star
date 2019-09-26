@@ -1,5 +1,6 @@
 #pragma GCC optimize("O3","unroll-loops","inline")
 #include "SBNosc.h"
+#include <Eigen/Dense>
 using namespace sbn;
 
 SBNosc::SBNosc(std::vector<TH1D> const & bghist, const char* xmldata) : SBNspec(bghist, xmldata) {
@@ -321,21 +322,14 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
     if (return_compressed)  temp = collapsed_vector;
     else temp = full_vector;
 
-    //std::cerr << "Oscillate will open " << mass_splittings.size()*2 << " ROOT files\n";
+    int n = temp.size();
+    Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, 1> > PRED(temp.data(), n, 1);
 
     for (auto ms: mass_splittings) {
 
-              std::string name_sinsq = tag +"_SINSQ_dm_"+working_model.mass_tag+".SBNspec.root";
-              std::string name_sin = tag +"_SIN_dm_"+working_model.mass_tag+".SBNspec.root";
 
-              //std::string aha =working_model.mass_tag;
-              //std::vector<TH1D>  test = sinsqmap.at(aha);
-
-              // TODO replace with ctor that takes vector<TH1D>
               SBNspec single_frequency_square(sinsqmap.at(working_model.mass_tag) , xmldata ,false);
               SBNspec single_frequency(sinmap.at(working_model.mass_tag) , xmldata , false);
-              //SBNspec single_frequency(name_sin , xmldata , false);
-              //SBNspec single_frequency_square(name_sinsq , xmldata ,false);
 
               single_frequency.CalcFullVector();
               single_frequency_square.CalcFullVector();
@@ -434,20 +428,30 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
 
 
 
-           if (return_compressed) { 
-              for(int i=0;i<temp.size(); i++){
-                temp[i] += single_frequency.collapsed_vector[i];
-                temp[i] += single_frequency_square.collapsed_vector[i];
-              }
+           if (return_compressed) {
+
+               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sf(single_frequency.collapsed_vector.data(), n, 1);
+               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sfsq(single_frequency_square.collapsed_vector.data(), n, 1);
+               PRED += _sf;
+               PRED +=_sfsq;
+              //for(int i=0;i<temp.size(); i++){
+                //temp[i] += single_frequency.collapsed_vector[i];
+                //temp[i] += single_frequency_square.collapsed_vector[i];
+              //}
            }
            else {
-              for(int i=0;i<temp.size(); i++){
-                temp[i] += single_frequency.full_vector[i];
-                temp[i] += single_frequency_square.full_vector[i];
-              }
+               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sf(single_frequency.full_vector.data(), n, 1);
+               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sfsq(single_frequency_square.full_vector.data(), n, 1);
+               PRED +=_sf;
+               PRED +=_sfsq;
+              //for(int i=0;i<temp.size(); i++){
+                //temp[i] += single_frequency.full_vector[i];
+                //temp[i] += single_frequency_square.full_vector[i];
+              //}
            }
         }//Done looping over
-        return temp;
+        std::vector<double> ret(PRED.data(), PRED.data() + PRED.rows() * PRED.cols());
+        return ret;
 };
 
 

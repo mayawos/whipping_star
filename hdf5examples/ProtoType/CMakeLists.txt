@@ -96,6 +96,7 @@ include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${DIY_INCLUDE_DIRS}
                             ${HDF5_INCLUDE_DIRS}
                             #${SGTE_INCLUDE_DIRS}
+                            ${EIGEN3_INCLUDE_DIR}
                             ${HIGHFIVE_DIR}/include 
                             SYSTEM ${MPI_INCLUDE_PATH}
                             )
