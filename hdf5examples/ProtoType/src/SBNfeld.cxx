@@ -201,7 +201,7 @@ std::unique_ptr<SBNspec> SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint, const
 
 std::unique_ptr<SBNspec> SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint, const char * xmldata,
       std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
-      std::unordered_map <std::string, std::vector<TH1D> > const & sinmap) {
+      std::unordered_map <std::string, std::vector<TH1D> > const & sinmap, bool compressed) {
 
   if (! m_cv_spec_grid.empty()) abort();
 
@@ -209,7 +209,7 @@ std::unique_ptr<SBNspec> SBNfeld::LoadPreOscillatedSpectrum(size_t ipoint, const
     m_core_spectrum->LoadModel(this_model); // At this point we know working_model.mass_tag and the mass splitting have been calculated, too
     m_core_spectrum->SetAppMode(); // This sets which_mode to APP_ONLY
 
-    std::vector<double> ans = m_core_spectrum->Oscillate(this->tag, false, xmldata, sinsqmap, sinmap);
+    std::vector<double> ans = m_core_spectrum->Oscillate(this->tag, compressed, xmldata, sinsqmap, sinmap);
     auto spec = std::make_unique<SBNspec>(ans, xmldata, ipoint, false);
     spec->CollapseVector();
     return spec;

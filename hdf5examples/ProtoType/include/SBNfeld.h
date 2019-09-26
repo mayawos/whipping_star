@@ -68,9 +68,9 @@ namespace sbn{
         double m_random_seed;
         std::string tag;
 
-        int nGridPoints() const { return m_grid.f_num_total_points;}
 
         public:
+        int nGridPoints() const { return m_grid.f_num_total_points;}
         
         SBNfeld(SBNfeld const&) = delete;
         SBNfeld& operator=(SBNfeld const&) = delete;
@@ -123,7 +123,7 @@ namespace sbn{
         std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint, const char * xmldata);
         std::unique_ptr<SBNspec> LoadPreOscillatedSpectrum(size_t ipoint, const char * xmldata,
             std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
-            std::unordered_map <std::string, std::vector<TH1D> > const & sinmap);
+            std::unordered_map <std::string, std::vector<TH1D> > const & sinmap, bool compressed=false);
 
         int SetRandomSeed(double);
 
