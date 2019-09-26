@@ -10,9 +10,16 @@ install(FILES ${MY_PUBLIC_HEADERS}
     COMPONENT devel)
 
 add_executable              (highfivewrite highfivewrite.cpp)
+add_executable              (nopreosc nopreosc.cpp)
 
 target_link_libraries (highfivewrite LINK_PUBLIC ${libraries} ${GSL_LIBS} SBNfit Eigen3::Eigen)
 install(TARGETS highfivewrite
+    DESTINATION ${CMAKE_INSTALL_PREFIX/bin}
+    RUNTIME DESTINATION bin
+    )
+
+target_link_libraries (nopreosc LINK_PUBLIC ${libraries} ${GSL_LIBS} SBNfit Eigen3::Eigen)
+install(TARGETS nopreosc
     DESTINATION ${CMAKE_INSTALL_PREFIX/bin}
     RUNTIME DESTINATION bin
     )
