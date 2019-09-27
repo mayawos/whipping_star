@@ -72,8 +72,9 @@ sbn::NeutrinoModel convert3p1(std::vector<double> const & ingrid){
 
 // TODO can this be simplified?
 std::vector<double> collapseVector(std::vector<double> const & vin, sbn::SBNconfig const & conf){
-   std::vector<double> cvec;  
+   std::vector<double> cvec;
    cvec.reserve(conf.num_bins_total_compressed);
+   //std::vector<double> cvec2(conf.num_bins_total_compressed, 0.0);
 
    for(int im = 0; im < conf.num_modes; im++){
        for(int id =0; id < conf.num_detectors; id++){
@@ -91,10 +92,52 @@ std::vector<double> collapseVector(std::vector<double> const & vin, sbn::SBNconf
            }
        }
    }
+   //// All we want is a representation with the subchannels added together
+
+   //std::cerr << " target size: " << cvec.size() << "\n";
+   //for (int d=0; d<conf.num_detectors;++d) {
+          //size_t offset(0);
+          //size_t offset2(0);
+      //for (int i=0; i<conf.num_channels; i++) {
+          //size_t nbins_chan = conf.num_bins.at(i);
+          //for (int j=0; j<conf.num_subchannels.at(i); j++) {
+                //size_t first      = d*conf.num_bins_detector_block + offset;
+                //size_t last       = d*conf.num_bins_detector_block + offset + nbins_chan;
+                //size_t first_out  = d*conf.num_bins_detector_block_compressed + offset2;
+                //size_t last_out   = d*conf.num_bins_detector_block_compressed + offset2 + nbins_chan;
+                //std::cerr << "in : " << first << " : " << last << " out --- " << first_out << " : " << last_out << "\n";
+                //std::transform (cvec2.begin() + first_out, cvec2.begin() + last_out, vin.begin() +first, cvec2.begin() + first_out, std::plus<double>());
+                //offset +=nbins_chan;
+          //}
+                //offset2 +=nbins_chan;
+       //}
+   //}
+
    return cvec;
 }
 
-
+// TODO add mode logic if necessary
+std::vector<double> collapseVectorStd(std::vector<double> const & vin, sbn::SBNconfig const & conf){
+   // All we want is a representation with the subchannels added together
+   std::vector<double> cvec(conf.num_bins_total_compressed, 0.0);
+   for (int d=0; d<conf.num_detectors;++d) {
+      size_t offset_in(0), offset_out(0);
+      for (int i=0; i<conf.num_channels; i++) {
+          size_t nbins_chan = conf.num_bins.at(i);
+          for (int j=0; j<conf.num_subchannels.at(i); j++) {
+             size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
+             size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
+             std::transform (
+                   cvec.begin() + first_out, cvec.begin() + first_out + nbins_chan, 
+                   vin.begin()  + first_in,  cvec.begin() + first_out,
+                   std::plus<double>());
+             offset_in +=nbins_chan;
+          }
+          offset_out += nbins_chan;
+      }
+   }
+   return cvec;
+}
 
 
 struct SignalGenerator {
@@ -127,7 +170,7 @@ struct SignalGeneratorStd {
       std::vector<double> ans = osc.Oscillate(sinsqmap, sinmap);
       std::transform (ans.begin(), ans.end(), core.begin(), ans.begin(), std::plus<double>());
       if (compressed) {
-         return collapseVector(ans, conf);
+         return collapseVectorStd(ans, conf);
       }
       else {
          return ans;
@@ -561,14 +604,14 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
 
        if (debug && i_grid!=0) return;
        std::vector<double> specfull = signal.predict(i_grid, false);
-       std::vector<double> speccoll = collapseVector(specfull, myconf); //signal.predict(i_grid, true);
+       std::vector<double> speccoll = collapseVectorStd(specfull, myconf); //signal.predict(i_grid, true);
        sbn::SBNchi mychi(covmat, xmldata, false);
        mychi.InitRandomNumberSeeds(double(cp.gid()));
 
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
           fake_data = mychi.SampleCovariance(specfull);
-          fake_dataC = collapseVector(fake_data, myconf);
+          fake_dataC = collapseVectorStd(fake_data, myconf);
           results.push_back(coreFC(fake_dataC, speccoll, signal, INVCOV, covmat, myconf, tol, iter));
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
@@ -735,6 +778,7 @@ int main(int argc, char* argv[]) {
     double time4 = MPI_Wtime();
     for (int i =0;i<1000;++i) signal_std.predict(1,false);
     double time5 = MPI_Wtime();
+
     
     for (int i =0;i<1000;++i) signal.predict(1,true);
     double time6 = MPI_Wtime();
@@ -748,6 +792,22 @@ int main(int argc, char* argv[]) {
     if (world.rank()==0) fmt::print(stderr, "[{}] C TH1D way took {} seconds\n",world.rank(), time6 - time5);
     if (world.rank()==0) fmt::print(stderr, "[{}] C std  way took {} seconds\n",world.rank(), time7 - time6);
     if (world.rank()==0) fmt::print(stderr, "[{}] C std speed-up {} \n",world.rank(), (time6 - time5)/(time7 - time6));
+
+
+    std::vector<double> test =signal_std.predict(1,false);
+    time3 = MPI_Wtime();
+    for (int i =0;i<10000;++i) collapseVector(test, myconf);
+    time4 = MPI_Wtime();
+    for (int i =0;i<10000;++i) collapseVectorStd(test, myconf);
+    time5 = MPI_Wtime();
+    
+    if (world.rank()==0) fmt::print(stderr, "[{}] old way took {} seconds\n",world.rank(), time4 - time3);
+    if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
+    if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(), (time4 - time3)/(time5 - time4));
+
+    //std::vector<double> a =collapseVector(   test, myconf);
+    //std::vector<double> b =collapseVectorStd(test, myconf);
+
 
 
     //for (int i =0;i<1;++i) signal_eig.predict(1,false);
