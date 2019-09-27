@@ -68,6 +68,33 @@ sbn::NeutrinoModel convert3p1(std::vector<double> const & ingrid){
     return signalModel;
 }
 
+// TODO can this be simplified?
+std::vector<double> collapseVector(std::vector<double> const & vin, sbn::SBNconfig const & conf){
+   std::vector<double> cvec;  
+   cvec.reserve(conf.num_bins_total_compressed);
+
+   for(int im = 0; im < conf.num_modes; im++){
+       for(int id =0; id < conf.num_detectors; id++){
+           int edge = id*conf.num_bins_detector_block + conf.num_bins_mode_block*im;
+           for(int ic = 0; ic < conf.num_channels; ic++){
+               int corner=edge;
+               for(int j=0; j< conf.num_bins.at(ic); j++){
+                   double tempval=0;
+                   for(int sc = 0; sc < conf.num_subchannels.at(ic); sc++){
+                        tempval += vin.at(j+sc*conf.num_bins.at(ic)+corner);
+                        edge +=1;
+                   }
+                   cvec.push_back(tempval);
+               }
+           }
+       }
+   }
+   return cvec;
+}
+
+
+
+
 struct SignalGenerator {
    sbn::SBNosc osc; std::vector<std::vector<double>> const & m_vec_grid; std::string tag;
    std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap;
@@ -79,6 +106,45 @@ struct SignalGenerator {
       osc.LoadModel(this_model);
       osc.SetAppMode();            
       std::vector<double> ans = osc.Oscillate(tag, compressed, xmldata, sinsqmap, sinmap);
+      return ans;
+   }
+   size_t gridsize() {return m_vec_grid.size();}
+
+};
+
+struct SignalGeneratorStd {
+   sbn::SBNosc osc; sbn::SBNconfig const & conf; std::vector<std::vector<double>> const & m_vec_grid;
+   std::unordered_map <std::string, std::vector<double> > const & sinsqmap;
+   std::unordered_map <std::string, std::vector<double> > const & sinmap;
+   std::vector<double> const core;
+   
+   std::vector<double> predict(size_t i_grid, bool compressed) {
+      sbn::NeutrinoModel this_model = convert3p1(m_vec_grid[i_grid]);
+      osc.LoadModel(this_model);
+      osc.SetAppMode();            
+      std::vector<double> ans = osc.Oscillate(sinsqmap, sinmap);
+      std::transform (ans.begin(), ans.end(), core.begin(), ans.begin(), std::plus<double>());
+      if (compressed) {
+         return collapseVector(ans, conf);
+      }
+      else {
+         return ans;
+      }
+   }
+   size_t gridsize() {return m_vec_grid.size();}
+
+};
+
+struct SignalGeneratorEigen {
+   sbn::SBNosc osc; std::vector<std::vector<double>> const & m_vec_grid;
+   std::unordered_map <std::string, Eigen::VectorXd > const & sinsqmap;
+   std::unordered_map <std::string, Eigen::VectorXd > const & sinmap;
+   
+   std::vector<double> predict(size_t i_grid, bool compressed) {
+      sbn::NeutrinoModel this_model = convert3p1(m_vec_grid[i_grid]);
+      osc.LoadModel(this_model);
+      osc.SetAppMode();            
+      std::vector<double> ans = osc.Oscillate(sinsqmap, sinmap);
       return ans;
    }
    size_t gridsize() {return m_vec_grid.size();}
@@ -185,9 +251,20 @@ TMatrixD readFracCovMat(std::string const & rootfile){
 std::vector<TH1D> readHistos(std::string const & rootfile, std::vector<string> const & fullnames) {
     std::vector<TH1D > hist;
     TFile f(rootfile.c_str(),"read");
-    for (auto fn: fullnames) hist.push_back(*((TH1D*)f.Get(fn.c_str())));
+    for (auto fn: fullnames) {
+       //std::cerr << "reading " <<fn.c_str() << "\n";
+       hist.push_back(*((TH1D*)f.Get(fn.c_str())));
+    }
     f.Close();
     return hist;
+}
+
+std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
+   std::vector<double> ret; 
+   for (auto h : v_hist) {
+      for (int i=1; i<(h.GetSize()-1); ++i) ret.push_back(h.GetBinContent(i));
+   }
+   return ret;
 }
 
 std::unordered_map <std::string, std::vector<TH1D> > mkHistoMap(std::string const & prefix, std::vector<string> const & fullnames) {
@@ -206,18 +283,43 @@ std::unordered_map <std::string, std::vector<TH1D> > mkHistoMap(std::string cons
    return hmap;
 }
 
-// Assume order is correct
-std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
-   std::vector<double> temp;
-   for (auto hist : v_hist) {
-      for (int i=1; i< (hist.GetNbinsX()+1); ++i) {
-         temp.push_back(hist.GetBinContent(i));
-      }
+std::unordered_map <std::string, std::vector<double> > mkHistoMapStd(std::string const & prefix, std::vector<string> const & fullnames) {
+   // TODO can we have all spectra in a single file or something?
+   std::string mass_tag = "";
+   std::unordered_map <std::string, std::vector<double> > hmap;
+   float dm(-2.0);
+   while( dm < 2.3) {
+      std::ostringstream out;
+      out <<std::fixed<< std::setprecision(4) << dm;
+      mass_tag = out.str();
+      dm+=0.2;
+      std::string fname = prefix+mass_tag+".SBNspec.root";
+      std::vector<TH1D> histos = readHistos(fname, fullnames);
+      hmap[mass_tag] = flattenHistos(histos);
    }
-   return temp;
+   return hmap;
 }
 
-float calcChi(std::vector<float> const & data, std::vector<double> const & prediction, TMatrixT<double> const & C_inv ) {
+std::unordered_map <std::string, Eigen::VectorXd > mkHistoMapEig(std::string const & prefix, std::vector<string> const & fullnames) {
+   // TODO can we have all spectra in a single file or something?
+   std::string mass_tag = "";
+   std::unordered_map <std::string, Eigen::VectorXd > hmap;
+   float dm(-2.0);
+   while( dm < 2.3) {
+      std::ostringstream out;
+      out <<std::fixed<< std::setprecision(4) << dm;
+      mass_tag = out.str();
+      dm+=0.2;
+      std::string fname = prefix+mass_tag+".SBNspec.root";
+      std::vector<TH1D> histos = readHistos(fname, fullnames);
+      std::vector<double> ret = flattenHistos(histos);
+      hmap[mass_tag] = Eigen::Map<Eigen::VectorXd>(ret.data(), ret.size(), 1);
+   }
+   return hmap;
+}
+
+
+float calcChi(std::vector<double> const & data, std::vector<double> const & prediction, TMatrixT<double> const & C_inv ) {
     int n = data.size();
     Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > CINV(C_inv.GetMatrixArray(), n, n);
     Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > PRED(prediction.data(), n, 1);
@@ -236,8 +338,8 @@ inline size_t grid_to_index(size_t ix, size_t iy) {
 }
 
 // Calculate all chi2 for this universe
-std::vector<double> universeChi2(std::vector<float> const & data, TMatrixT<double> const & C_inv,
-   SignalGenerator signal)
+std::vector<double> universeChi2(std::vector<double> const & data, TMatrixT<double> const & C_inv,
+   SignalGeneratorStd signal)
 {
    std::vector<double> temp;
    std::vector<double> result;
@@ -378,8 +480,8 @@ void updateInvCov(TMatrixT<double> & invcov, TMatrixD const & covmat, std::vecto
 }
 
 
-FitResult coreFC(std::vector<float> const & fake_data, std::vector<double> const & v_coll,
-      SignalGenerator signal,
+FitResult coreFC(std::vector<double> const & fake_data, std::vector<double> const & v_coll,
+      SignalGeneratorStd signal,
       TMatrixT<double> const & INVCOV, 
       TMatrixT<double> const & covmat, 
       sbn::SBNconfig const & myconf,
@@ -425,13 +527,14 @@ FitResult coreFC(std::vector<float> const & fake_data, std::vector<double> const
 void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
       NGrid mygrid, const char * xmldata, sbn::SBNconfig const & myconf,
       TMatrixD const & covmat, TMatrixT<double> const & INVCOV,
-      SignalGenerator signal,
+      SignalGeneratorStd signal,
       HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
       double tol, size_t iter, bool debug)
 {
 
     double starttime, endtime;
-    std::vector<float> fake_data;
+    std::vector<double> fake_data;
+    std::vector<double> fake_dataC;
     std::vector<FitResult> results;
     results.reserve(rankwork.size()*nUniverses);
    
@@ -444,27 +547,25 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     v_last.reserve(rankwork.size()*nUniverses);
     v_dchi.reserve(rankwork.size()*nUniverses);
     
+
     for (int i_grid : rankwork) {
 
        if (debug && i_grid!=0) return;
        std::vector<double> specfull = signal.predict(i_grid, false);
-       std::vector<double> speccoll = signal.predict(i_grid, true);
-       sbn::SBNspec myspec(specfull, xmldata, i_grid, false);
-       double sumF = std::accumulate(specfull.begin(), specfull.end(), 0.0);
-       double sumC = std::accumulate(speccoll.begin(), speccoll.end(), 0.0);
-       
-       sbn::SBNchi mychi(myspec, covmat, xmldata, false);
+       std::vector<double> speccoll = collapseVector(specfull, myconf); //signal.predict(i_grid, true);
+       sbn::SBNchi mychi(covmat, xmldata, false);
+       mychi.InitRandomNumberSeeds(double(cp.gid()));
 
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
-          fake_data = mychi.SampleCovariance(&myspec); // YUCK this thing rebuilds the covariance matrix*spectrum all the time
-          results.push_back(coreFC(fake_data, speccoll, signal, INVCOV, covmat, myconf, tol, iter));
+          fake_data = mychi.SampleCovariance(specfull);
+          fake_dataC = collapseVector(fake_data, myconf);
+          results.push_back(coreFC(fake_dataC, speccoll, signal, INVCOV, covmat, myconf, tol, iter));
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
        }
        endtime   = MPI_Wtime(); 
        if (rank==0) fmt::print(stderr, "[{}] gridp {}/{} ({} universes) took {} seconds\n",cp.gid(), i_grid, rankwork.size(), nUniverses, endtime-starttime);
-       myspec.reset();
     }
 
     // Write to HDF5
@@ -599,13 +700,56 @@ int main(int argc, char* argv[]) {
     const char* xmldata = text.c_str();
     sbn::SBNconfig myconf(xmldata, false);
 
+    // Central values FIXME don't read on every rank!
+    std::vector<TH1D> cvhist = readHistos(f_CV, myconf.fullnames);
+    sbn::SBNosc myosc(cvhist, xmldata);
+    
     // TODO find a way to serialize and reconstruct TH1D that is not too painful
     double time0 = MPI_Wtime();
-    std::unordered_map <std::string, std::vector<TH1D> > sinsqmap = mkHistoMap(tag+"_SINSQ_dm_", myconf.fullnames);
-    std::unordered_map <std::string, std::vector<TH1D> > sinmap   = mkHistoMap(tag+"_SIN_dm_",   myconf.fullnames);
+    std::unordered_map <std::string, std::vector<TH1D> >   sinsqmap     = mkHistoMap(   tag+"_SINSQ_dm_", myconf.fullnames);
+    std::unordered_map <std::string, std::vector<TH1D> >   sinmap       = mkHistoMap(   tag+"_SIN_dm_"  , myconf.fullnames);
+    std::unordered_map <std::string, std::vector<double> > sinsqmap_std = mkHistoMapStd(tag+"_SINSQ_dm_", myconf.fullnames);
+    std::unordered_map <std::string, std::vector<double> > sinmap_std   = mkHistoMapStd(tag+"_SIN_dm_"  , myconf.fullnames);
+    //std::unordered_map <std::string, Eigen::VectorXd >     sinsqmap_eig = mkHistoMapEig(tag+"_SINSQ_dm_", myconf.fullnames);
+    //std::unordered_map <std::string, Eigen::VectorXd >     sinmap_eig   = mkHistoMapEig(tag+"_SIN_dm_"  , myconf.fullnames);
     double time1 = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra the new way took {} seconds\n",world.rank(), time1 - time0);
 
+    std::vector<double> const core  = flattenHistos(cvhist);
+
+    SignalGenerator signal          = {myosc, mygrid.GetGrid(), tag, sinsqmap,     sinmap,     xmldata};
+    SignalGeneratorStd signal_std   = {myosc, myconf, mygrid.GetGrid(), sinsqmap_std, sinmap_std, core};
+    //SignalGeneratorEigen signal_eig = {myosc, mygrid.GetGrid(), sinsqmap_eig, sinmap_eig};
+
+    double time3 = MPI_Wtime();
+    for (int i =0;i<1000;++i) signal.predict(1,false);
+    double time4 = MPI_Wtime();
+    for (int i =0;i<1000;++i) signal_std.predict(1,false);
+    double time5 = MPI_Wtime();
+    
+    for (int i =0;i<1000;++i) signal.predict(1,true);
+    double time6 = MPI_Wtime();
+    for (int i =0;i<1000;++i) signal_std.predict(1,true);
+    double time7 = MPI_Wtime();
+
+    if (world.rank()==0) fmt::print(stderr, "[{}] TH1D way took {} seconds\n",world.rank(), time4 - time3);
+    if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
+    if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(), (time4 - time3)/(time5 - time4));
+  
+    if (world.rank()==0) fmt::print(stderr, "[{}] C TH1D way took {} seconds\n",world.rank(), time6 - time5);
+    if (world.rank()==0) fmt::print(stderr, "[{}] C std  way took {} seconds\n",world.rank(), time7 - time6);
+    if (world.rank()==0) fmt::print(stderr, "[{}] C std speed-up {} \n",world.rank(), (time6 - time5)/(time7 - time6));
+
+
+    //for (int i =0;i<1;++i) signal_eig.predict(1,false);
+    //double time6 = MPI_Wtime();
+    //if (world.rank()==0) fmt::print(stderr, "[{}] TH1D way took {} seconds\n",world.rank(), time4 - time3);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig  way took {} seconds\n",world.rank(), time6 - time5);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(), (time4 - time3)/(time5 - time4));
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig speed-up {} \n",world.rank(), (time4 - time3)/(time6 - time5));
+    
+    
     // Background
     std::vector<double> bgvec;
     if (world.rank() == 0) {
@@ -615,11 +759,6 @@ int main(int argc, char* argv[]) {
        bghist.shrink_to_fit();
     }
     diy::mpi::broadcast(world, bgvec, 0);
-
-    // Central values FIXME don't on every rank!
-    std::vector<TH1D> cvhist = readHistos(f_CV, myconf.fullnames);
-    sbn::SBNosc myosc(cvhist, xmldata);
-    SignalGenerator signal = {myosc, mygrid.GetGrid(), tag, sinsqmap, sinmap, xmldata};
 
     // Read the covariance matrix on rank 0 --- broadcast and subsequently buid from array
     TMatrixD covmat;
@@ -715,8 +854,8 @@ int main(int argc, char* argv[]) {
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
 
     double starttime = MPI_Wtime();
-    fc_master.foreach([world, mygrid, covmat, xmldata, INVCOV, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
-                           { doFC(b, cp, world.rank(), mygrid, xmldata, myconf, covmat, INVCOV, signal, f_out, rankwork, nUniverses, tol, iter, debug); });
+    fc_master.foreach([world, mygrid, covmat, xmldata, INVCOV, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal_std](Block* b, const diy::Master::ProxyWithLink& cp)
+                           { doFC(b, cp, world.rank(), mygrid, xmldata, myconf, covmat, INVCOV, signal_std, f_out, rankwork, nUniverses, tol, iter, debug); });
     double endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
 
