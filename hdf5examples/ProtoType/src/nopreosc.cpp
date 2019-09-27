@@ -8,6 +8,8 @@
 #include <numeric>
 #include <stdexcept>
 #include <unordered_map>
+#include <tuple>
+#include <limits>
 
 #include <diy/master.hpp>
 #include <diy/reduce.hpp>
@@ -338,17 +340,24 @@ inline size_t grid_to_index(size_t ix, size_t iy) {
 }
 
 // Calculate all chi2 for this universe
-std::vector<double> universeChi2(std::vector<double> const & data, TMatrixT<double> const & C_inv,
+std::tuple<double, int> universeChi2(std::vector<double> const & data, TMatrixT<double> const & C_inv,
    SignalGeneratorStd signal)
 {
    std::vector<double> temp;
    std::vector<double> result;
    result.reserve(signal.gridsize());
+   double chimin=std::numeric_limits<double>::infinity();
+   int bestP(0);
+
    for (size_t i=0; i<signal.gridsize(); ++i) {
        temp = signal.predict(i, true);
-       result.push_back(calcChi(data, temp, C_inv));
+       double chi = calcChi(data, temp, C_inv);
+       if (chi<chimin) {
+          chimin = chi;
+          bestP=i;
+       }
    }
-   return result;
+   return {chimin, bestP};
 }
 
 TMatrixT<double> calcCovarianceMatrix(TMatrixT<double> const & M, std::vector<double> const & spec){
@@ -503,9 +512,9 @@ FitResult coreFC(std::vector<double> const & fake_data, std::vector<double> cons
        }
        //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
        float chi_min = FLT_MAX;
-       std::vector<double> allchi = universeChi2(fake_data, invcov, signal);
-       chi_min = *std::min_element(allchi.begin(), allchi.end());
-       best_grid_point = std::min_element(allchi.begin(), allchi.end()) - allchi.begin();
+       auto resuni  = universeChi2(fake_data, invcov, signal);
+       chi_min = std::get<0>(resuni);
+       best_grid_point = std::get<1>(resuni);
  
        if(n_iter!=0){
            //Step 3.0 Check to see if min_chi for this particular fake_data  has converged sufficiently
