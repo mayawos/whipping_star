@@ -1,6 +1,7 @@
 #pragma GCC optimize("O3","unroll-loops","inline")
 #include "SBNosc.h"
-#include <Eigen/Dense>
+#include <functional> 
+
 using namespace sbn;
 
 SBNosc::SBNosc(std::vector<TH1D> const & bghist, const char* xmldata) : SBNspec(bghist, xmldata) {
@@ -310,13 +311,222 @@ std::vector<double> SBNosc::Oscillate(std::string tag){
 }
 
 
+void scaleSubBy(std::vector<double> & vin, size_t first, size_t last, double scaleby) {
+  std::transform(vin.begin() + first, vin.begin() + last, vin.begin() +first, 
+      std::bind(std::multiplies<double>(), std::placeholders::_1, scaleby));
+}
+
+// This is a stripped down version of the code that really only does the
+// oscillation. To get a final spectrum, the core spectrum needs to be added.
+std::vector<double> SBNosc::Oscillate(
+          std::unordered_map <std::string, Eigen::VectorXd > const & sinsqmap,
+          std::unordered_map <std::string, Eigen::VectorXd > const & sinmap) 
+{
+    Eigen::VectorXd retVec(num_bins_total);
+    retVec.setZero();
+
+
+    for (auto ms: mass_splittings) {
+        int which_dm = ms.second;
+        double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
+
+        // TODO this should be in a function.
+        switch (which_mode) {
+            case APP_ONLY: //Strictly nu_e app only
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DIS_ONLY: //Strictly nu_mu dis only
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                break;
+            case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DISE_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                break;
+        }
+
+        Eigen::VectorXd sf_sinsq = sinsqmap.at(working_model.mass_tag);
+        Eigen::VectorXd sf_sin   = sinmap.at(  working_model.mass_tag);
+
+        double osc_amp(0), osc_amp_sq(0);
+        int osc_pattern(0);
+        // Iterate over channels
+        size_t offset(0);
+        for (int i=0; i<num_channels; i++) {
+            size_t nbins_chan = num_bins.at(i);
+            for (int j=0; j<num_subchannels.at(i); j++){
+                osc_pattern = subchannel_osc_patterns.at(i).at(j);
+                switch (osc_pattern){
+                    case 11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case -11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case 22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case -22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case 21:
+                        osc_amp    = prob_mue;
+                        osc_amp_sq = prob_mue_sq;
+                        break;
+                    case -21:
+                        osc_amp    = prob_muebar;
+                        osc_amp_sq = prob_muebar_sq;
+                        break;
+                    case 0:
+                    default:
+                        break;
+                }
+
+                // Iterate over detectors
+                for (int d=0; d<num_detectors;++d) {
+                  size_t first  = d*num_bins_detector_block + offset;
+                  size_t last   = d*num_bins_detector_block + offset + nbins_chan;
+                  Eigen::Map<Eigen::VectorXd>(sf_sin.data(),   nbins_chan,1) *= osc_amp;
+                  Eigen::Map<Eigen::VectorXd>(sf_sinsq.data(), nbins_chan,1) *= osc_amp_sq;
+                }
+                offset +=nbins_chan;
+            }
+	}
+        retVec += sf_sin;
+        retVec += sf_sinsq;
+
+    } // Done looping over mass splittings
+    std::vector<double> temp(retVec.data(), retVec.data() + retVec.rows() * retVec.cols());
+    for (int i=0; i<num_bins_total;++i) std::cerr << "EIG :" << i << " " << temp[i] << "\n";
+    return temp;
+};
+
+// This is a stripped down version of the code that really only does the
+// oscillation. To get a final spectrum, the core spectrum needs to be added.
+std::vector<double> SBNosc::Oscillate(
+          std::unordered_map <std::string, std::vector<double> > const & sinsqmap,
+          std::unordered_map <std::string, std::vector<double> > const & sinmap) 
+{
+    Eigen::VectorXd retVec(num_bins_total);
+    retVec.setZero();
+
+
+    for (auto ms: mass_splittings) {
+        int which_dm = ms.second;
+        double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
+
+        // TODO this should be in a function.
+        switch (which_mode) {
+            case APP_ONLY: //Strictly nu_e app only
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DIS_ONLY: //Strictly nu_mu dis only
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                break;
+            case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DISE_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                break;
+        }
+
+        std::vector<double> sf_sinsq = sinsqmap.at(working_model.mass_tag);
+        std::vector<double> sf_sin   = sinmap.at(  working_model.mass_tag);
+
+        double osc_amp(0), osc_amp_sq(0);
+        int osc_pattern(0);
+        // Iterate over channels
+        size_t offset(0);
+        for (int i=0; i<num_channels; i++) {
+            size_t nbins_chan = num_bins.at(i);
+            for (int j=0; j<num_subchannels.at(i); j++){
+                osc_pattern = subchannel_osc_patterns.at(i).at(j);
+                switch (osc_pattern){
+                    case 11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case -11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case 22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case -22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case 21:
+                        osc_amp    = prob_mue;
+                        osc_amp_sq = prob_mue_sq;
+                        break;
+                    case -21:
+                        osc_amp    = prob_muebar;
+                        osc_amp_sq = prob_muebar_sq;
+                        break;
+                    case 0:
+                    default:
+                        break;
+                }
+
+                // Iterate over detectors
+                for (int d=0; d<num_detectors;++d) {
+                  size_t first  = d*num_bins_detector_block + offset;
+                  size_t last   = d*num_bins_detector_block + offset + nbins_chan;
+                  scaleSubBy(sf_sinsq, first, last, osc_amp_sq);
+                  scaleSubBy(sf_sin,   first, last, osc_amp   );
+                }
+                offset +=nbins_chan;
+            }
+	}
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sf(sf_sin.data(), num_bins_total, 1);
+        Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sfsq(sf_sinsq.data(), num_bins_total, 1);
+        retVec += _sf;
+        retVec += _sfsq;
+
+    } // Done looping over mass splittings
+    std::vector<double> temp(retVec.data(), retVec.data() + retVec.rows() * retVec.cols());
+    return temp;
+};
+
+// Use vector< vector<double>> instead
 std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, const char * xmldata,
           std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
           std::unordered_map <std::string, std::vector<TH1D> > const & sinmap) 
 {
     this->CalcFullVector();
     this->CollapseVector();
-    //calcMassSplittings();
+    calcMassSplittings();
     std::vector<double> temp;
     
     if (return_compressed)  temp = collapsed_vector;
@@ -324,134 +534,113 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
 
     int n = temp.size();
     Eigen::Map< Eigen::Matrix<double, Eigen::Dynamic, 1> > PRED(temp.data(), n, 1);
+    PRED.setZero();
 
     for (auto ms: mass_splittings) {
 
+        SBNspec single_frequency_square(sinsqmap.at(working_model.mass_tag) , xmldata , false);
+        SBNspec single_frequency(       sinmap.at(  working_model.mass_tag) , xmldata , false);
 
-              SBNspec single_frequency_square(sinsqmap.at(working_model.mass_tag) , xmldata ,false);
-              SBNspec single_frequency(sinmap.at(working_model.mass_tag) , xmldata , false);
+        single_frequency.CalcFullVector();
+        single_frequency_square.CalcFullVector();
 
-              single_frequency.CalcFullVector();
-              single_frequency_square.CalcFullVector();
+        // This is madness, we only want two numbers, osc_amp and osc_amp_sq as function of dm.
+        // they are used to scale (i.e. multiply) the spectra with
 
-              double prob_mumu, prob_ee, prob_mue, prob_mue_sq, prob_muebar, prob_muebar_sq;
+        int which_dm = ms.second;
+        double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
 
-              int which_dm = ms.second;
+        // TODO this should be in a function.
+        switch (which_mode) {
+            case APP_ONLY: //Strictly nu_e app only
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DIS_ONLY: //Strictly nu_mu dis only
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                break;
+            case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DISE_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                break;
+        }
 
-              switch (which_mode)
-                    {
-                            case APP_ONLY: //Strictly nu_e app only
-                                    prob_mumu =0;
-                                    prob_ee   =0;
-                                    prob_mue = working_model.oscAmp(2,1,which_dm,1);
-                                    prob_mue_sq = working_model.oscAmp(2,1,which_dm,2);
-                                    prob_muebar = working_model.oscAmp(-2,-1,which_dm,1);
-                                    prob_muebar_sq = working_model.oscAmp(-2,-1,which_dm,2);
-                                    break;
-                            case DIS_ONLY: //Strictly nu_mu dis only
-                                    prob_mumu = working_model.oscAmp(2,2,which_dm,2);
-                                    prob_ee = 0;
-                                    prob_mue = 0;
-                                    prob_mue_sq =0;
-                                    prob_muebar =0;
-                                    prob_muebar_sq =0;
-                                    break;
-                            case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
-                                    prob_mumu = working_model.oscAmp(2,2,which_dm,2);
-                                    prob_ee = working_model.oscAmp(1,1,which_dm,2);
-                                    prob_mue = working_model.oscAmp(2,1,which_dm,1);
-                                    prob_mue_sq = working_model.oscAmp(2,1,which_dm,2);
-                                    prob_muebar = working_model.oscAmp(-2,-1,which_dm,1);
-                                    prob_muebar_sq = working_model.oscAmp(-2,-1,which_dm,2);
-                                    break;
-                            case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
-                                    prob_mumu =working_model.oscAmp(2,2,which_dm,2);
-                                    prob_ee = 0.0;
-                                    prob_mue = working_model.oscAmp(2,1,which_dm,1);
-                                    prob_mue_sq = working_model.oscAmp(2,1,which_dm,2);
-                                    prob_muebar = working_model.oscAmp(-2,-1,which_dm,1);
-                                    prob_muebar_sq = working_model.oscAmp(-2,-1,which_dm,2);
-                                    break;
-                            case DISE_ONLY: // A strange version where nu_e can appear but not disapear
-                                    prob_mumu = 0.0;
-                                    prob_ee = working_model.oscAmp(1,1,which_dm,2);
-                                    prob_mue = 0;
-                                    prob_mue_sq = 0;
-                                    prob_muebar = 0;
-                                    prob_muebar_sq = 0;
-                                    break;
+       double osc_amp(0), osc_amp_sq(0);
+       int osc_pattern(0);
+       for (int i=0; i<num_channels; i++){
+           for (int j=0; j<num_subchannels.at(i); j++){
+               osc_pattern = subchannel_osc_patterns.at(i).at(j);
+               switch (osc_pattern){
+                   case 11:
+                       osc_amp_sq = prob_ee;
+                       break;
+                   case -11:
+                       osc_amp_sq = prob_ee;
+                       break;
+                   case 22:
+                       osc_amp_sq = prob_mumu;
+                       break;
+                   case -22:
+                       osc_amp_sq = prob_mumu;
+                       break;
+                   case 21:
+                       osc_amp    = prob_mue;
+                       osc_amp_sq = prob_mue_sq;
+                       break;
+                   case -21:
+                       osc_amp    = prob_muebar;
+                       osc_amp_sq = prob_muebar_sq;
+                       break;
+                   case 0:
+                   default:
+                       break;
+               }
 
-                    }
-
-
-                        for(int i=0; i<num_channels; i++){
-                                for(int j=0; j<num_subchannels.at(i); j++){
-                                        int osc_pattern = subchannel_osc_patterns.at(i).at(j);
-                                        double osc_amp = 0;
-                                        double osc_amp_sq = 0;
-                                        switch(osc_pattern){
-                                                case 11:
-                                                        osc_amp_sq = prob_ee;
-                                                        break;
-                                                case -11:
-                                                        osc_amp_sq = prob_ee;
-                                                        break;
-                                                case 22:
-                                                        osc_amp_sq = prob_mumu;
-                                                        break;
-                                                case -22:
-                                                        osc_amp_sq = prob_mumu;
-                                                        break;
-                                                case 21:
-                                                        osc_amp = prob_mue;
-                                                        osc_amp_sq = prob_mue_sq;
-                                                        break;
-                                                case -21:
-                                                        osc_amp = prob_muebar;
-                                                        osc_amp_sq = prob_muebar_sq;
-                                                        break;
-                                                case 0:
-                                                default:
-                                                        break;
-                                        }
-
-                                        single_frequency.Scale(channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp);
-                                        single_frequency_square.Scale(channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp_sq );
-                                }
-                        }
-
-                        single_frequency.CalcFullVector();
-                        single_frequency.CollapseVector();
-
-                        single_frequency_square.CalcFullVector();
-                        single_frequency_square.CollapseVector();
-
-
-
-           if (return_compressed) {
-
-               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sf(single_frequency.collapsed_vector.data(), n, 1);
-               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sfsq(single_frequency_square.collapsed_vector.data(), n, 1);
-               PRED += _sf;
-               PRED +=_sfsq;
-              //for(int i=0;i<temp.size(); i++){
-                //temp[i] += single_frequency.collapsed_vector[i];
-                //temp[i] += single_frequency_square.collapsed_vector[i];
-              //}
+               single_frequency.Scale(       channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp    ); // This calls TH1D on a subset of the histograms
+               single_frequency_square.Scale(channel_names.at(i)+"_"+subchannel_names.at(i).at(j), osc_amp_sq );
            }
-           else {
-               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sf(single_frequency.full_vector.data(), n, 1);
-               Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sfsq(single_frequency_square.full_vector.data(), n, 1);
-               PRED +=_sf;
-               PRED +=_sfsq;
-              //for(int i=0;i<temp.size(); i++){
-                //temp[i] += single_frequency.full_vector[i];
-                //temp[i] += single_frequency_square.full_vector[i];
-              //}
-           }
-        }//Done looping over
-        std::vector<double> ret(PRED.data(), PRED.data() + PRED.rows() * PRED.cols());
-        return ret;
+       }
+
+       single_frequency.CalcFullVector();
+       single_frequency.CollapseVector();
+
+       single_frequency_square.CalcFullVector();
+       single_frequency_square.CollapseVector();
+
+       if (return_compressed) {
+
+           Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sf(single_frequency.collapsed_vector.data(), n, 1);
+           Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sfsq(single_frequency_square.collapsed_vector.data(), n, 1);
+           PRED += _sf;
+           PRED +=_sfsq;
+       }
+       else {
+           Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sf(single_frequency.full_vector.data(), n, 1);
+           Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > _sfsq(single_frequency_square.full_vector.data(), n, 1);
+           PRED +=_sf;
+           PRED +=_sfsq;
+       }
+    }//Done looping over
+    std::vector<double> ret(PRED.data(), PRED.data() + PRED.rows() * PRED.cols());
+    //for (int i=0; i<num_bins_total;++i) std::cerr << "OLD :" << i << " " << ret[i] << "\n";
+
+    return ret;
 };
 
 
@@ -463,8 +652,6 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
     
     if (return_compressed)  temp = collapsed_vector;
     else temp = full_vector;
-
-    //std::cerr << "Oscillate will open " << mass_splittings.size()*2 << " ROOT files\n";
 
     for (auto ms: mass_splittings) {
 

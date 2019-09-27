@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 #include <unordered_map>
+#include <Eigen/Dense>
 
 /**********************************************
  *	This is a less general 3+N osc spectrum
@@ -43,6 +44,12 @@ class SBNosc : public SBNspec{
         std::vector<double> Oscillate(std::string, bool compress, const char * xmldata,
           std::unordered_map <std::string, std::vector<TH1D> > const & sinsqmap,
           std::unordered_map <std::string, std::vector<TH1D> > const & sinmap);
+        std::vector<double> Oscillate(
+          std::unordered_map <std::string, std::vector<double> > const & sinsqmap,
+          std::unordered_map <std::string, std::vector<double> > const & sinmap);
+        std::vector<double> Oscillate(
+          std::unordered_map <std::string, Eigen::VectorXd > const & sinsqmap,
+          std::unordered_map <std::string, Eigen::VectorXd > const & sinmap);
         std::vector<double> Oscillate(std::string,bool compress); 
         std::vector<double> Oscillate(std::string);
 	std::vector<double> Oscillate(std::string, double);
