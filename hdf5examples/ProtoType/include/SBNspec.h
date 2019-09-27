@@ -63,8 +63,8 @@ namespace sbn{
 			SBNspec(std::string, const char *, bool);
 			SBNspec(std::string, std::string, bool);
 			
-                        SBNspec(std::vector<TH1D> const & bghist, const char *);
-			SBNspec(std::vector<TH1D> const & bghist, const char *, bool);
+                        SBNspec(std::vector<TH1D> const & hist, const char *);
+			SBNspec(std::vector<TH1D> const & hist, const char *, bool);
 
 
 			SBNspec(std::vector<double> input_full_vec, std::string whichxml);
@@ -76,7 +76,7 @@ namespace sbn{
 
 			// this vector of hists contains all spectra used.
 			// The order of filling is the same as the order defined in xml file!
-			std::vector<TH1D > hist;
+			std::vector<TH1D> hist;
 			std::map<std::string, int> map_hist;
 
                         void reset() {
