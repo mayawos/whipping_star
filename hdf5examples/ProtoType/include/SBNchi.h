@@ -50,6 +50,7 @@ class SBNchi : public SBNconfig{
 	SBNchi(SBNspec,TMatrixT<double>,bool);
 	SBNchi(SBNspec,TMatrixT<double>,std::string, bool);
 
+	SBNchi(TMatrixT<double> const &, const char *, bool);
 	SBNchi(SBNspec const & in, TMatrixT<double>, const char *, bool);
 	
         SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed);
@@ -144,9 +145,11 @@ class SBNchi : public SBNconfig{
 
 	//Cholosky related
 	int PerformCholoskyDecomposition(SBNspec *specin);
+	void PerformCholeskyDecomposition(std::vector<double> const & specin);
 
-//	SBNspec SampleCovariance(SBNspec *specin); 
-    std::vector<float> SampleCovariance(SBNspec *specin); 
+        //SBNspec SampleCovariance(SBNspec *specin);
+        std::vector<float> SampleCovariance(SBNspec *specin);
+        std::vector<double> SampleCovariance(std::vector<double> const & specin);
 
 	TH1D SamplePoissonVaryCore(SBNspec *specin, int num_MC);
 	TH1D SamplePoissonVaryInput(SBNspec *specin, int num_MC, double maxchi);

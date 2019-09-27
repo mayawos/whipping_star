@@ -19,6 +19,30 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, bool is_verbos
 
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose) : SBNchi(in, matrix_systematicsin, inxml,  is_verbose,-1){}
 
+SBNchi::SBNchi(TMatrixT<double> const & matrix_systematicsin, const char* xmldata, bool is_verbose) : SBNconfig(xmldata, is_verbose) {
+
+    last_calculated_chi = -9999999;
+    is_stat_only= false;
+
+    matrix_collapsed.ResizeTo(num_bins_total_compressed, num_bins_total_compressed);
+    matrix_systematics.ResizeTo(num_bins_total, num_bins_total);
+    matrix_fractional_covariance.ResizeTo(num_bins_total, num_bins_total);
+
+    TMatrixD m = matrix_systematicsin;
+    for (int i = 0; i < used_bins.size(); i++){
+        TMatrixDColumn(m,i) = TMatrixDColumn(m,used_bins.at(i));
+        m.ResizeTo(used_bins.size(),matrix_systematicsin.GetNcols());
+    }
+
+    matrix_fractional_covariance = m;
+    matrix_systematics.Zero();
+    max_sample_chi_val =150.0;
+    cholosky_performed=false;
+
+    //this->InitRandomNumberSeeds(-1);
+    //this->ReloadCoreSpectrum(core_spectrum);
+}
+
 SBNchi::SBNchi(SBNspec const & in, TMatrixT<double> matrix_systematicsin, const char* xmldata, bool is_verbose) : SBNconfig(xmldata, is_verbose), core_spectrum(in){
 
     last_calculated_chi = -9999999;
@@ -1029,6 +1053,103 @@ int SBNchi::PrintMatricies(std::string tag){
     return 0;
 }
 
+void SBNchi::PerformCholeskyDecomposition(std::vector<double> const & specfull) {
+    double tol = 1e-7;
+
+    TMatrixD U  = matrix_fractional_covariance;
+
+    U.ResizeTo(specfull.size(), specfull.size());
+
+    for(int i =0; i<U.GetNcols(); i++) {
+        for(int j =0; j<U.GetNrows(); j++) {
+            if(std::isnan(U(i,j)))
+                U(i,j) = 0;
+            else
+                U(i,j)=U(i,j)*specfull.at(i)*specfull.at(j);
+        }
+    }
+
+    //Lets NOT add these in here but treat them as Poisson later. Seems better
+    //for(int i =0; i<U.GetNcols(); i++)
+    //{
+        //U(i,i) += specin->full_vector.at(i); // FIXME is that what we want ???
+    //}
+
+    int n_t = U.GetNcols();
+
+    //First up, we have some problems with positive semi-definite and not positive definite
+    //TMatrixDEigen eigen (U); // This was original, but caused a lot of "Error in <MakeSchurr>: too many iterations". Move to explicit symmetric matrix
+
+    //Is this Really the best way to construct?!?
+    TMatrixDSym U_explicit_sym(n_t);
+    for(int i=0; i< n_t;i++){
+        for(int j=i; j< n_t;j++){
+            U_explicit_sym[i][j] = U(i,j);
+        }
+    }
+
+    TMatrixDSymEigen eigen (U_explicit_sym);
+    TVectorD eigen_values = eigen.GetEigenValues();
+
+    for(int i=0; i< eigen_values.GetNoElements(); i++){
+        if(eigen_values(i)<=0){
+            if(fabs(eigen_values(i))< tol){
+                if(is_verbose)std::cout<<"SBNchi::SampleCovariance\t|| cov has a very small, < "<<tol<<" , negative eigenvalue. Adding it back to diagonal of : "<<eigen_values(i)<<std::endl;
+
+                for(int a =0; a<U.GetNcols(); a++){
+                    U(a,a) += eigen_values(i);
+                }
+
+            }else{
+                std::cout<<"SBNchi::SampleCovariance\t|| 0 or negative eigenvalues! error: Value "<<eigen_values(i)<<" Tolerence "<<tol<<std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if(fabs(eigen_values(i))< tol){
+            //SP_WARNING()<<"U has a very small, < "<<tol<<", eigenvalue which for some reason fails to decompose. Adding 1e9 to diagonal of U"<<std::endl;
+
+            for(int a =0; a<U.GetNcols(); a++){
+                U(a,a) += tol;
+            }
+
+        }	
+    }
+
+
+    //Seconndly attempt a Cholosky Decomposition
+    TDecompChol * chol = new TDecompChol(U,0.1);
+    bool worked = chol->Decompose();
+
+    if(!worked){
+        std::cerr<<"SBNchi::SampleCovariance\t|| Cholosky Decomposition Failed."<<std::endl;
+        exit(EXIT_FAILURE);
+
+    }
+
+    TMatrixT<float> upper_trian(n_t,n_t);
+    matrix_lower_triangular.ResizeTo(n_t,n_t);
+    upper_trian = chol->GetU();
+    
+    if (!upper_trian.IsValid()) {
+        std::cerr<<"SBNchi::SampleCovariance\t|| Cholesky decomposition did not produce a valid u-matrix\n.";
+    }
+
+
+    matrix_lower_triangular = upper_trian;
+    matrix_lower_triangular.T();
+
+
+    vec_matrix_lower_triangular.resize(n_t, std::vector<float>(n_t));
+    for(int i=0; i< num_bins_total; i++){
+        for(int j=0; j< num_bins_total; j++){
+            vec_matrix_lower_triangular[i][j] = matrix_lower_triangular(i,j);//[i][j];
+        }
+    }
+
+    delete chol;
+    cholosky_performed = true;
+}
 
 int SBNchi::PerformCholoskyDecomposition(SBNspec *specin){
     specin->CalcFullVector();
@@ -1051,7 +1172,7 @@ int SBNchi::PerformCholoskyDecomposition(SBNspec *specin){
     //Lets NOT add these in here but treat them as Poisson later. Seems better
     for(int i =0; i<U.GetNcols(); i++)
     {
-        //U(i,i) += specin->full_vector.at(i);
+        U(i,i) += specin->full_vector.at(i); // FIXME is that what we want ???
     }
 
     int n_t = U.GetNcols();
@@ -1419,6 +1540,28 @@ int SBNchi::CollapseVectorStandAlone(double* full_vector, double *collapsed_vect
     return 0;
 }
 
+// Note his returns the non compressed vector
+std::vector<double> SBNchi::SampleCovariance(std::vector<double> const & specfull) {
+    if (!cholosky_performed) this->PerformCholeskyDecomposition(specfull); 
+
+    int n_t = specfull.size();
+
+    TVectorT<float> u(n_t);
+    TVectorT<float> gaus_sample(n_t);
+    TVectorT<float> multi_sample(n_t);
+
+    std::normal_distribution<float> dist_normal(0,1);
+
+    for(int i=0; i<n_t; i++) u(i) = specfull.at(i);
+    for(int a=0; a<n_t; a++) gaus_sample(a) = dist_normal(*rangen_twister);	
+
+    multi_sample = u + matrix_lower_triangular*gaus_sample;
+
+    std::vector<double> sampled_fullvector(n_t, 0.0);
+    for(int j=0; j<n_t; j++) sampled_fullvector[j] = multi_sample(j);
+
+    return sampled_fullvector;
+}
 
 // TODO: do the sampling without root and only use call to CollapseVectorStandAlone
 std::vector<float> SBNchi::SampleCovariance(SBNspec *specin){
