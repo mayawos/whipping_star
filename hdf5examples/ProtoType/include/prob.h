@@ -76,7 +76,7 @@ struct NeutrinoModel{
 	//constructors!! Should overload these immensely for  3+1, 3+2, 3+3 and NULL
 	NeutrinoModel();
 	NeutrinoModel(double * mn, double * ue, double *um, double *ph);
-	NeutrinoModel(double m4, double ue4, double um4);
+	NeutrinoModel(double m4, double ue4, double um4, bool setMassTag=true);
 	
 	//
 	NeutrinoModel(std::vector<double> mass_splittings, std::vector<double>angles, std::vector<double> phases);

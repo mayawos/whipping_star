@@ -446,7 +446,7 @@ NeutrinoModel::NeutrinoModel(double * mn, double * ue, double * um, double * ph)
 }
 
 /******	3+1 constructor ******/
-NeutrinoModel::NeutrinoModel(double  mn, double  ue4, double  um4){
+NeutrinoModel::NeutrinoModel(double  mn, double  ue4, double  um4, bool setMassTag){
 	zero();
 	mNu[0] = mn;
 	Ue[0]=ue4;
@@ -456,9 +456,11 @@ NeutrinoModel::NeutrinoModel(double  mn, double  ue4, double  um4){
 
 	difference();
 
-  std::ostringstream out;
-  out <<std::fixed<< std::setprecision(4) << log10(dm41Sq);
-	mass_tag = out.str();
+        if (setMassTag) {
+          std::ostringstream out;
+          out <<std::fixed<< std::setprecision(4) << log10(dm41Sq);
+          mass_tag = out.str();
+        }
 
 
 }
