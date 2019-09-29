@@ -38,6 +38,7 @@
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 //#include "nomad.hpp"
+#include "tools.h"
 
 
 using namespace std;
@@ -61,83 +62,16 @@ struct Block
     std::vector<int> best_grid_point, n_iter, i_grid, i_univ;
 };
 
-sbn::NeutrinoModel convert3p1(std::vector<double> const & ingrid){
+sbn::NeutrinoModel convert3p1(std::vector<double> const & ingrid, bool setMassTag=true){
     if(ingrid.size()!=3){
         std::cout<<"ERROR: Currently must have a 3-grid, for Dm ue4 and um4. grid.size(): "<<ingrid.size()<<std::endl;
         exit(EXIT_FAILURE);
     }
-    sbn::NeutrinoModel signalModel(pow(10,ingrid[0]), pow(10,ingrid[1]), pow(10,ingrid[2]));
+    sbn::NeutrinoModel signalModel(pow(10,ingrid[0]), pow(10,ingrid[1]), pow(10,ingrid[2]), setMassTag);
     return signalModel;
 }
 
-// TODO can this be simplified?
-std::vector<double> collapseVector(std::vector<double> const & vin, sbn::SBNconfig const & conf){
-   std::vector<double> cvec;
-   cvec.reserve(conf.num_bins_total_compressed);
-   //std::vector<double> cvec2(conf.num_bins_total_compressed, 0.0);
 
-   for(int im = 0; im < conf.num_modes; im++){
-       for(int id =0; id < conf.num_detectors; id++){
-           int edge = id*conf.num_bins_detector_block + conf.num_bins_mode_block*im;
-           for(int ic = 0; ic < conf.num_channels; ic++){
-               int corner=edge;
-               for(int j=0; j< conf.num_bins.at(ic); j++){
-                   double tempval=0;
-                   for(int sc = 0; sc < conf.num_subchannels.at(ic); sc++){
-                        tempval += vin.at(j+sc*conf.num_bins.at(ic)+corner);
-                        edge +=1;
-                   }
-                   cvec.push_back(tempval);
-               }
-           }
-       }
-   }
-   //// All we want is a representation with the subchannels added together
-
-   //std::cerr << " target size: " << cvec.size() << "\n";
-   //for (int d=0; d<conf.num_detectors;++d) {
-          //size_t offset(0);
-          //size_t offset2(0);
-      //for (int i=0; i<conf.num_channels; i++) {
-          //size_t nbins_chan = conf.num_bins.at(i);
-          //for (int j=0; j<conf.num_subchannels.at(i); j++) {
-                //size_t first      = d*conf.num_bins_detector_block + offset;
-                //size_t last       = d*conf.num_bins_detector_block + offset + nbins_chan;
-                //size_t first_out  = d*conf.num_bins_detector_block_compressed + offset2;
-                //size_t last_out   = d*conf.num_bins_detector_block_compressed + offset2 + nbins_chan;
-                //std::cerr << "in : " << first << " : " << last << " out --- " << first_out << " : " << last_out << "\n";
-                //std::transform (cvec2.begin() + first_out, cvec2.begin() + last_out, vin.begin() +first, cvec2.begin() + first_out, std::plus<double>());
-                //offset +=nbins_chan;
-          //}
-                //offset2 +=nbins_chan;
-       //}
-   //}
-
-   return cvec;
-}
-
-// TODO add mode logic if necessary
-std::vector<double> collapseVectorStd(std::vector<double> const & vin, sbn::SBNconfig const & conf){
-   // All we want is a representation with the subchannels added together
-   std::vector<double> cvec(conf.num_bins_total_compressed, 0.0);
-   for (int d=0; d<conf.num_detectors;++d) {
-      size_t offset_in(0), offset_out(0);
-      for (int i=0; i<conf.num_channels; i++) {
-          size_t nbins_chan = conf.num_bins.at(i);
-          for (int j=0; j<conf.num_subchannels.at(i); j++) {
-             size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
-             size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
-             std::transform (
-                   cvec.begin() + first_out, cvec.begin() + first_out + nbins_chan, 
-                   vin.begin()  + first_in,  cvec.begin() + first_out,
-                   std::plus<double>());
-             offset_in +=nbins_chan;
-          }
-          offset_out += nbins_chan;
-      }
-   }
-   return cvec;
-}
 
 
 struct SignalGenerator {
@@ -180,83 +114,61 @@ struct SignalGeneratorStd {
 
 };
 
-struct SignalGeneratorEigen {
-   sbn::SBNosc osc; std::vector<std::vector<double>> const & m_vec_grid;
-   std::unordered_map <std::string, Eigen::VectorXd > const & sinsqmap;
-   std::unordered_map <std::string, Eigen::VectorXd > const & sinmap;
+//struct SignalGeneratorEigen {
+   //sbn::SBNosc osc; std::vector<std::vector<double>> const & m_vec_grid;
+   //std::unordered_map <std::string, Eigen::VectorXd > const & sinsqmap;
+   //std::unordered_map <std::string, Eigen::VectorXd > const & sinmap;
    
-   std::vector<double> predict(size_t i_grid, bool compressed) {
-      sbn::NeutrinoModel this_model = convert3p1(m_vec_grid[i_grid]);
+   //std::vector<double> predict(size_t i_grid, bool compressed) {
+      //sbn::NeutrinoModel this_model = convert3p1(m_vec_grid[i_grid]);
+      //osc.LoadModel(this_model);
+      //osc.SetAppMode();            
+      //std::vector<double> ans = osc.Oscillate(sinsqmap, sinmap);
+      //return ans;
+   //}
+   //size_t gridsize() {return m_vec_grid.size();}
+
+//};
+
+//struct SignalGeneratorEigen2 {
+   //sbn::SBNosc osc; std::vector<std::vector<double>> const & m_vec_grid; int dim2;
+   //Eigen::MatrixXd  const & sinsq;
+   //Eigen::MatrixXd  const & sin;
+   
+   //Eigen::VectorXd predict(size_t i_grid, bool compressed) {
+      //sbn::NeutrinoModel this_model = convert3p1(m_vec_grid[i_grid], false);
+      //osc.LoadModel(this_model);
+      //osc.SetAppMode();
+      //int m_idx = massindex(i_grid); 
+      //Eigen::VectorXd ans = osc.Oscillate(sinsq.row(m_idx), sin.row(m_idx));
+      //return ans;
+   //}
+   //int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
+   //size_t gridsize() {return m_vec_grid.size();}
+
+//};
+
+struct SignalGeneratorEigen3 {
+   sbn::SBNosc osc; sbn::SBNconfig const & conf; 
+   std::vector<std::vector<double>> const & m_vec_grid; int dim2;
+   std::vector<Eigen::VectorXd>  const & sinsq;
+   std::vector<Eigen::VectorXd>  const & sin;
+   Eigen::VectorXd const & core;
+   
+   Eigen::VectorXd predict(size_t i_grid, bool compressed) {
+      sbn::NeutrinoModel this_model = convert3p1(m_vec_grid[i_grid], false);
       osc.LoadModel(this_model);
-      osc.SetAppMode();            
-      std::vector<double> ans = osc.Oscillate(sinsqmap, sinmap);
-      return ans;
+      osc.SetAppMode();
+      int m_idx = massindex(i_grid); 
+      Eigen::VectorXd ans = osc.Oscillate(sinsq[m_idx], sin[m_idx]);
+      ans+=core;
+      if (compressed) return collapseVectorEigen(ans, conf);
+      else return ans;
    }
+   int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
    size_t gridsize() {return m_vec_grid.size();}
 
 };
-
-
-// Split input vector into pieces of similar size
-std::vector<std::vector<int>> splitVector(const std::vector<int>& vec, size_t n) {
-    std::vector<std::vector<int>> outVec;
-    size_t length = vec.size() / n;
-    size_t remain = vec.size() % n;
-    size_t begin = 0;
-    size_t end = 0;
-
-    for (size_t i = 0; i < std::min(n, vec.size()); ++i) {
-        end += (remain > 0) ? (length + !!(remain--)) : length;
-        outVec.push_back(std::vector<int>(vec.begin() + begin, vec.begin() + end));
-        begin = end;
-    }
-    return outVec;
-}
-
-// Concatenate vector of vectors as vector
-std::vector<double> asVector(std::vector<std::vector<double> > v_in) {
-    std::vector<double> allSpectra;
-    allSpectra.reserve(v_in.size()*v_in[0].size());
-    for (auto temp : v_in) allSpectra.insert(allSpectra.end(), temp.begin(), temp.end());
-    return allSpectra;
-}
-
-std::vector<double> asVector(TMatrixT<double> const & M) {
-    const double *pData = M.GetMatrixArray();
-    std::vector<double> vData;
-    vData.assign(pData, pData + M.GetNoElements());
-    return vData;
-}
-
-template<typename T>
-std::vector<T> myslice(std::vector<T> const &v, int m, int n)
-{
-    auto first = v.cbegin() + m;
-    auto last = v.cbegin() + n + 1;
-    std::vector<T> vec(first, last);
-    return vec;
-}
-
-std::vector< std::vector<double> > sliceVector(std::vector<double> const & input, int nPoints) {
-   std::vector< std::vector<double> > test;
-   test.reserve(nPoints);
-   int nBins = input.size()/nPoints;
-
-   std::vector<double> work;
-   work.reserve(nBins);
-
-   for (int i=0;i<nPoints;++i) {
-      work=myslice(input, i*nBins, (i+1)*nBins-1);
-      test.push_back(work);
-   }
-   return test;
-}
-
-// Properly release memory
-void releaseVec(std::vector<double> & vec) {
-    vec.clear();
-    vec.shrink_to_fit();
-}
 
 void createDataSets(HighFive::File* file, size_t nPoints, size_t nUniverses) {
     file->createDataSet<double>("last_chi_min", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
@@ -311,6 +223,55 @@ std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
    }
    return ret;
 }
+
+
+Eigen::MatrixXd mkHistoArray(std::string const & prefix, std::vector<string> const & fullnames) {
+   // TODO can we have all spectra in a single file or something?
+
+   std::string mass_tag = "";
+   std::vector<std::vector<double> > temp;
+   float dm(-2.0);
+   while( dm < 2.3) {
+      std::ostringstream out;
+      out <<std::fixed<< std::setprecision(4) << dm;
+      mass_tag = out.str();
+      dm+=0.2;
+      std::string fname = prefix+mass_tag+".SBNspec.root";
+      temp.push_back(flattenHistos(readHistos(fname, fullnames)));
+   }
+
+   Eigen::MatrixXd ret2(temp.size(), temp[0].size());
+   for (size_t i=0;i<temp.size();++i) {
+      ret2.row(i) = Eigen::Map<Eigen::RowVectorXd> (temp[i].data(), 1, temp[i].size());
+   }
+
+   std::vector<double> all = asVector(temp);
+   Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > ret(all.data(), temp.size(), temp[0].size());
+
+   return ret2;
+}
+
+std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<string> const & fullnames) {
+   // TODO can we have all spectra in a single file or something?
+
+   std::string mass_tag = "";
+   std::vector<std::vector<double> > temp;
+   float dm(-2.0);
+   while( dm < 2.3) {
+      std::ostringstream out;
+      out <<std::fixed<< std::setprecision(4) << dm;
+      mass_tag = out.str();
+      dm+=0.2;
+      std::string fname = prefix+mass_tag+".SBNspec.root";
+      temp.push_back(flattenHistos(readHistos(fname, fullnames)));
+   }
+
+   std::vector<Eigen::VectorXd> ret;
+   for (size_t i=0;i<temp.size();++i) ret.push_back(Eigen::Map<Eigen::VectorXd> (temp[i].data(), temp[i].size(), 1) );
+   
+   return ret;
+}
+
 
 std::unordered_map <std::string, std::vector<TH1D> > mkHistoMap(std::string const & prefix, std::vector<string> const & fullnames) {
    // TODO can we have all spectra in a single file or something?
@@ -663,6 +624,7 @@ int main(int argc, char* argv[]) {
     int nPoints=-1;
     int mockFactor=1;
     int nUniverses=1;
+    int NTEST(1000000);
     std::string out_file="test.hdf5";
     std::string f_BG="BOTHv2_BKG_ONLY.SBNspec.root";
     std::string f_CV="BOTHv2_CV.SBNspec.root";
@@ -682,6 +644,7 @@ int main(int argc, char* argv[]) {
     Options ops(argc, argv);
     ops >> Option('o', "output",     out_file,   "Output filename.");
     ops >> Option('u', "nuniverse",  nUniverses, "Number of universes");
+    ops >> Option("ntest", NTEST , "Number of universes");
     ops >> Option('x', "xml",        xml,        "XML config.");
     ops >> Option("tol",             tol,        "Minimiser tolerance");
     ops >> Option("iter",            iter,       "Max number of iterations.");
@@ -714,6 +677,8 @@ int main(int argc, char* argv[]) {
     mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1 --- can't change easily --- sterile mass
     mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1 --- arbirtrarily dense! mixing angle nu_e --- can change ywidth. Try 20^6
     mygrid.AddFixedDimension("um4", 0.0); //0.05
+    //mygrid.Print();
+    //for (size_t i=0; i< mygrid.GetGrid().size(); ++i) std::cerr << i << " : " << mygrid.GetGrid()[i][0] << " " << floor( (i) /  mygrid.f_dimensions[1].f_N )  << "\n";
 
     nPoints = mygrid.f_num_total_points;
 
@@ -764,46 +729,127 @@ int main(int argc, char* argv[]) {
     std::unordered_map <std::string, std::vector<double> > sinmap_std   = mkHistoMapStd(tag+"_SIN_dm_"  , myconf.fullnames);
     //std::unordered_map <std::string, Eigen::VectorXd >     sinsqmap_eig = mkHistoMapEig(tag+"_SINSQ_dm_", myconf.fullnames);
     //std::unordered_map <std::string, Eigen::VectorXd >     sinmap_eig   = mkHistoMapEig(tag+"_SIN_dm_"  , myconf.fullnames);
+    std::vector<Eigen::VectorXd >     sinsqvec_eig = mkHistoVec(tag+"_SINSQ_dm_", myconf.fullnames);
+    std::vector<Eigen::VectorXd >     sinvec_eig   = mkHistoVec(tag+"_SIN_dm_"  , myconf.fullnames);
     double time1 = MPI_Wtime();
+
+    //Eigen::MatrixXd arrsq = mkHistoArray(tag+"_SINSQ_dm_", myconf.fullnames);
+    //Eigen::MatrixXd arr   = mkHistoArray(tag+"_SIN_dm_",   myconf.fullnames);
+    //for (int i=0;i<arrarr.rows();++i) std::cerr << i << " #### " << arrarr.row(i) << "\n";
+
+
     if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra the new way took {} seconds\n",world.rank(), time1 - time0);
 
     std::vector<double> const core  = flattenHistos(cvhist);
+    Eigen::Map<const Eigen::VectorXd> ecore(core.data(), core.size(), 1);
 
     SignalGenerator signal          = {myosc, mygrid.GetGrid(), tag, sinsqmap,     sinmap,     xmldata};
     SignalGeneratorStd signal_std   = {myosc, myconf, mygrid.GetGrid(), sinsqmap_std, sinmap_std, core};
     //SignalGeneratorEigen signal_eig = {myosc, mygrid.GetGrid(), sinsqmap_eig, sinmap_eig};
+    //SignalGeneratorEigen2 yoyo = {myosc, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, arrsq, arr};
+    SignalGeneratorEigen3 signal_eig = {myosc, myconf, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
 
-    double time3 = MPI_Wtime();
-    for (int i =0;i<1000;++i) signal.predict(1,false);
-    double time4 = MPI_Wtime();
-    for (int i =0;i<1000;++i) signal_std.predict(1,false);
-    double time5 = MPI_Wtime();
+    auto a = signal.predict(0, false);
+    auto b = signal_std.predict(0, false);
+    auto c = signal_eig.predict(0, false);
 
+    for (size_t i=0;i<a.size();++i) {
+       //std::cerr << i << " " <<  a[i] << " vs " << b[i] << "\n";
+       assert(a[i]==b[i]);
+       assert(a[i]==b[i]);
+       assert(b[i]==c[i]);
+    }
+
+    std::cerr << "UNCOMPRESSED TEST\n";
+
+    //double time00 = MPI_Wtime();
+    //for (int i =0;i<NTEST;++i) signal.predict(    1, false);
+    //double time01 = MPI_Wtime();
+    for (int i =0;i<NTEST;++i) signal_std.predict(1, false);
+    //double time02 = MPI_Wtime();
+    for (int i =0;i<NTEST;++i) signal_eig.predict(1, false);
+    //double time03 = MPI_Wtime();
+
+
+    //if (world.rank()==0) fmt::print(stderr, "[{}] ROOT  way took {} seconds\n",world.rank(), time01 - time00);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std   way took {} seconds (speedup: {})\n",world.rank(), time02 - time01, (time01 - time00)/(time02 - time01)) ;
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig   way took {} seconds (speedup: {})\n",world.rank(), time03 - time02, (time01 - time00)/(time03 - time02));
+    //std::cerr << "COMPRESSED TEST\n";
+
+    //time00 = MPI_Wtime();
+    //for (int i =0;i<NTEST;++i) signal.predict(    1, true);
+    //time01 = MPI_Wtime();
+    for (int i =0;i<NTEST;++i) signal_std.predict(1, true);
+    //time02 = MPI_Wtime();
+    for (int i =0;i<NTEST;++i) signal_eig.predict(1, true);
+    //time03 = MPI_Wtime();
+
+    exit(0);
+
+    //if (world.rank()==0) fmt::print(stderr, "[{}] ROOT  way took {} seconds\n",world.rank(), time01 - time00);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std   way took {} seconds (speedup: {})\n",world.rank(), time02 - time01, (time01 - time00)/(time02 - time01)) ;
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig   way took {} seconds (speedup: {})\n",world.rank(), time03 - time02, (time01 - time00)/(time03 - time02));
+
+    //double time00 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) collapseVector(a, myconf);
+    //double time01 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) collapseVectorStd(a, myconf);
+    //double time02 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) collapseVectorEigen(c, myconf);
+    //double time03 = MPI_Wtime();
+
+    //if (world.rank()==0) fmt::print(stderr, "[{}] old  way took {} seconds\n",world.rank(), time01 - time00);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds (speedup: {})\n",world.rank(), time02 - time01, (time01 - time00)/(time02 - time01)) ;
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig  way took {} seconds (speedup: {})\n",world.rank(), time03 - time02, (time01 - time00)/(time03 - time02));
+
+
+
+    //double time3 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) signal.predict(1,false);
+    //double time4 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) signal_std.predict(1,false);
+    //double time5 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) signal_eig.predict(1,false);
+    //double time6 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) yoyo.predict(1,false);
+    //double time7 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) yoyo3.predict(1,false);
+    //double time8 = MPI_Wtime();
+
+    //if (world.rank()==0) fmt::print(stderr, "[{}] TH1D way took {} seconds\n",world.rank(), time4 - time3);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig  way took {} seconds\n",world.rank(), time6 - time5);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig nomap  way took {} seconds\n",world.rank(), time7 - time6);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig vec  way took {} seconds\n",world.rank(), time8 - time7);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(),        (time4 - time3)/(time5 - time4));
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig speed-up {} \n",world.rank(),        (time4 - time3)/(time6 - time5));
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig nomap speed-up {} \n",world.rank(),  (time4 - time3)/(time7 - time6));
+    //if (world.rank()==0) fmt::print(stderr, "[{}] eig vec speed-up {} \n",world.rank(),  (time4 - time3)/(time8 - time7));
     
-    for (int i =0;i<1000;++i) signal.predict(1,true);
-    double time6 = MPI_Wtime();
-    for (int i =0;i<1000;++i) signal_std.predict(1,true);
-    double time7 = MPI_Wtime();
+    //for (int i =0;i<1000;++i) signal.predict(1,true);
+    //double time6 = MPI_Wtime();
+    //for (int i =0;i<1000;++i) signal_std.predict(1,true);
+    //double time7 = MPI_Wtime();
 
-    if (world.rank()==0) fmt::print(stderr, "[{}] TH1D way took {} seconds\n",world.rank(), time4 - time3);
-    if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
-    if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(), (time4 - time3)/(time5 - time4));
+    //if (world.rank()==0) fmt::print(stderr, "[{}] TH1D way took {} seconds\n",world.rank(), time4 - time3);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(), (time4 - time3)/(time5 - time4));
   
-    if (world.rank()==0) fmt::print(stderr, "[{}] C TH1D way took {} seconds\n",world.rank(), time6 - time5);
-    if (world.rank()==0) fmt::print(stderr, "[{}] C std  way took {} seconds\n",world.rank(), time7 - time6);
-    if (world.rank()==0) fmt::print(stderr, "[{}] C std speed-up {} \n",world.rank(), (time6 - time5)/(time7 - time6));
+    //if (world.rank()==0) fmt::print(stderr, "[{}] C TH1D way took {} seconds\n",world.rank(), time6 - time5);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] C std  way took {} seconds\n",world.rank(), time7 - time6);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] C std speed-up {} \n",world.rank(), (time6 - time5)/(time7 - time6));
 
 
-    std::vector<double> test =signal_std.predict(1,false);
-    time3 = MPI_Wtime();
-    for (int i =0;i<10000;++i) collapseVector(test, myconf);
-    time4 = MPI_Wtime();
-    for (int i =0;i<10000;++i) collapseVectorStd(test, myconf);
-    time5 = MPI_Wtime();
+    //std::vector<double> test =signal_std.predict(1,false);
+    //time3 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) collapseVector(test, myconf);
+    //time4 = MPI_Wtime();
+    //for (int i =0;i<10000;++i) collapseVectorStd(test, myconf);
+    //time5 = MPI_Wtime();
     
-    if (world.rank()==0) fmt::print(stderr, "[{}] old way took {} seconds\n",world.rank(), time4 - time3);
-    if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
-    if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(), (time4 - time3)/(time5 - time4));
+    //if (world.rank()==0) fmt::print(stderr, "[{}] old way took {} seconds\n",world.rank(), time4 - time3);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std  way took {} seconds\n",world.rank(), time5 - time4);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] std speed-up {} \n",world.rank(), (time4 - time3)/(time5 - time4));
 
     //std::vector<double> a =collapseVector(   test, myconf);
     //std::vector<double> b =collapseVectorStd(test, myconf);
