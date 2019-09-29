@@ -50,6 +50,7 @@ class SBNosc : public SBNspec{
         std::vector<double> Oscillate(
           std::unordered_map <std::string, Eigen::VectorXd > const & sinsqmap,
           std::unordered_map <std::string, Eigen::VectorXd > const & sinmap);
+        Eigen::VectorXd Oscillate(Eigen::VectorXd  sinsq, Eigen::VectorXd sinm);
         std::vector<double> Oscillate(std::string,bool compress); 
         std::vector<double> Oscillate(std::string);
 	std::vector<double> Oscillate(std::string, double);
