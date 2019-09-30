@@ -361,8 +361,9 @@ Eigen::VectorXd SBNosc::Oscillate(Eigen::VectorXd sf_sinsq, Eigen::VectorXd sf_s
         size_t offset(0);
         for (int i=0; i<num_channels; i++) {
             size_t nbins_chan = num_bins.at(i);
-            for (int j=0; j<num_subchannels.at(i); j++){
-                osc_pattern = subchannel_osc_patterns.at(i).at(j);
+            auto const & thisPattern = subchannel_osc_patterns[i];//.at(j);
+            for (int j=0; j<num_subchannels[i]; j++){
+                osc_pattern = thisPattern[j];//_osc_patterns.at(i).at(j);
                 switch (osc_pattern){
                     case 11:
                         osc_amp_sq = prob_ee;
@@ -402,9 +403,6 @@ Eigen::VectorXd SBNosc::Oscillate(Eigen::VectorXd sf_sinsq, Eigen::VectorXd sf_s
         retVec += sf_sinsq;
 
     } // Done looping over mass splittings
-    //std::vector<double> temp(retVec.data(), retVec.data() + retVec.rows() * retVec.cols());
-    //for (int i=0; i<num_bins_total;++i) std::cerr << "EIG :" << i << " " << temp[i] << "\n";
-    //return temp;
     return retVec;
 };
 
@@ -808,7 +806,7 @@ std::vector<double> SBNosc::Oscillate(std::string tag, bool return_compressed, c
 
 			for(int i=0; i<num_channels; i++){
 				for(int j=0; j<num_subchannels.at(i); j++){
-					int osc_pattern = subchannel_osc_patterns.at(i).at(j);
+                                        int osc_pattern = subchannel_osc_patterns.at(i).at(j);
 					double osc_amp = 0;
 					double osc_amp_sq = 0;
 					switch(osc_pattern){
