@@ -200,7 +200,7 @@ struct SignalGeneratorEigenGG {
       osc.LoadModel(this_model);
       osc.SetAppMode();
       int m_idx = massindex(i_grid);
-      Eigen::VectorXd ans = osc.Oscillate(sinsq[m_idx], sin[m_idx]);
+      auto ans = osc.Oscillate(sinsq[m_idx], sin[m_idx]);
       ans+=core;
       if (compressed) return collapseVectorEigen(ans, conf);
       else return ans;

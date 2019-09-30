@@ -47,19 +47,20 @@ int SBNosc::LoadModel(NeutrinoModel in){
 int SBNosc::calcMassSplittings(){
 	mass_splittings.clear();
 
-	double fix41=round(log10((working_model.dm41Sq))/mass_step_size)*mass_step_size;
-	double fix51=round(log10((working_model.dm51Sq))/mass_step_size)*mass_step_size;
-	double fix61=round(log10((working_model.dm61Sq))/mass_step_size)*mass_step_size;
+	double fix41   = round(log10(    (working_model.dm41Sq))/mass_step_size)*mass_step_size;
+	if (working_model.numsterile == 1) {
+            mass_splittings.push_back( std::make_pair(fix41,41 ));
+            return 0;
+	}
+
+	double fix51   = round(log10(    (working_model.dm51Sq))/mass_step_size)*mass_step_size;
+	double fix61   = round(log10(    (working_model.dm61Sq))/mass_step_size)*mass_step_size;
 
 	double round54 = round(log10(fabs(working_model.dm54Sq))/mass_step_size)*mass_step_size;
 	double round64 = round(log10(fabs(working_model.dm64Sq))/mass_step_size)*mass_step_size;
 	double round65 = round(log10(fabs(working_model.dm65Sq))/mass_step_size)*mass_step_size;
 
-	if (working_model.numsterile == 1)
-	{
-		mass_splittings.push_back( std::make_pair(fix41,41 ));
-	}
-       	else if (working_model.numsterile ==2)
+       	if (working_model.numsterile ==2)
 	{
 		mass_splittings.push_back( std::make_pair (fix41,41));
 		mass_splittings.push_back( std::make_pair (fix51,51));
