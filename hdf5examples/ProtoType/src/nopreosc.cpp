@@ -147,7 +147,7 @@ struct SignalGeneratorStd {
    //size_t gridsize() {return m_vec_grid.size();}
 
 //};
-
+// std::array<double, 3>; to get rid of memory mangling
 struct SignalGeneratorEigen3 {
    sbn::SBNosc osc; sbn::SBNconfig const & conf; 
    std::vector<std::vector<double>> const & m_vec_grid; int dim2;
@@ -167,6 +167,46 @@ struct SignalGeneratorEigen3 {
    }
    int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
    size_t gridsize() {return m_vec_grid.size();}
+
+};
+
+typedef std::array<double, 3> GridPoint;
+
+class GridPoints {
+   public:
+      GridPoints(std::vector<std::vector<double>> const & m_vec_grid) {
+         for (auto gp : m_vec_grid)
+            _gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
+      }
+
+      size_t NPoints()         { return _gridpoints.size(); }
+      GridPoint Get(size_t index) { return _gridpoints[index]; }
+
+   private:
+      std::vector<GridPoint> _gridpoints;
+
+};
+
+struct SignalGeneratorEigenGG {
+   sbn::SBNosc osc; sbn::SBNconfig const & conf;
+   GridPoints m_gridpoints; int dim2;
+   std::vector<Eigen::VectorXd>  const & sinsq;
+   std::vector<Eigen::VectorXd>  const & sin;
+   Eigen::VectorXd const & core;
+
+   Eigen::VectorXd predict(size_t i_grid, bool compressed) {
+      auto const & gp = m_gridpoints.Get(i_grid);
+      sbn::NeutrinoModel this_model(gp[0], gp[1], gp[2], false);
+      osc.LoadModel(this_model);
+      osc.SetAppMode();
+      int m_idx = massindex(i_grid);
+      Eigen::VectorXd ans = osc.Oscillate(sinsq[m_idx], sin[m_idx]);
+      ans+=core;
+      if (compressed) return collapseVectorEigen(ans, conf);
+      else return ans;
+   }
+   int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
+   size_t gridsize() {return m_gridpoints.NPoints();}
 
 };
 
@@ -723,8 +763,8 @@ int main(int argc, char* argv[]) {
     
     // TODO find a way to serialize and reconstruct TH1D that is not too painful
     double time0 = MPI_Wtime();
-    std::unordered_map <std::string, std::vector<TH1D> >   sinsqmap     = mkHistoMap(   tag+"_SINSQ_dm_", myconf.fullnames);
-    std::unordered_map <std::string, std::vector<TH1D> >   sinmap       = mkHistoMap(   tag+"_SIN_dm_"  , myconf.fullnames);
+    //std::unordered_map <std::string, std::vector<TH1D> >   sinsqmap     = mkHistoMap(   tag+"_SINSQ_dm_", myconf.fullnames);
+    //std::unordered_map <std::string, std::vector<TH1D> >   sinmap       = mkHistoMap(   tag+"_SIN_dm_"  , myconf.fullnames);
     std::unordered_map <std::string, std::vector<double> > sinsqmap_std = mkHistoMapStd(tag+"_SINSQ_dm_", myconf.fullnames);
     std::unordered_map <std::string, std::vector<double> > sinmap_std   = mkHistoMapStd(tag+"_SIN_dm_"  , myconf.fullnames);
     //std::unordered_map <std::string, Eigen::VectorXd >     sinsqmap_eig = mkHistoMapEig(tag+"_SINSQ_dm_", myconf.fullnames);
@@ -743,45 +783,69 @@ int main(int argc, char* argv[]) {
     std::vector<double> const core  = flattenHistos(cvhist);
     Eigen::Map<const Eigen::VectorXd> ecore(core.data(), core.size(), 1);
 
-    SignalGenerator signal          = {myosc, mygrid.GetGrid(), tag, sinsqmap,     sinmap,     xmldata};
+    //SignalGenerator signal          = {myosc, mygrid.GetGrid(), tag, sinsqmap,     sinmap,     xmldata};
     SignalGeneratorStd signal_std   = {myosc, myconf, mygrid.GetGrid(), sinsqmap_std, sinmap_std, core};
     //SignalGeneratorEigen signal_eig = {myosc, mygrid.GetGrid(), sinsqmap_eig, sinmap_eig};
     //SignalGeneratorEigen2 yoyo = {myosc, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, arrsq, arr};
     SignalGeneratorEigen3 signal_eig = {myosc, myconf, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
 
-    auto a = signal.predict(0, false);
-    auto b = signal_std.predict(0, false);
-    auto c = signal_eig.predict(0, false);
+    GridPoints GP(mygrid.GetGrid());
+    SignalGeneratorEigenGG signal_gg = {myosc, myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
 
-    for (size_t i=0;i<a.size();++i) {
-       //std::cerr << i << " " <<  a[i] << " vs " << b[i] << "\n";
-       assert(a[i]==b[i]);
-       assert(a[i]==b[i]);
-       assert(b[i]==c[i]);
-    }
 
-    std::cerr << "UNCOMPRESSED TEST\n";
+    ////auto a = signal.predict(0, false);
+    //auto b = signal_std.predict(0, false);
+    //auto c = signal_eig.predict(0, false);
+    //auto d = signal_gg.predict(0, false);
+
+    //for (size_t i=0;i<b.size();++i) {
+       ////std::cerr << i << " " <<  a[i] << " vs " << b[i] << "\n";
+       ////assert(a[i]==b[i]);
+       ////assert(a[i]==b[i]);
+       //assert(b[i]==c[i]);
+       //assert(b[i]==d[i]);
+    //}
+
+    double time02 = MPI_Wtime();
+    for (int i =0;i<NTEST;++i) signal_eig.predict(1, false);
+    double time03 = MPI_Wtime();
+    for (int i =0;i<NTEST;++i) signal_gg.predict(1, false);
+    double time04 = MPI_Wtime();
+    
+    fmt::print(stderr, "[{}] old way took {} seconds\n",world.rank(), time03 - time02);
+    fmt::print(stderr, "[{}] new way took {} seconds\n",world.rank(), time04 - time03);
+    exit(0);
+    //std::cerr << "UNCOMPRESSED TEST\n";
 
     //double time00 = MPI_Wtime();
-    //for (int i =0;i<NTEST;++i) signal.predict(    1, false);
+    //for (int i =0;i<NTEST;++i) {
+       //sbn::NeutrinoModel this_model = convert3p1(mygrid.GetGrid()[1]);
+       //myosc.LoadModel(this_model);
+       //myosc.SetAppMode();            
+       //myosc.Oscillate(tag, false, xmldata);
+    //}
+    ////for (int i =0;i<NTEST;++i) signal.predict(    1, false);
     //double time01 = MPI_Wtime();
-    for (int i =0;i<NTEST;++i) signal_std.predict(1, false);
+    //for (int i =0;i<NTEST;++i) signal_std.predict(1, false);
     //double time02 = MPI_Wtime();
-    for (int i =0;i<NTEST;++i) signal_eig.predict(1, false);
+    //for (int i =0;i<NTEST;++i) signal_eig.predict(1, false);
     //double time03 = MPI_Wtime();
+    //for (int i =0;i<NTEST;++i) signal.predict(    1, false);
+    //double time04 = MPI_Wtime();
 
 
-    //if (world.rank()==0) fmt::print(stderr, "[{}] ROOT  way took {} seconds\n",world.rank(), time01 - time00);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] ORIG  way took {} seconds\n",world.rank(), time01 - time00);
+    //if (world.rank()==0) fmt::print(stderr, "[{}] TH1   way took {} seconds (speedup: {})\n",world.rank(), time04 - time03, (time01 - time00)/(time04 - time03));
     //if (world.rank()==0) fmt::print(stderr, "[{}] std   way took {} seconds (speedup: {})\n",world.rank(), time02 - time01, (time01 - time00)/(time02 - time01)) ;
     //if (world.rank()==0) fmt::print(stderr, "[{}] eig   way took {} seconds (speedup: {})\n",world.rank(), time03 - time02, (time01 - time00)/(time03 - time02));
     //std::cerr << "COMPRESSED TEST\n";
 
-    //time00 = MPI_Wtime();
-    //for (int i =0;i<NTEST;++i) signal.predict(    1, true);
-    //time01 = MPI_Wtime();
-    for (int i =0;i<NTEST;++i) signal_std.predict(1, true);
-    //time02 = MPI_Wtime();
-    for (int i =0;i<NTEST;++i) signal_eig.predict(1, true);
+    ////time00 = MPI_Wtime();
+    ////for (int i =0;i<NTEST;++i) signal.predict(    1, true);
+    ////time01 = MPI_Wtime();
+    //for (int i =0;i<NTEST;++i) signal_std.predict(1, true);
+    ////time02 = MPI_Wtime();
+    //for (int i =0;i<NTEST;++i) signal_eig.predict(1, true);
     //time03 = MPI_Wtime();
 
     exit(0);
