@@ -317,9 +317,100 @@ void scaleSubBy(std::vector<double> & vin, size_t first, size_t last, double sca
       std::bind(std::multiplies<double>(), std::placeholders::_1, scaleby));
 }
 
-Eigen::VectorXd SBNosc::Oscillate(Eigen::VectorXd sf_sinsq, Eigen::VectorXd sf_sin) {
+std::vector<double> SBNosc::Oscillate(std::vector<double> const & sf_sinsq, std::vector<double> const & sf_sin) {
+
+    std::vector<double> out = {0.0, sf_sin.size()};
+    std::vector<double> v1, v2;
+    for (auto ms: mass_splittings) {
+        int which_dm = ms.second;
+        double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
+
+        // TODO this should be in a function.
+        switch (which_mode) {
+            case APP_ONLY: //Strictly nu_e app only
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DIS_ONLY: //Strictly nu_mu dis only
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                break;
+            case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                break;
+            case DISE_ONLY: // A strange version where nu_e can appear but not disapear
+                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                break;
+        }
+
+        v1 = sf_sinsq;
+        v2 = sf_sin;
+        double osc_amp(0), osc_amp_sq(0);
+        int osc_pattern(0);
+        // Iterate over channels
+        size_t offset(0);
+        for (int i=0; i<num_channels; i++) {
+            size_t nbins_chan = num_bins.at(i);
+            auto const & thisPattern = subchannel_osc_patterns[i];//.at(j);
+            for (int j=0; j<num_subchannels[i]; j++){
+                osc_pattern = thisPattern[j];//_osc_patterns.at(i).at(j);
+                switch (osc_pattern){
+                    case 11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case -11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case 22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case -22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case 21:
+                        osc_amp    = prob_mue;
+                        osc_amp_sq = prob_mue_sq;
+                        break;
+                    case -21:
+                        osc_amp    = prob_muebar;
+                        osc_amp_sq = prob_muebar_sq;
+                        break;
+                    case 0:
+                    default:
+                        break;
+                }
+
+                // Iterate over detectors
+                for (int d=0; d<num_detectors;++d) {
+                  size_t first  = d*num_bins_detector_block + offset;
+                  scaleSubBy(v1, first, first + nbins_chan, osc_amp_sq);
+                  scaleSubBy(v2, first, first + nbins_chan, osc_amp   );
+                }
+                offset +=nbins_chan;
+            }
+	}
+        std::transform(v1.begin(), v1.end(), v2.begin(), std::back_inserter(out), std::plus<double>());
+
+    } // Done looping over mass splittings
+    return out;
+};
+
+Eigen::VectorXd SBNosc::Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::VectorXd const & sf_sin) {
     Eigen::VectorXd retVec(num_bins_total);
-    retVec.setZero();
+    retVec.setZero(); // !!!
 
     for (auto ms: mass_splittings) {
         int which_dm = ms.second;
@@ -361,7 +452,7 @@ Eigen::VectorXd SBNosc::Oscillate(Eigen::VectorXd sf_sinsq, Eigen::VectorXd sf_s
         // Iterate over channels
         size_t offset(0);
         for (int i=0; i<num_channels; i++) {
-            size_t nbins_chan = num_bins.at(i);
+            size_t nbins_chan = num_bins[i];
             auto const & thisPattern = subchannel_osc_patterns[i];//.at(j);
             for (int j=0; j<num_subchannels[i]; j++){
                 osc_pattern = thisPattern[j];//_osc_patterns.at(i).at(j);
@@ -394,14 +485,16 @@ Eigen::VectorXd SBNosc::Oscillate(Eigen::VectorXd sf_sinsq, Eigen::VectorXd sf_s
                 // Iterate over detectors
                 for (int d=0; d<num_detectors;++d) {
                   size_t first  = d*num_bins_detector_block + offset;
-                  Eigen::Map<Eigen::VectorXd>(sf_sin.data()   + first, nbins_chan,1) *= osc_amp;
-                  Eigen::Map<Eigen::VectorXd>(sf_sinsq.data() + first, nbins_chan,1) *= osc_amp_sq;
+                  retVec.segment(first, nbins_chan) += osc_amp   *  sf_sin.segment(first, nbins_chan);
+                  retVec.segment(first, nbins_chan) += osc_amp_sq*sf_sinsq.segment(first, nbins_chan);
+                  //Eigen::Map<Eigen::VectorXd>(sf_sin.data()   + first, nbins_chan,1) *= osc_amp;
+                  //Eigen::Map<Eigen::VectorXd>(sf_sinsq.data() + first, nbins_chan,1) *= osc_amp_sq;
                 }
                 offset +=nbins_chan;
             }
 	}
-        retVec += sf_sin;
-        retVec += sf_sinsq;
+        //retVec += sf_sin;
+        //retVec += sf_sinsq;
 
     } // Done looping over mass splittings
     return retVec;
