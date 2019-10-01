@@ -763,8 +763,8 @@ int main(int argc, char* argv[]) {
     
     // TODO find a way to serialize and reconstruct TH1D that is not too painful
     double time0 = MPI_Wtime();
-    //std::unordered_map <std::string, std::vector<TH1D> >   sinsqmap     = mkHistoMap(   tag+"_SINSQ_dm_", myconf.fullnames);
-    //std::unordered_map <std::string, std::vector<TH1D> >   sinmap       = mkHistoMap(   tag+"_SIN_dm_"  , myconf.fullnames);
+    std::unordered_map <std::string, std::vector<TH1D> >   sinsqmap     = mkHistoMap(   tag+"_SINSQ_dm_", myconf.fullnames);
+    std::unordered_map <std::string, std::vector<TH1D> >   sinmap       = mkHistoMap(   tag+"_SIN_dm_"  , myconf.fullnames);
     std::unordered_map <std::string, std::vector<double> > sinsqmap_std = mkHistoMapStd(tag+"_SINSQ_dm_", myconf.fullnames);
     std::unordered_map <std::string, std::vector<double> > sinmap_std   = mkHistoMapStd(tag+"_SIN_dm_"  , myconf.fullnames);
     //std::unordered_map <std::string, Eigen::VectorXd >     sinsqmap_eig = mkHistoMapEig(tag+"_SINSQ_dm_", myconf.fullnames);
@@ -783,7 +783,7 @@ int main(int argc, char* argv[]) {
     std::vector<double> const core  = flattenHistos(cvhist);
     Eigen::Map<const Eigen::VectorXd> ecore(core.data(), core.size(), 1);
 
-    //SignalGenerator signal          = {myosc, mygrid.GetGrid(), tag, sinsqmap,     sinmap,     xmldata};
+    SignalGenerator signal          = {myosc, mygrid.GetGrid(), tag, sinsqmap,     sinmap,     xmldata};
     SignalGeneratorStd signal_std   = {myosc, myconf, mygrid.GetGrid(), sinsqmap_std, sinmap_std, core};
     //SignalGeneratorEigen signal_eig = {myosc, mygrid.GetGrid(), sinsqmap_eig, sinmap_eig};
     //SignalGeneratorEigen2 yoyo = {myosc, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, arrsq, arr};
@@ -798,6 +798,19 @@ int main(int argc, char* argv[]) {
     //auto c = signal_eig.predict(0, false);
     //auto d = signal_gg.predict(0, false);
 
+
+    for (size_t ig=0; ig<GP.NPoints();++ig) {
+       auto a = signal.predict(    ig, false);
+       auto b = signal_std.predict(ig, false);
+       auto d = signal_gg.predict( ig, false);
+       for (size_t i=0;i<b.size();++i) {
+          std::cerr << i << " " <<  a[i] << " vs " << b[i] << " vs " << d[i] << "\n";
+          assert(a[i]==b[i]);
+          //assert(a[i]==b[i]);
+          assert(b[i]==d[i]);
+       }
+    }
+
     //for (size_t i=0;i<b.size();++i) {
        ////std::cerr << i << " " <<  a[i] << " vs " << b[i] << "\n";
        ////assert(a[i]==b[i]);
@@ -805,6 +818,8 @@ int main(int argc, char* argv[]) {
        //assert(b[i]==c[i]);
        //assert(b[i]==d[i]);
     //}
+
+
 
     double time02 = MPI_Wtime();
     for (int i =0;i<NTEST;++i) signal_eig.predict(1, false);
