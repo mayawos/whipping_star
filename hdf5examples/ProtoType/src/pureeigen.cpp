@@ -81,7 +81,7 @@ class GridPoints {
 
 struct SignalGenerator {
    sbn::SBNosc osc; sbn::SBNconfig const & conf;
-   GridPoints m_gridpoints; int dim2;
+   GridPoints m_gridpoints; size_t dim2;
    std::vector<Eigen::VectorXd>  const & sinsq;
    std::vector<Eigen::VectorXd>  const & sin;
    Eigen::VectorXd const & core;
@@ -94,7 +94,12 @@ struct SignalGenerator {
       int m_idx = massindex(i_grid);
       auto ans = osc.Oscillate(sinsq[m_idx], sin[m_idx]);
       ans+=core;
-      if (compressed) return collapseVectorEigen(ans, conf);
+      if (compressed) {
+         std::vector<double> specfull(ans.data(), ans.data() + ans.rows() * ans.cols());
+         std::vector<double> speccoll = collapseVectorStd(specfull, conf);
+         return Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(),1 );
+         //return collapseVectorEigen(ans, conf);
+      }
       else return ans;
    }
    int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
@@ -128,14 +133,18 @@ void writeGrid(HighFive::File* file, std::vector<std::vector<double> > const & c
     d_gridy.select(   {0, 0}, {ycoord.size(), 1}).write(ycoord);
 }
 
-
 TMatrixD readFracCovMat(std::string const & rootfile){
     TFile  fsys(rootfile.c_str(),"read");
     TMatrixD cov =  *(TMatrixD*)fsys.Get("frac_covariance");
     fsys.Close();
+
+    for(int i =0; i<cov.GetNcols(); i++) {
+        for(int j =0; j<cov.GetNrows(); j++) {
+            if ( std::isnan( cov(i,j) ) )  cov(i,j) = 0.0;
+        }
+    }
     return cov;
 }
-
 
 std::vector<TH1D> readHistos(std::string const & rootfile, std::vector<string> const & fullnames) {
     std::vector<TH1D > hist;
@@ -173,40 +182,19 @@ std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<
    return ret;
 }
 
-float calcChi(std::vector<double> const & data, std::vector<double> const & prediction, TMatrixT<double> const & C_inv ) {
-    int n = data.size();
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > CINV(C_inv.GetMatrixArray(), n, n);
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > PRED(prediction.data(), n, 1);
-    // Massage data right now to convert from float to double.
-    std::vector<double> temp;
-    temp.assign(data.begin(), data.end());
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, 1> > DATA(temp.data(), n, 1);
-    Eigen::VectorXd DIFF = DATA-PRED;
-    return DIFF.transpose() * CINV * DIFF; 
-}
-double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, TMatrixT<double> const & C_inv ) {
-    int n = data.size();
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > CINV(C_inv.GetMatrixArray(), n, n);
-    Eigen::VectorXd DIFF = data - prediction;
-    return DIFF.transpose() * CINV * DIFF; 
-}
-
 double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, Eigen::MatrixXd const & C_inv ) {
     Eigen::VectorXd DIFF = data - prediction;
     return DIFF.transpose() * C_inv * DIFF; 
 }
 
-// Calculate all chi2 for this universe
-std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, TMatrixT<double> const & C_inv,
+std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
    SignalGenerator signal)
 {
    double chimin=std::numeric_limits<double>::infinity();
    int bestP(0);
-   int n = C_inv.GetNrows();
-   Eigen::Map<const Eigen::MatrixXd> CINV(C_inv.GetMatrixArray(), n, n);
 
    for (size_t i=0; i<signal.gridsize(); ++i) {
-       double chi = calcChi(data, signal.predict(i, true), CINV);
+       double chi = calcChi(data, signal.predict(i, true), C_inv);
        if (chi<chimin) {
           chimin = chi;
           bestP=i;
@@ -217,16 +205,28 @@ std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, TMatrixT<doub
 
 TMatrixT<double> calcCovarianceMatrix(TMatrixT<double> const & M, std::vector<double> const & spec){
     TMatrixT<double> Mout( M.GetNcols(), M.GetNcols() );
+    Mout.Zero();
     // systematics per scaled event
     for(int i =0; i<M.GetNcols(); i++) {
         for(int j =0; j<M.GetNrows(); j++) {
-            if ( std::isnan( M(i,j) ) )  Mout(i,j) = 0.0;
-            else                         Mout(i,j) = M(i,j)*spec[i]*spec[j];
-
+            Mout(i,j) = M(i,j)*spec[i]*spec[j];
             if (i==j) Mout(i,i) += spec[i];
         }
     }
     return Mout;
+}
+
+// Can we optimise this?
+Eigen::MatrixXd calcCovarianceMatrix(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec){
+   Eigen::MatrixXd test(M.cols(), M.cols());
+    for(int i =0; i<M.cols(); i++) {
+        for(int j =i; j<M.rows(); j++) {
+            test(i,j) = M(i,j)*spec[i]*spec[j];
+            if (i==j) test(i,i) += spec[i];
+            test(j,i)=test(i,j);
+        }
+    }
+    return test;
 }
 
 // Only used for covariance matrix a very beginning, just being lazy here
@@ -332,43 +332,44 @@ void collapseModes(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBNconfig
     }
 }
 
-void updateInvCov(TMatrixT<double> & invcov, TMatrixD const & covmat, std::vector<double> const & spec_full, sbn::SBNconfig const & conf, int nBinsC) {
-    TMatrixT<double> _cov = calcCovarianceMatrix(covmat, spec_full);
+Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::VectorXd const & spec_full, sbn::SBNconfig const & conf, int nBinsC) {
+   Eigen::MatrixXd _cov = calcCovarianceMatrix(covmat, spec_full);
     TMatrixT<double> _covcol;
+    TMatrixT<double> __cov;
     _covcol.ResizeTo(nBinsC, nBinsC);
-    collapseModes(_cov, _covcol, conf);
-    Eigen::MatrixXd temp = invertMatrixEigen3(_covcol);
-    invcov.SetMatrixArray(temp.data());
+    __cov.ResizeTo(covmat.rows(), covmat.rows());
+    __cov.SetMatrixArray(_cov.data());
+    collapseModes(__cov, _covcol, conf);
+    return invertMatrixEigen3(_covcol);
 }
 
 
 FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
       SignalGenerator signal,
-      TMatrixT<double> const & INVCOV, 
-      TMatrixT<double> const & covmat, 
+      Eigen::MatrixXd const & INVCOV,
+      Eigen::MatrixXd const & covmat,
       sbn::SBNconfig const & myconf,
       double chi_min_convergance_tolerance = 0.001,
-      size_t max_number_iterations = 5)
+      size_t max_number_iterations = 5
+      )
 {
    float last_chi_min = FLT_MAX;
    int best_grid_point = -99;
    size_t n_iter = 0;
 
-   TMatrixT<double> invcov = INVCOV;
-   std::vector<double> temp;
+   Eigen::MatrixXd invcov = INVCOV;//std::vector<double> temp;
    
    for(n_iter = 0; n_iter < max_number_iterations; n_iter++){
        if(n_iter!=0){
            //Calculate current full covariance matrix, collapse it, then Invert.
-           auto temp  = signal.predict(best_grid_point, false);
-           updateInvCov(invcov, covmat, std::vector<double>(temp.data(), temp.data() + temp.rows()*temp.cols()), myconf, 90);
+           auto const & temp  = signal.predict(best_grid_point, false);
+           invcov = updateInvCov(covmat, temp, myconf, 90);
        }
        //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
        float chi_min = FLT_MAX;
        auto resuni  = universeChi2(fake_data, invcov, signal);
        chi_min = std::get<0>(resuni);
        best_grid_point = std::get<1>(resuni);
- 
        if(n_iter!=0){
            //Step 3.0 Check to see if min_chi for this particular fake_data  has converged sufficiently
            if(fabs(chi_min-last_chi_min)< chi_min_convergance_tolerance){
@@ -409,13 +410,15 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     v_last.reserve(rankwork.size()*nUniverses);
     v_dchi.reserve(rankwork.size()*nUniverses);
     
+    Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
+    Eigen::Map<const Eigen::MatrixXd> INVCOVBG(INVCOV.GetMatrixArray(), INVCOV.GetNcols(), INVCOV.GetNcols());
 
     for (int i_grid : rankwork) {
 
        if (debug && i_grid!=0) return;
        auto specfull_e = signal.predict(i_grid, false);
-       auto speccoll_e = collapseVectorEigen(specfull_e, myconf);
        std::vector<double> specfull(specfull_e.data(), specfull_e.data() + specfull_e.rows() * specfull_e.cols());
+       std::vector<double> speccoll = collapseVectorStd(specfull, myconf);
        sbn::SBNchi mychi(covmat, xmldata, false);
        mychi.InitRandomNumberSeeds(double(cp.gid()));
 
@@ -423,7 +426,10 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        for (int uu=0; uu<nUniverses;++uu) {
           fake_data = mychi.SampleCovariance(specfull);
           fake_dataC = collapseVectorStd(fake_data, myconf);
-          results.push_back(coreFC(Eigen::Map<Eigen::VectorXd>(fake_dataC.data(), fake_dataC.size(),1 ), speccoll_e, signal, INVCOV, covmat, myconf, tol, iter));
+          results.push_back(coreFC(
+                   Eigen::Map<Eigen::VectorXd>(fake_dataC.data(), fake_dataC.size(), 1),
+                   Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(), 1),
+                   signal, INVCOVBG, ECOV, myconf, tol, iter));
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
        }
@@ -526,9 +532,7 @@ int main(int argc, char* argv[]) {
     NGrid mygrid;
     mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1 --- can't change easily --- sterile mass
     mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1 --- arbirtrarily dense! mixing angle nu_e --- can change ywidth. Try 20^6
-    mygrid.AddFixedDimension("um4", 0.0); //0.05
-    //mygrid.Print();
-    //for (size_t i=0; i< mygrid.GetGrid().size(); ++i) std::cerr << i << " : " << mygrid.GetGrid()[i][0] << " " << floor( (i) /  mygrid.f_dimensions[1].f_N )  << "\n";
+    mygrid.AddFixedDimension("um4", 0.0);
 
     nPoints = mygrid.f_num_total_points;
 
@@ -582,10 +586,6 @@ int main(int argc, char* argv[]) {
     std::vector<double> const core  = flattenHistos(cvhist);
     Eigen::Map<const Eigen::VectorXd> ecore(core.data(), core.size(), 1);
 
-    GridPoints GP(mygrid.GetGrid());
-    SignalGenerator signal = {myosc, myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
-
-    
     // Background
     std::vector<double> bgvec;
     if (world.rank() == 0) {
@@ -622,6 +622,9 @@ int main(int argc, char* argv[]) {
        covmat.ResizeTo(nBins, nBins);
        covmat.Zero();
     }
+
+    GridPoints GP(mygrid.GetGrid());
+    SignalGenerator    signal    = {myosc, myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
 
     if( world.rank()==0 ) {
       fmt::print(stderr, "\n    Output will be written to {}\n", out_file);
@@ -670,7 +673,6 @@ int main(int argc, char* argv[]) {
     collapseModes(_cov, _covcol, myconf);
     TMatrixT<double> INVCOV = invertMatrix(_covcol);
 
-
     //// Now more blocks as we have universes
     blocks = world.size();//nPoints;//*nUniverses;
     if (world.rank()==0) fmt::print(stderr, "FC will be done on {} blocks, distributed over {} ranks\n", blocks, world.size());
@@ -684,7 +686,6 @@ int main(int argc, char* argv[]) {
     diy::Master                    fc_master(world, 1, -1, &Block::create, &Block::destroy);
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);//, share_face, wrap, ghosts);
 
-
     std::vector<int> work(nPoints);
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
@@ -694,7 +695,7 @@ int main(int argc, char* argv[]) {
                            { doFC(b, cp, world.rank(), mygrid, xmldata, myconf, covmat, INVCOV, signal, f_out, rankwork, nUniverses, tol, iter, debug); });
     double endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
-
+    if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
 
     delete f_out;
     return 0;
