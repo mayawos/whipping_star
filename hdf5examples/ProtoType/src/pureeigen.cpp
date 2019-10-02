@@ -480,7 +480,7 @@ int main(int argc, char* argv[]) {
     int nPoints=-1;
     int mockFactor=1;
     int nUniverses=1;
-    int NTEST(1000000);
+    int NTEST(0);
     std::string out_file="test.hdf5";
     std::string f_BG="BOTHv2_BKG_ONLY.SBNspec.root";
     std::string f_CV="BOTHv2_CV.SBNspec.root";
@@ -545,7 +545,7 @@ int main(int argc, char* argv[]) {
        }
        std::vector<std::string> infiles = {f_BG, f_COV, f_CV, xml};
        for (auto f : infiles) {
-          if (!file_exists(f)) {
+          if (!file_exists(f)) { 
              std::cerr << "Specified input file " << f <<" does not exist, exiting\n";
              exit(1);
           }
@@ -625,6 +625,26 @@ int main(int argc, char* argv[]) {
 
     GridPoints GP(mygrid.GetGrid());
     SignalGenerator    signal    = {myosc, myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
+
+    if (NTEST>0) {
+       auto sv = signal.predict(1, false);
+       std::vector<double> svb(sv.data(), sv.data() + sv.rows() * sv.cols());
+       
+       double t0 = MPI_Wtime();
+       for (int i=0;i<NTEST;++i) signal.predict(1, false);
+       double t1 = MPI_Wtime();
+       for (int i=0;i<NTEST;++i) collapseVectorEigen(sv, myconf);
+       double t2 = MPI_Wtime();
+       for (int i=0;i<NTEST;++i) collapseVectorStd(svb, myconf);
+       double t3 = MPI_Wtime();
+
+       fmt::print(stderr, "\n {} calls to predict took {} seconds\n", NTEST, t1-t0);
+       fmt::print(stderr, "\n {} calls to collapseVectorEigen took {} seconds\n", NTEST, t2-t1);
+       fmt::print(stderr, "\n {} calls to collapseVectorStd took {} seconds\n\n", NTEST, t3-t2);
+       exit(1);
+    }
+
+
 
     if( world.rank()==0 ) {
       fmt::print(stderr, "\n    Output will be written to {}\n", out_file);
