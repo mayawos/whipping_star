@@ -102,6 +102,23 @@ struct SignalGenerator {
       }
       else return ans;
    }
+   void testOscillate(size_t i_grid, size_t ncalls) {
+      auto const & gp = m_gridpoints.Get(i_grid);
+      sbn::NeutrinoModel this_model(gp[0], gp[1], gp[2], false);
+      osc.LoadModel(this_model);
+      osc.SetAppMode();
+      int m_idx = massindex(i_grid);
+      for (size_t i=0;i<ncalls;++i) osc.Oscillate(sinsq[m_idx], sin[m_idx]);
+   }
+   void testLoadModel(size_t i_grid, size_t ncalls) {
+      auto const & gp = m_gridpoints.Get(i_grid);
+      sbn::NeutrinoModel this_model(gp[0], gp[1], gp[2], false);
+      for (size_t i=0;i<ncalls;++i) osc.LoadModel(this_model);
+   }
+   void testConstModel(size_t i_grid, size_t ncalls) {
+      auto const & gp = m_gridpoints.Get(i_grid);
+      for (size_t i=0;i<ncalls;++i) sbn::NeutrinoModel(gp[0], gp[1], gp[2], false);
+   }
    int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
    size_t gridsize() {return m_gridpoints.NPoints();}
 
@@ -229,118 +246,53 @@ Eigen::MatrixXd calcCovarianceMatrix(Eigen::MatrixXd const & M, Eigen::VectorXd 
     return test;
 }
 
-// Only used for covariance matrix a very beginning, just being lazy here
-TMatrixT<double> invertMatrix(TMatrixT<double> &M){
-    TMatrixT<double> McI(M.GetNrows(),M.GetNrows());
-    McI.Zero();
-    TDecompSVD svd(M);
-    if (!svd.Decompose()) {
-        std::cerr<<" (InvertMatrix) Decomposition FAILED, matrix not symettric?, has nans?" << std::endl;
-        std::cerr<<"ERROR: The matrix to invert failed a SVD decomp!"<<std::endl;
-        for(int i=0; i< M.GetNrows(); i++){
-            for(int j=0; j< M.GetNrows(); j++) std::cerr<<i<<" "<<j<<" "<<M(i,j)<<std::endl;
-        }
-    }
-    else McI = svd.Invert();
-    if (!McI.IsValid()) std::cout << "ERROR: The inverted matrix isnt valid! Something went wrong.." << std::endl;
-    return McI;
-}
-
 // Cholesky decomposition and solve for inverted matrix --- fastest
-Eigen::MatrixXd invertMatrixEigen3(TMatrixT<double> &M){
-    int n = M.GetNrows();
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> > COV(M.GetMatrixArray(), n, n);
-    return COV.llt().solve(Eigen::MatrixXd::Identity(n,n));
+Eigen::MatrixXd invertMatrixEigen3(Eigen::MatrixXd const & M){
+    return M.llt().solve(Eigen::MatrixXd::Identity(M.rows(), M.rows()));
 }
 
-// This is the powerhouse, takes each detector matrix filled with num_channels channels of num_subchannels[i] subchannels, and collapses it.
-void collapseSubchannels(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBNconfig const & conf){
+Eigen::MatrixXd collapseSubchannels(Eigen::MatrixXd const & EE, sbn::SBNconfig const & conf){
+    Eigen::MatrixXd  retMat = Eigen::MatrixXd::Zero(conf.num_bins_detector_block_compressed, conf.num_bins_detector_block_compressed);
 
-    std::vector< std::vector< TMatrixT<double> > > Summed(conf.num_channels, std::vector<TMatrixT<double>>(conf.num_channels) );	//Initialise a matrix of matricies, to ZERO.
-    for(int ic = 0; ic < conf.num_channels; ic++){
-        for(int jc =0; jc < conf.num_channels; jc++){
-            Summed[ic][jc].ResizeTo(conf.num_bins[jc], conf.num_bins[ic]) ;// This is CORRECT, do not switch (ie Summed[0][1] = size (num_bins[1], num_bins[0])
-            Summed[ic][jc] = 0.0;
-        }
-    }
-
-    int mrow = 0.0;
-    int mcol = 0.0;
-
-    for(int ic = 0; ic < conf.num_channels; ic++){ 	 // Loop over all rows
-        for(int jc =0; jc < conf.num_channels; jc++){    // Loop over all columns
-            for(int m=0; m < conf.num_subchannels[ic]; m++){
-                for(int n=0; n< conf.num_subchannels[jc]; n++){ //For each big block, loop over all subchannels summing together
-                   int a, b, c, d;
+    int mrow(0), mcol(0), mrow_out(0), mcol_out(0);
+    for(int ic = 0; ic < conf.num_channels; ic++) {
+        for(int jc =0; jc < conf.num_channels; jc++) {
+            for(int m=0; m < conf.num_subchannels[ic]; m++) {
+                for(int n=0; n< conf.num_subchannels[jc]; n++) {
+                   int a, c;
                    a=mrow + n*conf.num_bins[jc];
-                   b=mrow + n*conf.num_bins[jc] + conf.num_bins[jc]-1;
                    c=mcol + m*conf.num_bins[ic];
-                   d=mcol + m*conf.num_bins[ic] + conf.num_bins[ic]-1;
-                   Summed[ic][jc] +=  M.GetSub(a,b,c,d);
+                   retMat.block(mrow_out, mcol_out, conf.num_bins[jc], conf.num_bins[ic]) += EE.block(a, c, conf.num_bins[jc], conf.num_bins[ic]);
                 }
             }
-            mrow += conf.num_subchannels[jc]*conf.num_bins[jc]; // As we work our way left in columns, add on that many bins
+            mrow     += conf.num_subchannels[jc]*conf.num_bins[jc];
+            mrow_out += conf.num_bins[jc];
         } // end of column loop
-        mrow = 0; // as we end this row, reSet row count, but jump down 1 column
-        mcol += conf.num_subchannels[ic]*conf.num_bins[ic];
+        mrow      = 0; // as we end this row, reSet row count, but jump down 1 column
+        mrow_out  = 0;
+        mcol     += conf.num_subchannels[ic]*conf.num_bins[ic];
+        mcol_out += conf.num_bins[ic];
     } // end of row loop
-
-    ///********************************* And put them back toGether! ************************//
-    Mc.Zero();
-    mrow = 0;
-    mcol = 0;
-
-    //Repeat again for Contracted matrix
-    for(int ic = 0; ic < conf.num_channels; ic++){
-        for(int jc =0; jc < conf.num_channels; jc++){
-            Mc.SetSub(mrow, mcol, Summed[ic][jc]);
-            mrow += conf.num_bins[jc];
-        }
-        mrow = 0;
-        mcol +=conf.num_bins[ic];
-    }
+    return retMat;
 }
 
-void collapseDetectors(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBNconfig const & conf){
-    Mc.Zero();
-    int nrow = conf.num_bins_detector_block;// N_e_bins*N_e_spectra+N_m_bins*N_m_spectra;
-    int crow = conf.num_bins_detector_block_compressed; //N_e_bins+N_m_bins;
+Eigen::MatrixXd collapseDetectors(Eigen::MatrixXd const & M, sbn::SBNconfig const & conf){
+    Eigen::MatrixXd  retMat = Eigen::MatrixXd::Zero(conf.num_bins_mode_block_compressed, conf.num_bins_mode_block_compressed);
+    auto const & nrow = conf.num_bins_detector_block;
+    auto const & crow = conf.num_bins_detector_block_compressed;
     for (int m=0; m<conf.num_detectors; m++) {
         for (int n=0; n<conf.num_detectors; n++) {
-            TMatrixT<double> imat(nrow,nrow);
-            TMatrixT<double> imatc(crow,crow);
-            imat = M.GetSub(n*nrow, n*nrow+nrow-1, m*nrow, m*nrow+nrow-1);
-            collapseSubchannels(imat, imatc, conf);
-            Mc.SetSub(n*crow, m*crow, imatc);
+            retMat.block(n*crow, m*crow, crow, crow) = collapseSubchannels(M.block(n*nrow, m*nrow, nrow, nrow), conf);
         }
     }
+    return retMat;
 }
 
-void collapseModes(TMatrixT <double> & M, TMatrixT <double> & Mc, sbn::SBNconfig const & conf){
-    Mc.Zero();
-    int nrow = conf.num_bins_mode_block;// (N_e_bins*N_e_spectra+N_m_bins*N_m_spectra)*N_dets;
-    int crow = conf.num_bins_mode_block_compressed;// (N_e_bins+N_m_bins)*N_dets;
-
-    for (int m=0; m<conf.num_modes ; m++) {
-        for (int n=0; n<conf.num_modes; n++) {
-            TMatrixT<double> imat(nrow, nrow);
-            TMatrixT<double> imatc(crow, crow);
-            imat = M.GetSub(n*nrow, n*nrow+nrow-1, m*nrow, m*nrow+nrow-1);
-            collapseDetectors(imat, imatc, conf);
-            Mc.SetSub(n*crow, m*crow, imatc);
-        }
-    }
-}
 
 Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::VectorXd const & spec_full, sbn::SBNconfig const & conf, int nBinsC) {
    Eigen::MatrixXd _cov = calcCovarianceMatrix(covmat, spec_full);
-    TMatrixT<double> _covcol;
-    TMatrixT<double> __cov;
-    _covcol.ResizeTo(nBinsC, nBinsC);
-    __cov.ResizeTo(covmat.rows(), covmat.rows());
-    __cov.SetMatrixArray(_cov.data());
-    collapseModes(__cov, _covcol, conf);
-    return invertMatrixEigen3(_covcol);
+    auto const & out = collapseDetectors(_cov, conf);
+    return invertMatrixEigen3(out);
 }
 
 
@@ -387,9 +339,10 @@ FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_co
    return fr;
 }
 
+// TODO add size_t writeEvery to prevent memory overload
 void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
       NGrid mygrid, const char * xmldata, sbn::SBNconfig const & myconf,
-      TMatrixD const & covmat, TMatrixT<double> const & INVCOV,
+      TMatrixD const & covmat, Eigen::MatrixXd const & INVCOVBG,
       SignalGenerator signal,
       HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
       double tol, size_t iter, bool debug)
@@ -411,7 +364,6 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     v_dchi.reserve(rankwork.size()*nUniverses);
     
     Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
-    Eigen::Map<const Eigen::MatrixXd> INVCOVBG(INVCOV.GetMatrixArray(), INVCOV.GetNcols(), INVCOV.GetNcols());
 
     for (int i_grid : rankwork) {
 
@@ -477,9 +429,9 @@ int main(int argc, char* argv[]) {
     diy::mpi::communicator world;
 
     size_t nBinsC=90;
-    int nPoints=-1;
+    size_t nPoints=-1;
     int mockFactor=1;
-    int nUniverses=1;
+    size_t nUniverses=1;
     int NTEST(0);
     std::string out_file="test.hdf5";
     std::string f_BG="BOTHv2_BKG_ONLY.SBNspec.root";
@@ -637,10 +589,19 @@ int main(int argc, char* argv[]) {
        double t2 = MPI_Wtime();
        for (int i=0;i<NTEST;++i) collapseVectorStd(svb, myconf);
        double t3 = MPI_Wtime();
+       signal.testOscillate(1, NTEST);
+       double t4 = MPI_Wtime();
+       signal.testLoadModel(1, NTEST);
+       double t5 = MPI_Wtime();
+       signal.testConstModel(1, NTEST);
+       double t6 = MPI_Wtime();
 
-       fmt::print(stderr, "\n {} calls to predict took {} seconds\n", NTEST, t1-t0);
+       fmt::print(stderr, "\n {} calls to predict took {} seconds\n",             NTEST, t1-t0);
        fmt::print(stderr, "\n {} calls to collapseVectorEigen took {} seconds\n", NTEST, t2-t1);
-       fmt::print(stderr, "\n {} calls to collapseVectorStd took {} seconds\n\n", NTEST, t3-t2);
+       fmt::print(stderr, "\n {} calls to collapseVectorStd took {} seconds\n",   NTEST, t3-t2);
+       fmt::print(stderr, "\n {} calls to oscillate took {} seconds\n",           NTEST, t4-t3);
+       fmt::print(stderr, "\n {} calls to LoadModel took {} seconds\n",           NTEST, t5-t4);
+       fmt::print(stderr, "\n {} calls to NeutrinoModel took {} seconds\n\n",     NTEST, t6-t5);
        exit(1);
     }
 
@@ -685,13 +646,11 @@ int main(int argc, char* argv[]) {
     diy::Master master(world, 1, -1, &Block::create, &Block::destroy);
     diy::decompose(1, world.rank(), domain, assigner, master);
     
-
     // Add the BG
     TMatrixT<double> _cov = calcCovarianceMatrix(covmat, bgvec);
-    TMatrixT<double> _covcol;
-    _covcol.ResizeTo(nBinsC, nBinsC);
-    collapseModes(_cov, _covcol, myconf);
-    TMatrixT<double> INVCOV = invertMatrix(_covcol);
+    Eigen::Map<const Eigen::MatrixXd> ecov(_cov.GetMatrixArray(), _cov.GetNcols(), _cov.GetNcols());
+    auto const & _covcol = collapseDetectors(ecov, myconf);
+    auto const & INVCOVBG = invertMatrixEigen3(_covcol);
 
     //// Now more blocks as we have universes
     blocks = world.size();//nPoints;//*nUniverses;
@@ -704,15 +663,15 @@ int main(int argc, char* argv[]) {
     diy::RegularBroadcastPartners  fc_comm(    fc_decomposer, 2, true);
     diy::RegularMergePartners      fc_partners(fc_decomposer, 2, true);
     diy::Master                    fc_master(world, 1, -1, &Block::create, &Block::destroy);
-    diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);//, share_face, wrap, ghosts);
+    diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
 
     std::vector<int> work(nPoints);
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
 
     double starttime = MPI_Wtime();
-    fc_master.foreach([world, mygrid, covmat, xmldata, INVCOV, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
-                           { doFC(b, cp, world.rank(), mygrid, xmldata, myconf, covmat, INVCOV, signal, f_out, rankwork, nUniverses, tol, iter, debug); });
+    fc_master.foreach([world, mygrid, covmat, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
+                           { doFC(b, cp, world.rank(), mygrid, xmldata, myconf, covmat, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug); });
     double endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
     if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
