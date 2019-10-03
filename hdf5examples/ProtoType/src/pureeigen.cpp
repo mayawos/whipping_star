@@ -245,8 +245,9 @@ std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<
 }
 
 double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, Eigen::MatrixXd const & C_inv ) {
-    auto const & DIFF = data - prediction;
-    return DIFF.transpose() * C_inv * DIFF; 
+    //auto const & DIFF = data - prediction;
+    //return DIFF.transpose() * C_inv * DIFF; 
+    return (data - prediction).transpose() * C_inv * (data - prediction);
 }
 
 std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
