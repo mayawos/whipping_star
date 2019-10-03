@@ -95,10 +95,10 @@ struct SignalGenerator {
 
       ans+=core;
       if (compressed) {
-         std::vector<double> specfull(ans.data(), ans.data() + ans.rows() * ans.cols());
-         std::vector<double> speccoll = collapseVectorStd(specfull, conf);
-         return Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(),1 );
-         //return collapseVectorEigen(ans, conf);
+         //std::vector<double> specfull(ans.data(), ans.data() + ans.rows() * ans.cols());
+         //std::vector<double> speccoll = collapseVectorStd(specfull, conf);
+         //return Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(),1 );
+         return collapseVectorEigen(ans, conf);
       }
       else return ans;
    }
@@ -245,8 +245,6 @@ std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<
 }
 
 double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, Eigen::MatrixXd const & C_inv ) {
-    //auto const & DIFF = data - prediction;
-    //return DIFF.transpose() * C_inv * DIFF; 
     return (data - prediction).transpose() * C_inv * (data - prediction);
 }
 
@@ -386,47 +384,56 @@ FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_co
 
 // TODO add size_t writeEvery to prevent memory overload
 void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
-      NGrid mygrid, const char * xmldata, sbn::SBNconfig const & myconf,
+      const char * xmldata, sbn::SBNconfig const & myconf,
       TMatrixD const & covmat, Eigen::MatrixXd const & INVCOVBG,
       SignalGenerator signal,
       HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
-      double tol, size_t iter, bool debug)
+      double tol, size_t iter, bool debug, bool noWrite=false)
 {
 
     double starttime, endtime;
-    std::vector<double> fake_data;
-    std::vector<double> fake_dataC;
     std::vector<FitResult> results;
-    results.reserve(rankwork.size()*nUniverses);
-   
     std::vector<int> v_grid, v_univ, v_iter, v_best;
-    v_grid.reserve(rankwork.size()*nUniverses);
-    v_univ.reserve(rankwork.size()*nUniverses);
-    v_iter.reserve(rankwork.size()*nUniverses);
-    v_best.reserve(rankwork.size()*nUniverses);
     std::vector<double> v_last, v_dchi;
-    v_last.reserve(rankwork.size()*nUniverses);
-    v_dchi.reserve(rankwork.size()*nUniverses);
+    
+    if (!noWrite) {
+       results.reserve(rankwork.size()*nUniverses);
+       v_grid.reserve(rankwork.size()*nUniverses);
+       v_univ.reserve(rankwork.size()*nUniverses);
+       v_iter.reserve(rankwork.size()*nUniverses);
+       v_best.reserve(rankwork.size()*nUniverses);
+       v_last.reserve(rankwork.size()*nUniverses);
+       v_dchi.reserve(rankwork.size()*nUniverses);
+    }
     
     Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
 
     for (int i_grid : rankwork) {
 
        if (debug && i_grid!=0) return;
-       auto specfull_e = signal.predict(i_grid, false);
-       std::vector<double> specfull(specfull_e.data(), specfull_e.data() + specfull_e.rows() * specfull_e.cols());
-       std::vector<double> speccoll = collapseVectorStd(specfull, myconf);
+       auto const & specfull_e = signal.predict(i_grid, false);
+       //std::vector<double> specfull(specfull_e.data(), specfull_e.data() + specfull_e.rows() * specfull_e.cols());
+       auto const & speccoll = collapseVectorEigen(specfull_e, myconf);
+       //std::vector<double> speccoll = collapseVectorStd(specfull, myconf);
        sbn::SBNchi mychi(covmat, xmldata, false);
        mychi.InitRandomNumberSeeds(double(cp.gid()));
 
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
-          fake_data = mychi.SampleCovariance(specfull);
-          fake_dataC = collapseVectorStd(fake_data, myconf);
-          results.push_back(coreFC(
-                   Eigen::Map<Eigen::VectorXd>(fake_dataC.data(), fake_dataC.size(), 1),
-                   Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(), 1),
+
+          auto const & fake_data = mychi.SampleCovariance(specfull_e);
+          auto const & fake_dataC = collapseVectorEigen(fake_data, myconf); 
+          results.push_back(coreFC(fake_dataC, speccoll,
                    signal, INVCOVBG, ECOV, myconf, tol, iter));
+
+
+          //fake_data = mychi.SampleCovariance(specfull); // NOTE on the first call to SampleCov the cholesky decomp is performed
+          //fake_dataC = collapseVectorStd(fake_data, myconf);
+          //results.push_back(coreFC(
+                   //Eigen::Map<Eigen::VectorXd>(fake_dataC.data(), fake_dataC.size(), 1), // costly?
+                   //speccoll,
+                   ////Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(), 1),
+                   //signal, INVCOVBG, ECOV, myconf, tol, iter));
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
        }
@@ -434,33 +441,36 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        if (rank==0) fmt::print(stderr, "[{}] gridp {}/{} ({} universes) took {} seconds\n",cp.gid(), i_grid, rankwork.size(), nUniverses, endtime-starttime);
     }
 
-    // Write to HDF5
-    starttime   = MPI_Wtime();
-    HighFive::DataSet d_last_chi_min    = file->getDataSet("last_chi_min"   );
-    HighFive::DataSet d_delta_chi       = file->getDataSet("delta_chi"      );
-    HighFive::DataSet d_best_grid_point = file->getDataSet("best_grid_point");
-    HighFive::DataSet d_n_iter          = file->getDataSet("n_iter"         );
-    // write out this grid and universe
-    HighFive::DataSet d_i_grid          = file->getDataSet("i_grid");
-    HighFive::DataSet d_i_univ          = file->getDataSet("i_univ");
-    // This is for the fake data dump
+    if (!noWrite) {
 
-    size_t d_bgn = rankwork[0]*nUniverses;
-    for (auto res : results) {
-       v_iter.push_back(res.n_iter);
-       v_best.push_back(res.best_grid_point);
-       v_last.push_back(res.last_chi_min);
-       v_dchi.push_back(res.delta_chi);
+       // Write to HDF5
+       starttime   = MPI_Wtime();
+       HighFive::DataSet d_last_chi_min    = file->getDataSet("last_chi_min"   );
+       HighFive::DataSet d_delta_chi       = file->getDataSet("delta_chi"      );
+       HighFive::DataSet d_best_grid_point = file->getDataSet("best_grid_point");
+       HighFive::DataSet d_n_iter          = file->getDataSet("n_iter"         );
+       // write out this grid and universe
+       HighFive::DataSet d_i_grid          = file->getDataSet("i_grid");
+       HighFive::DataSet d_i_univ          = file->getDataSet("i_univ");
+       // This is for the fake data dump
+
+       size_t d_bgn = rankwork[0]*nUniverses;
+       for (auto res : results) {
+          v_iter.push_back(res.n_iter);
+          v_best.push_back(res.best_grid_point);
+          v_last.push_back(res.last_chi_min);
+          v_dchi.push_back(res.delta_chi);
+       }
+
+       d_last_chi_min.select(     {d_bgn, 0}, {size_t(v_last.size()), 1}).write(v_last);
+       d_delta_chi.select(        {d_bgn, 0}, {size_t(v_dchi.size()), 1}).write(v_dchi);
+       d_best_grid_point.select(  {d_bgn, 0}, {size_t(v_best.size()), 1}).write(v_best);
+       d_n_iter.select(           {d_bgn, 0}, {size_t(v_iter.size()), 1}).write(v_iter);
+       d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
+       d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
+       endtime   = MPI_Wtime();
+       if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
     }
-
-    d_last_chi_min.select(     {d_bgn, 0}, {size_t(v_last.size()), 1}).write(v_last);
-    d_delta_chi.select(        {d_bgn, 0}, {size_t(v_dchi.size()), 1}).write(v_dchi);
-    d_best_grid_point.select(  {d_bgn, 0}, {size_t(v_best.size()), 1}).write(v_best);
-    d_n_iter.select(           {d_bgn, 0}, {size_t(v_iter.size()), 1}).write(v_iter);
-    d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
-    d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
-    endtime   = MPI_Wtime();
-    if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
 }
 
 inline bool file_exists (const std::string& name) {
@@ -513,6 +523,7 @@ int main(int argc, char* argv[]) {
     ops >> Option("mock",            mockFactor, "Mockfactor");
     bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
     bool statonly    = ops >> Present("stat", "Statistical errors only");
+    bool nowrite    = ops >> Present("nowrite", "Don't write output --- for performance estimates only");
     //bool storeINVCOV = ops >> Present("storeinvcov", "Write inverted covariance matrices to hdf5");
     if (ops >> Present('h', "help", "Show help")) {
         std::cout << "Usage:  [OPTIONS]\n";
@@ -623,7 +634,7 @@ int main(int argc, char* argv[]) {
     SignalGenerator    signal    = {myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
 
     if (NTEST>0) {
-       auto sv = signal.predict(1, false);
+       auto const & sv = signal.predict(1, false);
        std::vector<double> svb(sv.data(), sv.data() + sv.rows() * sv.cols());
        
        double t0 = MPI_Wtime();
@@ -631,12 +642,15 @@ int main(int argc, char* argv[]) {
        double t1 = MPI_Wtime();
        for (int i=0;i<NTEST;++i) collapseVectorEigen(sv, myconf);
        double t2 = MPI_Wtime();
-       for (int i=0;i<NTEST;++i) collapseVectorStd(svb, myconf);
+       //for (int i=0;i<NTEST;++i) collapseVectorEigenOld(sv, myconf);
        double t3 = MPI_Wtime();
+       for (int i=0;i<NTEST;++i) collapseVectorStd(svb, myconf);
+       double t4 = MPI_Wtime();
 
        fmt::print(stderr, "\n {} calls to predict took {} seconds\n",             NTEST, t1-t0);
        fmt::print(stderr, "\n {} calls to collapseVectorEigen took {} seconds\n", NTEST, t2-t1);
-       fmt::print(stderr, "\n {} calls to collapseVectorStd took {} seconds\n",   NTEST, t3-t2);
+       //fmt::print(stderr, "\n {} calls to collapseVectorEigenOld took {} seconds\n", NTEST, t3-t2);
+       fmt::print(stderr, "\n {} calls to collapseVectorStd took {} seconds\n",   NTEST, t4-t3);
        exit(1);
     }
 
@@ -668,18 +682,6 @@ int main(int argc, char* argv[]) {
    
     // First rank also writes the grid so we know what the poins actually are
     if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid());
-
-    // First diy setup to load spectra
-    size_t blocks = nPoints;
-    Bounds domain(1);
-    domain.min[0] = 0;
-    domain.max[0] = blocks-1;
-    diy::RoundRobinAssigner        assigner(world.size(), blocks);
-    diy::RegularDecomposer<Bounds> decomposer(1, domain, blocks);
-    diy::RegularBroadcastPartners  comm(    decomposer, 2, true);
-    diy::RegularMergePartners      partners(decomposer, 2, true);
-    diy::Master master(world, 1, -1, &Block::create, &Block::destroy);
-    diy::decompose(1, world.rank(), domain, assigner, master);
     
     // Add the BG
     TMatrixT<double> _cov = calcCovarianceMatrix(covmat, bgvec);
@@ -688,7 +690,7 @@ int main(int argc, char* argv[]) {
     auto const & INVCOVBG = invertMatrixEigen3(_covcol);
 
     //// Now more blocks as we have universes
-    blocks = world.size();//nPoints;//*nUniverses;
+    size_t blocks = world.size();//nPoints;//*nUniverses;
     if (world.rank()==0) fmt::print(stderr, "FC will be done on {} blocks, distributed over {} ranks\n", blocks, world.size());
     Bounds fc_domain(1);
     fc_domain.min[0] = 0;
@@ -698,15 +700,20 @@ int main(int argc, char* argv[]) {
     diy::RegularBroadcastPartners  fc_comm(    fc_decomposer, 2, true);
     diy::RegularMergePartners      fc_partners(fc_decomposer, 2, true);
     diy::Master                    fc_master(world, 1, -1, &Block::create, &Block::destroy);
+    if (world.rank()==0) fmt::print(stderr, "Decompose\n");
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
 
+    if (world.rank()==0) fmt::print(stderr, "Start Work vector\n");
     std::vector<int> work(nPoints);
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
+    work.clear();
+    work.shrink_to_fit();
 
     double starttime = MPI_Wtime();
-    fc_master.foreach([world, mygrid, covmat, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
-                           { doFC(b, cp, world.rank(), mygrid, xmldata, myconf, covmat, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug); });
+    if (world.rank()==0) fmt::print(stderr, "Start FC\n");
+    fc_master.foreach([world, covmat, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite](Block* b, const diy::Master::ProxyWithLink& cp)
+                           { doFC(b, cp, world.rank(), xmldata, myconf, covmat, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite); });
     double endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
     if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
