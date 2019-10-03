@@ -1061,11 +1061,9 @@ void SBNchi::PerformCholeskyDecomposition(std::vector<double> const & specfull) 
     U.ResizeTo(specfull.size(), specfull.size());
 
     for(int i =0; i<U.GetNcols(); i++) {
-        for(int j =0; j<U.GetNrows(); j++) {
-            if(std::isnan(U(i,j)))
-                U(i,j) = 0;
-            else
-                U(i,j)=U(i,j)*specfull.at(i)*specfull.at(j);
+        for(int j =i; j<U.GetNrows(); j++) {
+            U(i,j)=U(i,j)*specfull[i]*specfull[j];
+            U(j,i)=U(i,j);
         }
     }
 
@@ -1094,14 +1092,14 @@ void SBNchi::PerformCholeskyDecomposition(std::vector<double> const & specfull) 
     for(int i=0; i< eigen_values.GetNoElements(); i++){
         if(eigen_values(i)<=0){
             if(fabs(eigen_values(i))< tol){
-                if(is_verbose)std::cout<<"SBNchi::SampleCovariance\t|| cov has a very small, < "<<tol<<" , negative eigenvalue. Adding it back to diagonal of : "<<eigen_values(i)<<std::endl;
+                if (is_verbose) std::cerr<<"SBNchi::SampleCovariance\t|| cov has a very small, < "<<tol<<" , negative eigenvalue. Adding it back to diagonal of : "<<eigen_values(i)<<std::endl;
 
                 for(int a =0; a<U.GetNcols(); a++){
                     U(a,a) += eigen_values(i);
                 }
 
             }else{
-                std::cout<<"SBNchi::SampleCovariance\t|| 0 or negative eigenvalues! error: Value "<<eigen_values(i)<<" Tolerence "<<tol<<std::endl;
+                std::cerr<<"SBNchi::SampleCovariance\t|| 0 or negative eigenvalues! error: Value "<<eigen_values(i)<<" Tolerence "<<tol<<std::endl;
                 exit(EXIT_FAILURE);
             }
         }
@@ -1143,7 +1141,7 @@ void SBNchi::PerformCholeskyDecomposition(std::vector<double> const & specfull) 
     vec_matrix_lower_triangular.resize(n_t, std::vector<float>(n_t));
     for(int i=0; i< num_bins_total; i++){
         for(int j=0; j< num_bins_total; j++){
-            vec_matrix_lower_triangular[i][j] = matrix_lower_triangular(i,j);//[i][j];
+            vec_matrix_lower_triangular[i][j] = matrix_lower_triangular(i,j);;
         }
     }
 
@@ -1552,7 +1550,7 @@ std::vector<double> SBNchi::SampleCovariance(std::vector<double> const & specful
 
     std::normal_distribution<float> dist_normal(0,1);
 
-    for(int i=0; i<n_t; i++) u(i) = specfull.at(i);
+    for(int i=0; i<n_t; i++) u(i) = specfull[i];
     for(int a=0; a<n_t; a++) gaus_sample(a) = dist_normal(*rangen_twister);	
 
     multi_sample = u + matrix_lower_triangular*gaus_sample;
