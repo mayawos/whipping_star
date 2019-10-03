@@ -26,6 +26,7 @@
 #include "TDecompSVD.h"
 #include "TMatrixDEigen.h"
 #include "TMatrixDSymEigen.h"
+#include <Eigen/Dense>
 
 namespace sbn{
 
@@ -77,6 +78,7 @@ class SBNchi : public SBNconfig{
 	//Used in cholosky decompositions
 	bool cholosky_performed;
 	TMatrixT<float> matrix_lower_triangular;
+	TMatrixT<double> matrix_lower_triangularD;
 	std::vector<std::vector<float>> vec_matrix_lower_triangular;
 
 	//Some reason eventually store the reuslt in vectors, I think there was memory issues.
@@ -150,6 +152,7 @@ class SBNchi : public SBNconfig{
         //SBNspec SampleCovariance(SBNspec *specin);
         std::vector<float> SampleCovariance(SBNspec *specin);
         std::vector<double> SampleCovariance(std::vector<double> const & specin);
+        Eigen::VectorXd SampleCovariance(Eigen::VectorXd const & specin);
 
 	TH1D SamplePoissonVaryCore(SBNspec *specin, int num_MC);
 	TH1D SamplePoissonVaryInput(SBNspec *specin, int num_MC, double maxchi);
