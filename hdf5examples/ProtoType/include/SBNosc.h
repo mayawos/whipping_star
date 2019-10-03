@@ -60,6 +60,7 @@ class SBNosc : public SBNspec{
 	//std::vector<double> OscillateWithAmp(double amp, double amp_sq);
 
 	int LoadModel(NeutrinoModel);	
+	void setModel(NeutrinoModel const &);
 	int calcMassSplittings();	
 
 	int PrecomputeSpectra(double dm);
