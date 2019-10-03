@@ -38,6 +38,11 @@ int SBNosc::LoadModel(NeutrinoModel in){
 	return 0;
 }
 
+void SBNosc::setModel(NeutrinoModel const & in){
+    working_model = in;
+    calcMassSplittings();
+}
+
 /*************************************************
  * for a given working_model.
  * Calculate how many mass splittings, and which "type" it is,
@@ -45,14 +50,16 @@ int SBNosc::LoadModel(NeutrinoModel in){
  * **********************************************/
 
 int SBNosc::calcMassSplittings(){
-	mass_splittings.clear();
+        mass_splittings.clear();
 
-	double fix41   = round(log10(    (working_model.dm41Sq))/mass_step_size)*mass_step_size;
 	if (working_model.numsterile == 1) {
-            mass_splittings.push_back( std::make_pair(fix41,41 ));
+            mass_splittings.push_back(std::make_pair(0.0, 41));
             return 0;
 	}
 
+        // NOTE: the pair's first item is use nowehere ...
+
+	double fix41   = round(log10( working_model.dm41Sq)/mass_step_size)*mass_step_size;
 	double fix51   = round(log10(    (working_model.dm51Sq))/mass_step_size)*mass_step_size;
 	double fix61   = round(log10(    (working_model.dm61Sq))/mass_step_size)*mass_step_size;
 
@@ -417,35 +424,35 @@ Eigen::VectorXd SBNosc::Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::Vecto
         double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
 
         // TODO this should be in a function.
-        switch (which_mode) {
-            case APP_ONLY: //Strictly nu_e app only
+        //switch (which_mode) {
+            //case APP_ONLY: //Strictly nu_e app only
                 prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
                 prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
                 prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
                 prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
-                break;
-            case DIS_ONLY: //Strictly nu_mu dis only
-                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
-                break;
-            case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
-                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
-                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
-                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
-                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
-                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
-                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
-                break;
-            case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
-                prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
-                prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
-                prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
-                prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
-                prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
-                break;
-            case DISE_ONLY: // A strange version where nu_e can appear but not disapear
-                prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
-                break;
-        }
+                //break;
+            //case DIS_ONLY: //Strictly nu_mu dis only
+                //prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                //break;
+            //case BOTH_ONLY: // This allows for both nu_e dis/app and nu_mu dis
+                //prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                //prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                //prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                //prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                //prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                //prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                //break;
+            //case WIERD_ONLY: // A strange version where nu_e can appear but not disapear
+                //prob_mumu      = working_model.oscAmp( 2,  2, which_dm, 2);
+                //prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+                //prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+                //prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+                //prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+                //break;
+            //case DISE_ONLY: // A strange version where nu_e can appear but not disapear
+                //prob_ee        = working_model.oscAmp( 1,  1, which_dm, 2);
+                //break;
+        //}
 
         double osc_amp(0), osc_amp_sq(0);
         int osc_pattern(0);
