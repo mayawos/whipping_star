@@ -80,7 +80,8 @@ class GridPoints {
 };
 
 struct SignalGenerator {
-   sbn::SBNosc osc; sbn::SBNconfig const & conf;
+   //sbn::SBNosc osc; sbn::SBNconfig const & conf;
+   sbn::SBNconfig const & conf;
    GridPoints m_gridpoints; size_t dim2;
    std::vector<Eigen::VectorXd>  const & sinsq;
    std::vector<Eigen::VectorXd>  const & sin;
@@ -88,11 +89,10 @@ struct SignalGenerator {
 
    Eigen::VectorXd predict(size_t i_grid, bool compressed) {
       auto const & gp = m_gridpoints.Get(i_grid);
-      sbn::NeutrinoModel this_model(gp[0], gp[1], gp[2], false);
-      osc.LoadModel(this_model);
-      osc.SetAppMode();
+      sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
       int m_idx = massindex(i_grid);
-      auto ans = osc.Oscillate(sinsq[m_idx], sin[m_idx]);
+      auto ans = Oscillate(sinsq[m_idx], sin[m_idx], this_model, conf);
+
       ans+=core;
       if (compressed) {
          std::vector<double> specfull(ans.data(), ans.data() + ans.rows() * ans.cols());
@@ -102,26 +102,71 @@ struct SignalGenerator {
       }
       else return ans;
    }
-   void testOscillate(size_t i_grid, size_t ncalls) {
-      auto const & gp = m_gridpoints.Get(i_grid);
-      sbn::NeutrinoModel this_model(gp[0], gp[1], gp[2], false);
-      osc.LoadModel(this_model);
-      osc.SetAppMode();
-      int m_idx = massindex(i_grid);
-      for (size_t i=0;i<ncalls;++i) osc.Oscillate(sinsq[m_idx], sin[m_idx]);
-   }
-   void testLoadModel(size_t i_grid, size_t ncalls) {
-      auto const & gp = m_gridpoints.Get(i_grid);
-      sbn::NeutrinoModel this_model(gp[0], gp[1], gp[2], false);
-      for (size_t i=0;i<ncalls;++i) osc.LoadModel(this_model);
-   }
-   void testConstModel(size_t i_grid, size_t ncalls) {
-      auto const & gp = m_gridpoints.Get(i_grid);
-      for (size_t i=0;i<ncalls;++i) sbn::NeutrinoModel(gp[0], gp[1], gp[2], false);
-   }
+   
    int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
    size_t gridsize() {return m_gridpoints.NPoints();}
 
+
+   Eigen::VectorXd Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::VectorXd const & sf_sin, 
+         sbn::NeutrinoModel & working_model, sbn::SBNconfig const & conf) 
+   {
+       Eigen::VectorXd retVec(conf.num_bins_total);
+       retVec.setZero(); // !!!
+       int which_dm = 41;
+
+       double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
+
+       prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+       prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+       prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+       prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+       double osc_amp(0), osc_amp_sq(0);
+       int osc_pattern(0);
+           // Iterate over channels
+        size_t offset(0);
+        for (int i=0; i<conf.num_channels; i++) {
+            size_t nbins_chan = conf.num_bins[i];
+            auto const & thisPattern = conf.subchannel_osc_patterns[i];
+            for (int j=0; j<conf.num_subchannels[i]; j++){
+                osc_pattern = thisPattern[j];
+                switch (osc_pattern){
+                    case 11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case -11:
+                        osc_amp_sq = prob_ee;
+                        break;
+                    case 22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case -22:
+                        osc_amp_sq = prob_mumu;
+                        break;
+                    case 21:
+                        osc_amp    = prob_mue;
+                        osc_amp_sq = prob_mue_sq;
+                        break;
+                    case -21:
+                        osc_amp    = prob_muebar;
+                        osc_amp_sq = prob_muebar_sq;
+                        break;
+                    case 0:
+                    default:
+                        break;
+                }
+
+                // Iterate over detectors
+                for (int d=0; d<conf.num_detectors;++d) {
+                  size_t first  = d*conf.num_bins_detector_block + offset;
+                  retVec.segment(first, nbins_chan) += osc_amp   *  sf_sin.segment(first, nbins_chan);
+                  retVec.segment(first, nbins_chan) += osc_amp_sq*sf_sinsq.segment(first, nbins_chan);
+                }
+                offset +=nbins_chan;
+            }
+        }
+
+    return retVec;
+   }
 };
 
 void createDataSets(HighFive::File* file, size_t nPoints, size_t nUniverses) {
@@ -200,7 +245,7 @@ std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<
 }
 
 double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, Eigen::MatrixXd const & C_inv ) {
-    Eigen::VectorXd DIFF = data - prediction;
+    auto const & DIFF = data - prediction;
     return DIFF.transpose() * C_inv * DIFF; 
 }
 
@@ -289,12 +334,11 @@ Eigen::MatrixXd collapseDetectors(Eigen::MatrixXd const & M, sbn::SBNconfig cons
 }
 
 
-Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::VectorXd const & spec_full, sbn::SBNconfig const & conf, int nBinsC) {
-   Eigen::MatrixXd _cov = calcCovarianceMatrix(covmat, spec_full);
-    auto const & out = collapseDetectors(_cov, conf);
+Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::VectorXd const & spec_full, sbn::SBNconfig const & conf) {
+    auto const & cov = calcCovarianceMatrix(covmat, spec_full);
+    auto const & out = collapseDetectors(cov, conf);
     return invertMatrixEigen3(out);
 }
-
 
 FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
       SignalGenerator signal,
@@ -315,7 +359,7 @@ FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_co
        if(n_iter!=0){
            //Calculate current full covariance matrix, collapse it, then Invert.
            auto const & temp  = signal.predict(best_grid_point, false);
-           invcov = updateInvCov(covmat, temp, myconf, 90);
+           invcov = updateInvCov(covmat, temp, myconf);
        }
        //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
        float chi_min = FLT_MAX;
@@ -428,7 +472,6 @@ int main(int argc, char* argv[]) {
     diy::mpi::environment env(argc, argv);
     diy::mpi::communicator world;
 
-    size_t nBinsC=90;
     size_t nPoints=-1;
     int mockFactor=1;
     size_t nUniverses=1;
@@ -457,7 +500,6 @@ int main(int argc, char* argv[]) {
     ops >> Option("tol",             tol,        "Minimiser tolerance");
     ops >> Option("iter",            iter,       "Max number of iterations.");
     ops >> Option('t', "tag",        tag,        "Tag.");
-    ops >> Option("nbinsC",          nBinsC,     "Number of collapsed bins in 2d dataset");
     ops >> Option("core",            f_CV,       "Central values filename.");
     ops >> Option('b', "background", f_BG,       "Backgrounds filename.");
     ops >> Option('c', "covmat",     f_COV,      "Covariance matrix filename.");
@@ -576,7 +618,8 @@ int main(int argc, char* argv[]) {
     }
 
     GridPoints GP(mygrid.GetGrid());
-    SignalGenerator    signal    = {myosc, myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
+    //SignalGenerator    signal    = {myosc, myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
+    SignalGenerator    signal    = {myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
 
     if (NTEST>0) {
        auto sv = signal.predict(1, false);
@@ -589,19 +632,10 @@ int main(int argc, char* argv[]) {
        double t2 = MPI_Wtime();
        for (int i=0;i<NTEST;++i) collapseVectorStd(svb, myconf);
        double t3 = MPI_Wtime();
-       signal.testOscillate(1, NTEST);
-       double t4 = MPI_Wtime();
-       signal.testLoadModel(1, NTEST);
-       double t5 = MPI_Wtime();
-       signal.testConstModel(1, NTEST);
-       double t6 = MPI_Wtime();
 
        fmt::print(stderr, "\n {} calls to predict took {} seconds\n",             NTEST, t1-t0);
        fmt::print(stderr, "\n {} calls to collapseVectorEigen took {} seconds\n", NTEST, t2-t1);
        fmt::print(stderr, "\n {} calls to collapseVectorStd took {} seconds\n",   NTEST, t3-t2);
-       fmt::print(stderr, "\n {} calls to oscillate took {} seconds\n",           NTEST, t4-t3);
-       fmt::print(stderr, "\n {} calls to LoadModel took {} seconds\n",           NTEST, t5-t4);
-       fmt::print(stderr, "\n {} calls to NeutrinoModel took {} seconds\n\n",     NTEST, t6-t5);
        exit(1);
     }
 
