@@ -1,19 +1,17 @@
 #include <Eigen/Dense>
 
-// TODO add mode logic if necessary
-Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd const & vin, sbn::SBNconfig const & conf){
+
+Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd  const & vin, sbn::SBNconfig const & conf){
    // All we want is a representation with the subchannels added together
    Eigen::VectorXd cvec(conf.num_bins_total_compressed);
    cvec.setZero();
    for (int d=0; d<conf.num_detectors;++d) {
       size_t offset_in(0), offset_out(0);
       for (int i=0; i<conf.num_channels; i++) {
-          size_t nbins_chan = conf.num_bins.at(i);
-          for (int j=0; j<conf.num_subchannels.at(i); j++) {
+          size_t nbins_chan = conf.num_bins[i];
+          for (int j=0; j<conf.num_subchannels[i]; j++) {
              size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
              size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
-             //Eigen::Map<Eigen::VectorXd>(cvec.data() + first_out, nbins_chan, 1) += Eigen::Map<const Eigen::VectorXd>(vin.data() + first_in, nbins_chan, 1);
-             //Eigen::Map<Eigen::VectorXd>(cvec.data() + first_out, nbins_chan, 1) += Eigen::Map<const Eigen::VectorXd>(vin.data() + first_in, nbins_chan, 1);
              cvec.segment(first_out, nbins_chan) += vin.segment(first_in, nbins_chan);
              offset_in +=nbins_chan;
           }
@@ -28,8 +26,8 @@ std::vector<double> collapseVectorStd(std::vector<double> const & vin, sbn::SBNc
    for (int d=0; d<conf.num_detectors;++d) {
       size_t offset_in(0), offset_out(0);
       for (int i=0; i<conf.num_channels; i++) {
-          size_t nbins_chan = conf.num_bins.at(i);
-          for (int j=0; j<conf.num_subchannels.at(i); j++) {
+          size_t nbins_chan = conf.num_bins[i];
+          for (int j=0; j<conf.num_subchannels[i]; j++) {
              size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
              size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
              std::transform (
