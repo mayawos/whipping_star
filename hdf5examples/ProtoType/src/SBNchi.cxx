@@ -1125,8 +1125,8 @@ void SBNchi::PerformCholeskyDecomposition(std::vector<double> const & specfull) 
 
     }
 
-    TMatrixT<float> upper_trian(n_t,n_t);
-    matrix_lower_triangular.ResizeTo(n_t,n_t);
+    TMatrixT<double> upper_trian(n_t,n_t);
+    matrix_lower_triangularD.ResizeTo(n_t,n_t);
     upper_trian = chol->GetU();
     
     if (!upper_trian.IsValid()) {
@@ -1134,16 +1134,16 @@ void SBNchi::PerformCholeskyDecomposition(std::vector<double> const & specfull) 
     }
 
 
-    matrix_lower_triangular = upper_trian;
-    matrix_lower_triangular.T();
+    matrix_lower_triangularD = upper_trian;
+    matrix_lower_triangularD.T();
 
 
-    vec_matrix_lower_triangular.resize(n_t, std::vector<float>(n_t));
-    for(int i=0; i< num_bins_total; i++){
-        for(int j=0; j< num_bins_total; j++){
-            vec_matrix_lower_triangular[i][j] = matrix_lower_triangular(i,j);;
-        }
-    }
+    //vec_matrix_lower_triangular.resize(n_t, std::vector<double>(n_t));
+    //for(int i=0; i< num_bins_total; i++){
+        //for(int j=0; j< num_bins_total; j++){
+            //vec_matrix_lower_triangular[i][j] = matrix_lower_triangular(i,j);;
+        //}
+    //}
 
     delete chol;
     cholosky_performed = true;
@@ -1544,21 +1544,41 @@ std::vector<double> SBNchi::SampleCovariance(std::vector<double> const & specful
 
     int n_t = specfull.size();
 
-    TVectorT<float> u(n_t);
-    TVectorT<float> gaus_sample(n_t);
-    TVectorT<float> multi_sample(n_t);
+    TVectorT<double> u(n_t);
+    TVectorT<double> gaus_sample(n_t);
+    TVectorT<double> multi_sample(n_t);
 
-    std::normal_distribution<float> dist_normal(0,1);
+    std::normal_distribution<double> dist_normal(0,1);
 
     for(int i=0; i<n_t; i++) u(i) = specfull[i];
     for(int a=0; a<n_t; a++) gaus_sample(a) = dist_normal(*rangen_twister);	
 
-    multi_sample = u + matrix_lower_triangular*gaus_sample;
+    multi_sample = u + matrix_lower_triangularD*gaus_sample;
 
     std::vector<double> sampled_fullvector(n_t, 0.0);
     for(int j=0; j<n_t; j++) sampled_fullvector[j] = multi_sample(j);
 
     return sampled_fullvector;
+}
+
+Eigen::VectorXd SBNchi::SampleCovariance(Eigen::VectorXd const & specfull) {
+    if (!cholosky_performed) this->PerformCholeskyDecomposition(
+        std::vector<double>(specfull.data(), specfull.data() + specfull.rows()*specfull.cols())
+        ); 
+
+    int n_t = specfull.rows();
+
+    TVectorT<double> gaus_sample(n_t);
+    TVectorT<double> multi_sample(n_t);
+
+    std::normal_distribution<double> dist_normal(0,1);
+    for(int a=0; a<n_t; a++) gaus_sample[a] = dist_normal(*rangen_twister);	
+    multi_sample = matrix_lower_triangularD*gaus_sample;
+
+    Eigen::VectorXd ret = specfull;
+    for(int a=0; a<n_t; ++a) ret[a] += multi_sample[a];
+
+    return ret;
 }
 
 // TODO: do the sampling without root and only use call to CollapseVectorStandAlone
