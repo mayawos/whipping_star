@@ -1,4 +1,4 @@
-#pragma GCC optimize("O3","unroll-loops","inline", "peel-loops")
+//#pragma GCC optimize("O3","unroll-loops","inline")
 
 #include <cmath>
 #include <vector>
@@ -31,14 +31,11 @@
 #include "params.h"
 #include "SBNconfig.h"
 #include "SBNchi.h"
-#include "SBNspec.h"
-#include "SBNosc.h"
-#include "SBNcovariance.h"
-#include "SBNfeld.h"
 #include <Eigen/Dense>
 #include <Eigen/SVD>
-//#include "nomad.hpp"
 #include "tools.h"
+#include "prob.h"
+#include "ngrid.h"
 
 
 using namespace std;
@@ -94,12 +91,7 @@ struct SignalGenerator {
       auto ans = Oscillate(sinsq[m_idx], sin[m_idx], this_model, conf);
 
       ans+=core;
-      if (compressed) {
-         //std::vector<double> specfull(ans.data(), ans.data() + ans.rows() * ans.cols());
-         //std::vector<double> speccoll = collapseVectorStd(specfull, conf);
-         //return Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(),1 );
-         return collapseVectorEigen(ans, conf);
-      }
+      if (compressed) return collapseVectorEigen(ans, conf);
       else return ans;
    }
    
@@ -225,6 +217,21 @@ std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
    }
    return ret;
 }
+std::vector<std::vector<double>> mkHistoVecStd(std::string const & prefix, std::vector<string> const & fullnames) {
+   // TODO can we have all spectra in a single file or something?
+   std::string mass_tag = "";
+   std::vector<std::vector<double> > temp;
+   float dm(-2.0);
+   while( dm < 2.3) {
+      std::ostringstream out;
+      out <<std::fixed<< std::setprecision(4) << dm;
+      mass_tag = out.str();
+      dm+=0.2;
+      std::string fname = prefix+mass_tag+".SBNspec.root";
+      temp.push_back(flattenHistos(readHistos(fname, fullnames)));
+   }
+   return temp;
+}
 
 std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<string> const & fullnames) {
    // TODO can we have all spectra in a single file or something?
@@ -245,7 +252,11 @@ std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<
 }
 
 double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, Eigen::MatrixXd const & C_inv ) {
-    return (data - prediction).transpose() * C_inv * (data - prediction);
+   auto const & diff = data-prediction;
+   return diff.transpose() * C_inv * diff;
+}
+double calcChi(Eigen::VectorXd const & diff, Eigen::MatrixXd const & C_inv ) {
+   return diff.transpose() * C_inv * diff;
 }
 
 std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
@@ -253,9 +264,8 @@ std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::Matrix
 {
    double chimin=std::numeric_limits<double>::infinity();
    int bestP(0);
-
    for (size_t i=0; i<signal.gridsize(); ++i) {
-       double chi = calcChi(data, signal.predict(i, true), C_inv);
+       double chi = calcChi(data - signal.predict(i, true), C_inv);
        if (chi<chimin) {
           chimin = chi;
           bestP=i;
@@ -426,14 +436,6 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
           results.push_back(coreFC(fake_dataC, speccoll,
                    signal, INVCOVBG, ECOV, myconf, tol, iter));
 
-
-          //fake_data = mychi.SampleCovariance(specfull); // NOTE on the first call to SampleCov the cholesky decomp is performed
-          //fake_dataC = collapseVectorStd(fake_data, myconf);
-          //results.push_back(coreFC(
-                   //Eigen::Map<Eigen::VectorXd>(fake_dataC.data(), fake_dataC.size(), 1), // costly?
-                   //speccoll,
-                   ////Eigen::Map<Eigen::VectorXd>(speccoll.data(), speccoll.size(), 1),
-                   //signal, INVCOVBG, ECOV, myconf, tol, iter));
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
        }
@@ -524,7 +526,6 @@ int main(int argc, char* argv[]) {
     bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
     bool statonly    = ops >> Present("stat", "Statistical errors only");
     bool nowrite    = ops >> Present("nowrite", "Don't write output --- for performance estimates only");
-    //bool storeINVCOV = ops >> Present("storeinvcov", "Write inverted covariance matrices to hdf5");
     if (ops >> Present('h', "help", "Show help")) {
         std::cout << "Usage:  [OPTIONS]\n";
         std::cout << ops;
@@ -532,15 +533,9 @@ int main(int argc, char* argv[]) {
     }
     
     if( world.rank()==0 ) {
-      fmt::print(stderr, "\n*** This is diy running highfivewrite ***\n");
+      fmt::print(stderr, "\n*** This is diy running SBN Feldman Cousins ***\n");
     }
 
-    NGrid mygrid;
-    mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1 --- can't change easily --- sterile mass
-    mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1 --- arbirtrarily dense! mixing angle nu_e --- can change ywidth. Try 20^6
-    mygrid.AddFixedDimension("um4", 0.0);
-
-    nPoints = mygrid.f_num_total_points;
 
 
     // Whole bunch of tests
@@ -561,6 +556,8 @@ int main(int argc, char* argv[]) {
           exit(1);
        }
     }
+    
+    double time0 = MPI_Wtime();
 
     // Read the xml file on rank 0
     std::string line, text;
@@ -574,23 +571,35 @@ int main(int argc, char* argv[]) {
     if ( world.rank() != 0 ) text.resize(textsize);
     MPI_Bcast(const_cast<char*>(text.data()), textsize, MPI_CHAR, 0, world);
 
+    // Central configuration object
     const char* xmldata = text.c_str();
     sbn::SBNconfig myconf(xmldata, false);
 
-    // Central values FIXME don't read on every rank!
-    std::vector<TH1D> cvhist = readHistos(f_CV, myconf.fullnames);
-    sbn::SBNosc myosc(cvhist, xmldata);
-    
-    // TODO find a way to serialize and reconstruct TH1D that is not too painful
-    double time0 = MPI_Wtime();
-    std::vector<Eigen::VectorXd >     sinsqvec_eig = mkHistoVec(tag+"_SINSQ_dm_", myconf.fullnames);
-    std::vector<Eigen::VectorXd >     sinvec_eig   = mkHistoVec(tag+"_SIN_dm_"  , myconf.fullnames);
-    double time1 = MPI_Wtime();
+    // Pre-oscillated spectra
+    std::vector<double> sinsqvec, sinvec;
+    std::vector<Eigen::VectorXd > sinsqvec_eig, sinvec_eig;
+    int nFilesIn(0);
+    if (world.rank()==0) {
+       auto const & temp =mkHistoVecStd(tag+"_SINSQ_dm_", myconf.fullnames);
+       nFilesIn = temp.size();
+       sinsqvec = asVector(temp);
+       sinvec   = asVector(mkHistoVecStd(tag+"_SIN_dm_"  , myconf.fullnames));
+    }
+    diy::mpi::broadcast(world, sinsqvec, 0);
+    diy::mpi::broadcast(world, sinvec,   0);
+    diy::mpi::broadcast(world, nFilesIn, 0);
+    for (auto v : splitVector(sinsqvec, nFilesIn)) sinsqvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
+    for (auto v : splitVector(sinvec  , nFilesIn))   sinvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
 
-    if (world.rank()==0) fmt::print(stderr, "[{}] loading spectra the new way took {} seconds\n",world.rank(), time1 - time0);
+    // Core spectrum
+    std::vector<double> core;
+    if (world.rank()==0) {
+       auto const & cvhist = readHistos(f_CV, myconf.fullnames);
+       core = flattenHistos(cvhist);
+    }
+    diy::mpi::broadcast(world, core, 0);
 
-    std::vector<double> const core  = flattenHistos(cvhist);
-    Eigen::Map<const Eigen::VectorXd> ecore(core.data(), core.size(), 1);
+    Eigen::Map<Eigen::VectorXd> ecore(core.data(), core.size(), 1);
 
     // Background
     std::vector<double> bgvec;
@@ -628,10 +637,26 @@ int main(int argc, char* argv[]) {
        covmat.ResizeTo(nBins, nBins);
        covmat.Zero();
     }
+    
+    // Use the BG only inv cov matrix as start point
+    TMatrixT<double> _cov = calcCovarianceMatrix(covmat, bgvec);
+    Eigen::Map<const Eigen::MatrixXd> ecov(_cov.GetMatrixArray(), _cov.GetNcols(), _cov.GetNcols());
+    auto const & _covcol = collapseDetectors(ecov, myconf);
+    auto const & INVCOVBG = invertMatrixEigen3(_covcol);
 
+    // Setup grid
+    NGrid mygrid;
+    mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1 --- can't change easily --- sterile mass
+    mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1 --- arbirtrarily dense! mixing angle nu_e --- can change ywidth. Try 20^6
+    mygrid.AddFixedDimension("um4", 0.0);
+    nPoints = mygrid.f_num_total_points;
     GridPoints GP(mygrid.GetGrid());
-    //SignalGenerator    signal    = {myosc, myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
+
+    // Finally, the signal generator
     SignalGenerator    signal    = {myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
+    
+    double time1 = MPI_Wtime();
+    if (world.rank()==0) fmt::print(stderr, "[{}] Input preparation took {} seconds\n",world.rank(), time1 - time0);
 
     if (NTEST>0) {
        auto const & sv = signal.predict(1, false);
@@ -642,14 +667,12 @@ int main(int argc, char* argv[]) {
        double t1 = MPI_Wtime();
        for (int i=0;i<NTEST;++i) collapseVectorEigen(sv, myconf);
        double t2 = MPI_Wtime();
-       //for (int i=0;i<NTEST;++i) collapseVectorEigenOld(sv, myconf);
        double t3 = MPI_Wtime();
        for (int i=0;i<NTEST;++i) collapseVectorStd(svb, myconf);
        double t4 = MPI_Wtime();
 
        fmt::print(stderr, "\n {} calls to predict took {} seconds\n",             NTEST, t1-t0);
        fmt::print(stderr, "\n {} calls to collapseVectorEigen took {} seconds\n", NTEST, t2-t1);
-       //fmt::print(stderr, "\n {} calls to collapseVectorEigenOld took {} seconds\n", NTEST, t3-t2);
        fmt::print(stderr, "\n {} calls to collapseVectorStd took {} seconds\n",   NTEST, t4-t3);
        exit(1);
     }
@@ -657,18 +680,20 @@ int main(int argc, char* argv[]) {
 
 
     if( world.rank()==0 ) {
-      fmt::print(stderr, "\n    Output will be written to {}\n", out_file);
-      fmt::print(stderr, "\n    Points:  {}\n", nPoints);
-      fmt::print(stderr, "\n    nBins:  {}\n", nBins);
-      fmt::print(stderr, "\n    Universes: {}\n", nUniverses);
-      fmt::print(stderr, "\n    f_BG:  {}\n", f_BG);
-      fmt::print(stderr, "\n    f_CV:  {}\n", f_CV);
-      fmt::print(stderr, "\n    f_COV:  {}\n", f_COV);
-      fmt::print(stderr, "\n    iter :  {}\n", iter);
-      fmt::print(stderr, "\n    tol:    {}\n", tol);
-      if (statonly) fmt::print(stderr, "\n    S T A T  O N L Y \n");
-      if (debug) fmt::print(stderr, "\n    D E B U G \n");
-      fmt::print(stderr, "\n    Total size of dataset:  {}\n", nPoints*nUniverses);
+      fmt::print(stderr, "***********************************\n");
+      fmt::print(stderr, "    Output will be written to {}\n", out_file);
+      fmt::print(stderr, "    Points:  {}\n"                 ,  nPoints);
+      fmt::print(stderr, "    nBins:  {}\n"                  , nBins);
+      fmt::print(stderr, "    Universes: {}\n"               , nUniverses);
+      fmt::print(stderr, "    Total size of dataset:  {}\n"  , nPoints*nUniverses);
+      fmt::print(stderr, "    f_BG:  {}\n"                   , f_BG);
+      fmt::print(stderr, "    f_CV:  {}\n"                   , f_CV);
+      fmt::print(stderr, "    f_COV:  {}\n"                  , f_COV);
+      fmt::print(stderr, "    iter :  {}\n"                  , iter);
+      fmt::print(stderr, "    tol:    {}\n"                  , tol);
+      if (statonly) fmt::print(stderr, "    S T A T  O N L Y \n");
+      if (debug)    fmt::print(stderr,    "    D E B U G \n"    );
+      if (nowrite)  fmt::print(stderr,  "  N O   W R I T E \n"  );
       fmt::print(stderr, "***********************************\n");
     }
     
@@ -682,12 +707,6 @@ int main(int argc, char* argv[]) {
    
     // First rank also writes the grid so we know what the poins actually are
     if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid());
-    
-    // Add the BG
-    TMatrixT<double> _cov = calcCovarianceMatrix(covmat, bgvec);
-    Eigen::Map<const Eigen::MatrixXd> ecov(_cov.GetMatrixArray(), _cov.GetNcols(), _cov.GetNcols());
-    auto const & _covcol = collapseDetectors(ecov, myconf);
-    auto const & INVCOVBG = invertMatrixEigen3(_covcol);
 
     //// Now more blocks as we have universes
     size_t blocks = world.size();//nPoints;//*nUniverses;
@@ -700,10 +719,8 @@ int main(int argc, char* argv[]) {
     diy::RegularBroadcastPartners  fc_comm(    fc_decomposer, 2, true);
     diy::RegularMergePartners      fc_partners(fc_decomposer, 2, true);
     diy::Master                    fc_master(world, 1, -1, &Block::create, &Block::destroy);
-    if (world.rank()==0) fmt::print(stderr, "Decompose\n");
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
 
-    if (world.rank()==0) fmt::print(stderr, "Start Work vector\n");
     std::vector<int> work(nPoints);
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
