@@ -1,5 +1,5 @@
 project                     (sbn-diyhighfive)
-cmake_minimum_required      (VERSION 2.8)
+cmake_minimum_required      (VERSION 3.9)
 
 option                      (diy_thread     "Enable diy threading"                 OFF)
 
@@ -7,29 +7,39 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_FLAGS "-Wall -ggdb -O3")# -fPermissive")
-set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-#set(CMAKE_CXX_FLAGS_DEBUG "-g")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS "-march=${ARCH} -Wall -O3")# -fPermissive")
+#set (CMAKE_CXX_FLAGS_DEBUG " -fno-omit-frame-pointer -fsanitize=address ${CMAKE_CXX_FLAGS_DEBUG}")
+#set (CMAKE_LINKER_FLAGS_DEBUG "-fno-omit-frame-pointer -fsanitize=address ${CMAKE_LINKER_FLAGS_DEBUG})")
+#set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-#find_package(OpenMP)
-#if(OpenMP_CXX_FOUND)
-  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-#endif()
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
+
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT supported OUTPUT error)
+
+if( supported )
+    message(STATUS "IPO / LTO enabled")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+else()
+    message(STATUS "IPO / LTO not supported: <${error}>")
+endif()
 
 
 ## AddressSanitize
-#set(CMAKE_C_FLAGS_ASAN
-    #"-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
-    #CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
-    #FORCE)
-#set(CMAKE_CXX_FLAGS_ASAN
-    #"-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
-    #CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
-    #FORCE)
+set(CMAKE_C_FLAGS_ASAN
+    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+    CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
+    FORCE)
+set(CMAKE_CXX_FLAGS_ASAN
+    "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+    CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
+    FORCE)
 
-# LeakSanitizer
+ #LeakSanitizer
 set(CMAKE_C_FLAGS_LSAN
     "-fsanitize=leak -fno-omit-frame-pointer -g -O1"
     CACHE STRING "Flags used by the C compiler during LeakSanitizer builds."
@@ -78,6 +88,9 @@ find_package                (MPI REQUIRED)
 set                     (libraries ${libraries} ${HDF5_C_LIBRARIES})
 #set                     (libraries ${libraries} ${HDF5_C_LIBRARIES} ${NOMAD_INCLUDE_DIRS}/../lib/libnomad.so)
 
+find_package(GSL REQUIRED)
+set                     (libraries ${libraries} ${GSL_LIBRARIES})
+
 
 add_definitions         (-DDIY_NO_THREADS)
 # DIY
@@ -94,43 +107,19 @@ set (MY_PUBLIC_HEADERS
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${DIY_INCLUDE_DIRS}
+                            ${GSL_INCLUDE_DIRS}
                             ${HDF5_INCLUDE_DIRS}
-                            #${SGTE_INCLUDE_DIRS}
                             ${EIGEN3_INCLUDE_DIR}
                             ${HIGHFIVE_DIR}/include 
                             SYSTEM ${MPI_INCLUDE_PATH}
                             )
+                            #${SGTE_INCLUDE_DIRS}
                             #${NOMAD_INCLUDE_DIRS}
                         
-                        #FIND_PACKAGE(ROOT COMPONENTS MathCore MathMore)# COMPONENTS Core Cint RIO Net Hist Graf Graf3d Gpad Tree Rint Postscript Matrix Physics MathCore Thread)
 
-if(ROOT_FOUND)
-	message("Found ROOT using CMAKE FIND_PACKAGE")
-	include(${ROOT_USE_FILE})
-ELSE()
-	message("ROOT not compiled using CMAKE, use root-config")
-	#Get our ROOT libraries and such
-	FIND_PROGRAM(ROOT_CONFIG root-config)
-	EXEC_PROGRAM(${ROOT_CONFIG} ARGS --cflags --glibs OUTPUT_VARIABLE ROOT_CXX_FLAGS)
-	message("ROOT cxx flags set to: ${ROOT_CXX_FLAGS}")
-ENDIF()
+set (ROOT_LIBS "-I${ROOTSYS}/include -L${ROOTSYS}/lib -lGui -lCore -lImt -lRIO -lNet -lHist -lGraf -lGraf3d -lGpad -lROOTDataFrame -lROOTVecOps -lTree -lTreePlayer -lRint -lPostscript -lMatrix -lPhysics -lMathCore -lThread -lMultiProc")
 
-#Get our GSL libraries
-FIND_PROGRAM(GSL_CONFIG gsl-config)
-EXEC_PROGRAM(${GSL_CONFIG} ARGS --cflags OUTPUT_VARIABLE GSL_CXX_FLAGS)
-EXEC_PROGRAM(${GSL_CONFIG} ARGS --libs OUTPUT_VARIABLE GSL_LIBS)
-
-#message("@main CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
-#unset (CMAKE_CXX_FLAGS)
-
-message("GSL_LIBS: ${GSL_LIBS}")
-message("GSL_CXX_FLAGS: ${GSL_CXX_FLAGS}")
-#set (CMAKE_SO_CXX_FLAGS " ${ROOT_CXX_FLAGS} ${GSL_LIBS} ${GSL_CXX_FLAGS} ${CMAKE_CXX_FLAGS} -w -Wno-deprecated-declarations")
-#set (CMAKE_ACC_CXX_FLAGS "${CMAKE_GPU_CXX_FLAGS} ${CMAKE_SO_CXX_FLAGS} -g")
-#set (CMAKE_PCC_CXX_FLAGS "-ta=multicore -Minfo=accel -acc -w ${CMAKE_SO_CXX_FLAGS}")
-
-#set (CMAKE_CXX_FLAGS "${CMAKE_ACC_CXX_FLAGS}")
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ROOT_CXX_FLAGS} ${GSL_CXX_FLAGS}")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ROOT_LIBS}")
 message("CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 
 # Figure out correct library suffix
@@ -148,8 +137,9 @@ if (NOT HIGHFIVE_DIR)
     message                 (FATAL_ERROR " Need HighFive in order to build program --- check -DHIGHFIVE_DIR")
 endif                       ()
 
-
-
+if (NOT ROOTSYS)
+    message                 (FATAL_ERROR " Unfortunately need ROOT in order to build program --- check -DROOTSYS")
+endif                       ()
 
 
 find_file(HAVE_H5_H
