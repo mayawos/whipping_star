@@ -68,8 +68,9 @@ std::vector<double> collapseVector(std::vector<double> const & vin, sbn::SBNconf
 }
 
 // Split input vector into pieces of similar size
-std::vector<std::vector<int>> splitVector(const std::vector<int>& vec, size_t n) {
-    std::vector<std::vector<int>> outVec;
+template <typename T>
+std::vector<std::vector<T>> splitVector(const std::vector<T>& vec, size_t n) {
+    std::vector<std::vector<T>> outVec;
     size_t length = vec.size() / n;
     size_t remain = vec.size() % n;
     size_t begin = 0;
@@ -77,7 +78,7 @@ std::vector<std::vector<int>> splitVector(const std::vector<int>& vec, size_t n)
 
     for (size_t i = 0; i < std::min(n, vec.size()); ++i) {
         end += (remain > 0) ? (length + !!(remain--)) : length;
-        outVec.push_back(std::vector<int>(vec.begin() + begin, vec.begin() + end));
+        outVec.push_back(std::vector<T>(vec.begin() + begin, vec.begin() + end));
         begin = end;
     }
     return outVec;
