@@ -256,7 +256,8 @@ double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction,
    return diff.transpose() * C_inv * diff;
 }
 double calcChi(Eigen::VectorXd const & diff, Eigen::MatrixXd const & C_inv ) {
-   return diff.transpose() * C_inv * diff;
+   auto const & dt = diff.transpose();
+   return dt * C_inv * diff;
 }
 
 std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
