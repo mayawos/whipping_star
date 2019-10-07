@@ -1,7 +1,7 @@
 #include <Eigen/Dense>
 
 
-Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd  const & vin, sbn::SBNconfig const & conf){
+inline Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd  const & vin, sbn::SBNconfig const & conf){
    // All we want is a representation with the subchannels added together
    Eigen::VectorXd cvec(conf.num_bins_total_compressed);
    cvec.setZero();
@@ -12,13 +12,13 @@ Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd  const & vin, sbn::SBNconfig
           for (int j=0; j<conf.num_subchannels[i]; j++) {
              size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
              size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
-             cvec.segment(first_out, nbins_chan) += vin.segment(first_in, nbins_chan);
+             cvec.segment(first_out, nbins_chan).noalias() += vin.segment(first_in, nbins_chan);
              offset_in +=nbins_chan;
           }
           offset_out += nbins_chan;
       }
    }
-   return cvec;
+   return std::move(cvec);
 }
 std::vector<double> collapseVectorStd(std::vector<double> const & vin, sbn::SBNconfig const & conf){
    // All we want is a representation with the subchannels added together
