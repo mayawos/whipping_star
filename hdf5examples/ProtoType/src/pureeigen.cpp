@@ -96,27 +96,25 @@ class SignalGenerator {
          m_sinsq = sinsq;
          m_sin = sin;
          m_core = core;
+         retVec = Eigen::VectorXd(m_conf.num_bins_total);
       }
 
    Eigen::VectorXd predict(size_t i_grid, bool compressed) {
       auto const & gp = m_gridpoints.Get(i_grid);
       sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
       int m_idx = massindex(i_grid);
-      auto ans = Oscillate(m_sinsq[m_idx], m_sin[m_idx], this_model);
+      Oscillate(m_sinsq[m_idx], m_sin[m_idx], this_model);
 
-      ans.noalias()+=m_core;
-      if (compressed) return collapseVectorEigen(ans, m_conf);
-      else return ans;
+      if (compressed) return collapseVectorEigen(m_core+retVec, m_conf);
+      else return m_core+retVec;
    }
    
    int massindex(size_t igrd) {return int(floor( (igrd) / m_dim2 ));}
    size_t gridsize() {return m_gridpoints.NPoints();}
 
-
-   Eigen::VectorXd Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::VectorXd const & sf_sin, 
+   void Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::VectorXd const & sf_sin, 
          sbn::NeutrinoModel & working_model) 
    {
-       Eigen::VectorXd retVec(m_conf.num_bins_total);
        retVec.setZero(); // !!!
        int which_dm = 41;
 
@@ -170,15 +168,14 @@ class SignalGenerator {
                 offset +=nbins_chan;
             }
         }
-
-    return retVec;
    }
+
    private:
       sbn::SBNconfig m_conf;
       GridPoints m_gridpoints;
       size_t m_dim2;
       std::vector<Eigen::VectorXd> m_sinsq, m_sin;
-      Eigen::VectorXd m_core;
+      Eigen::VectorXd m_core, retVec;
 };
 
 struct SignalGeneratorC {
@@ -358,22 +355,25 @@ std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<
 
 inline double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, Eigen::MatrixXd const & C_inv ) {
    auto const & diff = data-prediction;
-   return diff.transpose() * C_inv * diff;
+   return std::move(diff.transpose() * C_inv * diff);
 }
 inline double calcChi(Eigen::VectorXd const & diff, Eigen::MatrixXd const & C_inv ) {
-   auto const & dt = diff.transpose();
-   auto const & temp = dt * C_inv;// * diff;
-   auto const & ret = temp * diff;
-   return ret;
+   //auto const & dt = diff.transpose();
+   //auto const & temp = dt * C_inv;// * diff;
+   //auto const & ret = temp * diff;
+   return std::move(diff.transpose() * C_inv * diff);
 }
 
 inline std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
    SignalGenerator signal)
 {
    double chimin=std::numeric_limits<double>::infinity();
+   Eigen::VectorXd diff(data.rows());
    int bestP(0);
    for (size_t i=0; i<signal.gridsize(); ++i) {
-       double chi = calcChi(data - signal.predict(i, true), C_inv);
+      diff = data - signal.predict(i, true);
+      double chi = calcChi(diff, C_inv);
+       //double chi = calcChi(data, signal.predict(i, true), C_inv);
        if (chi<chimin) {
           chimin = chi;
           bestP=i;
@@ -382,7 +382,7 @@ inline std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen:
    return {chimin, bestP};
 }
 
-std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
+inline std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
    SignalGenerator signal, std::vector<size_t> const & goodpoints)
 {
    double chimin=std::numeric_limits<double>::infinity();
@@ -422,7 +422,7 @@ TMatrixT<double> calcCovarianceMatrix(TMatrixT<double> const & M, std::vector<do
 }
 
 // Can we optimise this?
-Eigen::MatrixXd calcCovarianceMatrix(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec){
+inline Eigen::MatrixXd calcCovarianceMatrix(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec){
    Eigen::MatrixXd test(M.cols(), M.cols());
     for(int i =0; i<M.cols(); i++) {
         for(int j =i; j<M.rows(); j++) {
@@ -433,30 +433,13 @@ Eigen::MatrixXd calcCovarianceMatrix(Eigen::MatrixXd const & M, Eigen::VectorXd 
     }
     return test;
 }
-Eigen::MatrixXd calcCovarianceMatrixFast(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec){
-   Eigen::MatrixXd ret = M;
-   ret.array() *= (spec*spec.transpose()).array();
-   //Eigen::MatrixXd test(M.cols(), M.cols());
-    //for(int i =0; i<M.cols(); i++) {
-        //for(int j =i; j<M.rows(); j++) {
-            //test(i,j) = M(i,j)*spec[i]*spec[j];
-            ////if (i==j) test(i,i) += spec[i];
-            //test(j,i)=test(i,j);
-        //}
-    //}
-    //std::cerr << test.sum() << " " << ret.sum() << "\n";
-    //abort();
-   ret += Eigen::MatrixXd::Identity(M.rows(), M.rows())*spec.transpose();
-   return ret;
-   //return M;
-    //for(int i =0; i<M.cols(); i++) {
-        //for(int j =i; j<M.rows(); j++) {
-            ////test(i,j) = M(i,j)*spec[i]*spec[j];
-            //if (i==j) test(i,i) += spec[i];
-            //test(j,i)=test(i,j);
-        //}
-    //}
-    //return test;
+inline Eigen::MatrixXd calcCovarianceMatrixFast(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec) {
+   //Eigen::MatrixXd ret = M;
+   Eigen::MatrixXd ret(M.cols(), M.cols());// = M;
+   ret.setZero();
+   ret.array()    += M.array()*(spec*spec.transpose()).array();
+   ret.diagonal() += spec;
+   return std::move(ret);
 }
 
 // Cholesky decomposition and solve for inverted matrix --- fastest
@@ -486,7 +469,7 @@ inline Eigen::MatrixXd collapseSubchannels(Eigen::MatrixXd const & EE, sbn::SBNc
         mcol     += conf.num_subchannels[ic]*conf.num_bins[ic];
         mcol_out += conf.num_bins[ic];
     } // end of row loop
-    return retMat;
+    return std::move(retMat);
 }
 
 inline Eigen::MatrixXd collapseDetectors(Eigen::MatrixXd const & M, sbn::SBNconfig const & conf){
@@ -498,14 +481,12 @@ inline Eigen::MatrixXd collapseDetectors(Eigen::MatrixXd const & M, sbn::SBNconf
             retMat.block(n*crow, m*crow, crow, crow).noalias() = collapseSubchannels(M.block(n*nrow, m*nrow, nrow, nrow), conf);
         }
     }
-    return retMat;
+    return std::move(retMat);
 }
 
 
 inline Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::VectorXd const & spec_full, sbn::SBNconfig const & conf) {
     auto const & cov = calcCovarianceMatrixFast(covmat, spec_full);
-    //auto const & cov2 = calcCovarianceMatrixFast(covmat, spec_full);
-    //std::cerr << (cov-cov2).sum() << "#####\n";
     auto const & out = collapseDetectors(cov, conf);
     return invertMatrixEigen3(out);
 }
@@ -552,13 +533,13 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    float this_chi = calcChi(fake_data, v_coll, invcov);
 
    FitResult fr = {n_iter, best_grid_point, last_chi_min, this_chi-last_chi_min}; 
-   return fr;
+   return std::move(fr);
 }
 
 // TODO add size_t writeEvery to prevent memory overload
 void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
       const char * xmldata, sbn::SBNconfig const & myconf,
-      TMatrixD const & covmat, Eigen::MatrixXd const & INVCOVBG,
+      TMatrixD const & covmat, Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
       SignalGenerator signal,
       HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
       double tol, size_t iter, bool debug, bool noWrite=false)
@@ -579,7 +560,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        v_dchi.reserve(rankwork.size()*nUniverses);
     }
     
-    Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
+    //Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
 
     for (int i_grid : rankwork) {
 
@@ -800,6 +781,7 @@ int main(int argc, char* argv[]) {
        covmat.ResizeTo(nBins, nBins);
        covmat.Zero();
     }
+    Eigen::Map<const Eigen::MatrixXd > ECOVMAT(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
     
     // Use the BG only inv cov matrix as start point
     TMatrixT<double> _cov = calcCovarianceMatrix(covmat, bgvec);
@@ -816,8 +798,8 @@ int main(int argc, char* argv[]) {
     GridPoints GP(mygrid.GetGrid());
 
     // Finally, the signal generator
-    SignalGeneratorC    signalc    = {myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
-    SignalGenerator    signal(myconf, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore);
+    //SignalGeneratorC    signalc    = {myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
+    SignalGenerator     signal(myconf, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore);
     
     double time1 = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] Input preparation took {} seconds\n",world.rank(), time1 - time0);
@@ -831,7 +813,7 @@ int main(int argc, char* argv[]) {
        double t1 = MPI_Wtime();
        for (int i=0;i<NTEST;++i) collapseVectorEigen(sv, myconf);
        double t2 = MPI_Wtime();
-       for (int i=0;i<NTEST;++i) signalc.predict(1, false);
+       //for (int i=0;i<NTEST;++i) signalc.predict(1, false);
        double t3 = MPI_Wtime();
        for (int i=0;i<NTEST;++i) collapseVectorStd(svb, myconf);
        double t4 = MPI_Wtime();
@@ -895,8 +877,8 @@ int main(int argc, char* argv[]) {
 
     double starttime = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "Start FC\n");
-    fc_master.foreach([world, covmat, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite](Block* b, const diy::Master::ProxyWithLink& cp)
-                           { doFC(b, cp, world.rank(), xmldata, myconf, covmat, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite); });
+    fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite](Block* b, const diy::Master::ProxyWithLink& cp)
+                           { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite); });
     double endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
     if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
