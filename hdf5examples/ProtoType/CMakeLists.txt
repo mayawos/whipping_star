@@ -7,7 +7,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_FLAGS "-march=${ARCH} -Wall -O3")# -fPermissive")
+set(CMAKE_CXX_FLAGS "-march=native -Wall -O2 -DNDEBUG")# -fPermissive")
 #set (CMAKE_CXX_FLAGS_DEBUG " -fno-omit-frame-pointer -fsanitize=address ${CMAKE_CXX_FLAGS_DEBUG}")
 #set (CMAKE_LINKER_FLAGS_DEBUG "-fno-omit-frame-pointer -fsanitize=address ${CMAKE_LINKER_FLAGS_DEBUG})")
 #set(CMAKE_CXX_FLAGS_RELEASE "-O3")
@@ -53,7 +53,7 @@ find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 
 
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 # OSX flags
 if                          (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
