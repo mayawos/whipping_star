@@ -1,6 +1,8 @@
+//#define EIGEN_USE_MKL_ALL
 //#pragma GCC optimize("O3","unroll-loops","inline")
 
 //#define EIGEN_USE_BLAS
+//#define EIGEN_USE_MKL_VML
 //#define EIGEN_USE_LAPACKE
 
 #include <cmath>
@@ -13,6 +15,11 @@
 #include <unordered_map>
 #include <tuple>
 #include <limits>
+#include <filesystem> // Require C++17
+#include <regex>
+#include <chrono>
+#include <ctime>
+
 
 #include <diy/master.hpp>
 #include <diy/reduce.hpp>
@@ -40,8 +47,11 @@
 #include "prob.h"
 #include "ngrid.h"
 
-
+//#undef basic_string_view
 using namespace std;
+namespace fs = std::filesystem;
+using namespace std::chrono;
+
 
 #include "opts.h"
 
@@ -79,7 +89,31 @@ class GridPoints {
       std::vector<GridPoint> _gridpoints;
 
 };
+ 
+std::ostream& operator << (std::ostream& os, GridPoint const & p) {
+   os << "\t0: " << p[0]  << " 1: " << p[1]  << " 2: " << p[2] <<  "\n";
+   return os;
+}
 
+inline Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd  const & vin, sbn::SBNconfig const & conf){
+   // All we want is a representation with the subchannels added together
+   Eigen::VectorXd cvec(conf.num_bins_total_compressed);
+   cvec.setZero();
+   for (int d=0; d<conf.num_detectors;++d) {
+      size_t offset_in(0), offset_out(0);
+      for (int i=0; i<conf.num_channels; i++) {
+          size_t nbins_chan = conf.num_bins[i];
+          for (int j=0; j<conf.num_subchannels[i]; j++) {
+             size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
+             size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
+             cvec.segment(first_out, nbins_chan).noalias() += vin.segment(first_in, nbins_chan);
+             offset_in +=nbins_chan;
+          }
+          offset_out += nbins_chan;
+      }
+   }
+   return cvec;
+}
 
 class SignalGenerator {
    public:
@@ -87,7 +121,7 @@ class SignalGenerator {
             sbn::SBNconfig const & conf, std::vector<std::vector<double>> const & vec_grid, size_t dim2,
             std::vector<Eigen::VectorXd>  const & sinsq,
             std::vector<Eigen::VectorXd>  const & sin,
-            Eigen::VectorXd const & core
+            Eigen::VectorXd const & core, int oscmode
             ) 
       {
          m_conf = conf;
@@ -96,6 +130,7 @@ class SignalGenerator {
          m_sinsq = sinsq;
          m_sin = sin;
          m_core = core;
+         m_oscmode = oscmode;
          retVec = Eigen::VectorXd(m_conf.num_bins_total);
       }
 
@@ -103,6 +138,7 @@ class SignalGenerator {
       auto const & gp = m_gridpoints.Get(i_grid);
       sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
       int m_idx = massindex(i_grid);
+      //std::cerr << "i_grid: " << i_grid << " mass index " << m_idx << " dim2: " << m_dim2 << " GP:" << gp <<  "\n";
       Oscillate(m_sinsq[m_idx], m_sin[m_idx], this_model);
 
       if (compressed) return collapseVectorEigen(m_core+retVec, m_conf);
@@ -116,14 +152,26 @@ class SignalGenerator {
          sbn::NeutrinoModel & working_model) 
    {
        retVec.setZero(); // !!!
-       int which_dm = 41;
+       int which_dm = 41; // FIXME This must not be hardcoded!!! 41 is the value to be used in the 1 sterile case
 
        double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
 
-       prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
-       prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
-       prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
-       prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+       // TODO Make this logic nice
+       if (m_oscmode==0) {
+          prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+          prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+          prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+          prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+       }
+
+       else if (m_oscmode==1) prob_mumu = working_model.oscAmp(2,2,which_dm,2);
+       else {
+          std::cerr << "oscillation mode has to be either 0 or 1: " << m_oscmode << "\n";
+          exit(1);
+       }
+
+
+
        double osc_amp(0), osc_amp_sq(0);
        int osc_pattern(0);
            // Iterate over channels
@@ -136,15 +184,19 @@ class SignalGenerator {
                 switch (osc_pattern){
                     case 11:
                         osc_amp_sq = prob_ee;
+                        osc_amp = 0;
                         break;
                     case -11:
                         osc_amp_sq = prob_ee;
+                        osc_amp = 0;
                         break;
                     case 22:
                         osc_amp_sq = prob_mumu;
+                        osc_amp = 0;
                         break;
                     case -22:
                         osc_amp_sq = prob_mumu;
+                        osc_amp = 0;
                         break;
                     case 21:
                         osc_amp    = prob_mue;
@@ -154,7 +206,9 @@ class SignalGenerator {
                         osc_amp    = prob_muebar;
                         osc_amp_sq = prob_muebar_sq;
                         break;
-                    case 0:
+                    case 0:  // TODO ask Mark about actual logic
+                        osc_amp = 0;
+                        osc_amp_sq = 0;
                     default:
                         break;
                 }
@@ -176,92 +230,9 @@ class SignalGenerator {
       size_t m_dim2;
       std::vector<Eigen::VectorXd> m_sinsq, m_sin;
       Eigen::VectorXd m_core, retVec;
+      int m_oscmode;
 };
 
-struct SignalGeneratorC {
-   //sbn::SBNosc osc; sbn::SBNconfig const & conf;
-   sbn::SBNconfig const & conf;
-   GridPoints m_gridpoints; size_t dim2;
-   std::vector<Eigen::VectorXd>  const & sinsq;
-   std::vector<Eigen::VectorXd>  const & sin;
-   Eigen::VectorXd const & core;
-
-   Eigen::VectorXd predict(size_t i_grid, bool compressed) {
-      auto const & gp = m_gridpoints.Get(i_grid);
-      sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
-      int m_idx = massindex(i_grid);
-      auto ans = Oscillate(sinsq[m_idx], sin[m_idx], this_model, conf);
-
-      ans.noalias()+=core;
-      if (compressed) return collapseVectorEigen(ans, conf);
-      else return ans;
-   }
-   
-   int massindex(size_t igrd) {return int(floor( (igrd) / dim2 ));}
-   size_t gridsize() {return m_gridpoints.NPoints();}
-
-
-   Eigen::VectorXd Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::VectorXd const & sf_sin, 
-         sbn::NeutrinoModel & working_model, sbn::SBNconfig const & conf) 
-   {
-       Eigen::VectorXd retVec(conf.num_bins_total);
-       retVec.setZero(); // !!!
-       int which_dm = 41;
-
-       double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
-
-       prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
-       prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
-       prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
-       prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
-       double osc_amp(0), osc_amp_sq(0);
-       int osc_pattern(0);
-           // Iterate over channels
-        size_t offset(0);
-        for (int i=0; i<conf.num_channels; i++) {
-            size_t nbins_chan = conf.num_bins[i];
-            auto const & thisPattern = conf.subchannel_osc_patterns[i];
-            for (int j=0; j<conf.num_subchannels[i]; j++){
-                osc_pattern = thisPattern[j];
-                switch (osc_pattern){
-                    case 11:
-                        osc_amp_sq = prob_ee;
-                        break;
-                    case -11:
-                        osc_amp_sq = prob_ee;
-                        break;
-                    case 22:
-                        osc_amp_sq = prob_mumu;
-                        break;
-                    case -22:
-                        osc_amp_sq = prob_mumu;
-                        break;
-                    case 21:
-                        osc_amp    = prob_mue;
-                        osc_amp_sq = prob_mue_sq;
-                        break;
-                    case -21:
-                        osc_amp    = prob_muebar;
-                        osc_amp_sq = prob_muebar_sq;
-                        break;
-                    case 0:
-                    default:
-                        break;
-                }
-
-                // Iterate over detectors
-                for (int d=0; d<conf.num_detectors;++d) {
-                  size_t first  = d*conf.num_bins_detector_block + offset;
-                  retVec.segment(first, nbins_chan).noalias() += osc_amp   *  sf_sin.segment(first, nbins_chan);
-                  retVec.segment(first, nbins_chan).noalias() += osc_amp_sq*sf_sinsq.segment(first, nbins_chan);
-                }
-                offset +=nbins_chan;
-            }
-        }
-
-    return retVec;
-   }
-};
 
 void createDataSets(HighFive::File* file, size_t nPoints, size_t nUniverses) {
     file->createDataSet<double>("last_chi_min", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
@@ -275,13 +246,18 @@ void createDataSets(HighFive::File* file, size_t nPoints, size_t nUniverses) {
     file->createDataSet<double>("gridy",        HighFive::DataSpace( {nPoints,                   1} ));
 }
 
-void writeGrid(HighFive::File* file, std::vector<std::vector<double> > const & coords) {
+void writeGrid(HighFive::File* file, std::vector<std::vector<double> > const & coords, int mode) {
     std::vector<double> xcoord;
     std::vector<double> ycoord;
 
     for (size_t i=0; i< coords.size(); i++) {
        xcoord.push_back(coords[i][0]);
-       ycoord.push_back(coords[i][1]);
+       if (mode==0) ycoord.push_back(coords[i][1]);
+       else if (mode==1) ycoord.push_back(coords[i][2]);
+       else {
+          std::cerr << "Error, the mode must be either 0 or 1 a the moment: " << mode << "\n";
+          exit(1);
+       }
     }
     HighFive::DataSet d_gridx          = file->getDataSet("gridx");
     HighFive::DataSet d_gridy          = file->getDataSet("gridy");
@@ -319,49 +295,70 @@ std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
    }
    return ret;
 }
-std::vector<std::vector<double>> mkHistoVecStd(std::string const & prefix, std::vector<string> const & fullnames) {
-   // TODO can we have all spectra in a single file or something?
-   std::string mass_tag = "";
-   std::vector<std::vector<double> > temp;
-   float dm(-2.0);
-   while( dm < 2.3) {
-      std::ostringstream out;
-      out <<std::fixed<< std::setprecision(4) << dm;
-      mass_tag = out.str();
-      dm+=0.2;
-      std::string fname = prefix+mass_tag+".SBNspec.root";
-      temp.push_back(flattenHistos(readHistos(fname, fullnames)));
-   }
-   return temp;
+
+std::vector<std::tuple<std::string, float> > getFilesAndDm(std::string const & inDir, std::string const & tag, std::string const & subthing, double const & m_min, double const & m_max ) {
+    const std::regex re("[-+]?([0-9]*\\.[0-9]+|[0-9]+)");
+    std::smatch match;
+    std::string result;
+
+    std::vector<std::tuple<std::string, float> > ret;
+
+    for (const auto & entry : fs::directory_iterator(inDir)) {
+      if (std::string(fs::path(entry).stem()).rfind(tag + subthing, 0) == 0) {
+        std::string test     = std::string(fs::path(entry));
+        std::string teststem = std::string(fs::path(entry).stem());
+        
+        std::size_t loc = teststem.find(subthing);
+        std::string _test = teststem.substr(loc);
+
+        if (std::regex_search(_test, match, re) && match.size() > 1) {
+           float lgmsq = std::stof(match.str(0));
+           if (lgmsq > m_max || lgmsq < m_min) {
+              std::cerr << "\t NOT using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
+              continue;
+           }
+           ret.push_back({test, lgmsq});
+           std::cerr << "\t Using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
+        }
+      }
+    }
+    return ret;
 }
 
-std::vector<Eigen::VectorXd> mkHistoVec(std::string const & prefix, std::vector<string> const & fullnames) {
-   // TODO can we have all spectra in a single file or something?
-   std::string mass_tag = "";
-   std::vector<std::vector<double> > temp;
-   float dm(-2.0);
-   while( dm < 2.3) {
-      std::ostringstream out;
-      out <<std::fixed<< std::setprecision(4) << dm;
-      mass_tag = out.str();
-      dm+=0.2;
-      std::string fname = prefix+mass_tag+".SBNspec.root";
-      temp.push_back(flattenHistos(readHistos(fname, fullnames)));
+std::tuple< std::vector<std::vector<double>>, std::vector<float>> mkHistoVecStd(std::string const & inDir, std::string const & tag, std::string const & objname, std::vector<string> const & fullnames, double const & m_min, double const & m_max ) {
+
+   // The input files come unordered
+   auto const & inputs = getFilesAndDm(inDir, tag, objname, m_min, m_max);
+   std::vector<std::vector<double> > temp(inputs.size());
+
+   if (inputs.size() ==0) {
+      std::cerr << "Error, no valid input files, exiting. Maybe check --xmin --xmax and location -i\n";
+      exit(1);
    }
-   std::vector<Eigen::VectorXd> ret;
-   for (size_t i=0;i<temp.size();++i) ret.push_back(Eigen::Map<Eigen::VectorXd> (temp[i].data(), temp[i].size(), 1) );
-   return ret;
+   // Sort by mass, ascending
+   std::vector<float> masses;
+   for (auto in : inputs) masses.push_back(std::get<1>(in));
+   std::sort(masses.begin(), masses.end());
+
+   std::cerr << "Summary of mass dimension --- we have " << inputs.size() << " inputs corresponding to these mass-squared splittings: \n";
+   for (auto m : masses) std::cerr << m << " ";
+   std::cerr << "\n";
+   for (auto in : inputs) {
+      std::vector<float>::iterator it = std::find(masses.begin(), masses.end(), std::get<1>(in));
+      int mass_index = std::distance(masses.begin(), it);
+      temp[mass_index] = flattenHistos(readHistos(std::get<0>(in), fullnames));
+   }
+   
+   return {temp, masses};
 }
+
 
 inline double calcChi(Eigen::VectorXd const & data, Eigen::VectorXd const & prediction, Eigen::MatrixXd const & C_inv ) {
    auto const & diff = data-prediction;
-   return std::move(diff.transpose() * C_inv * diff);
+   return diff.transpose() * C_inv * diff;
 }
 inline double calcChi(Eigen::VectorXd const & diff, Eigen::MatrixXd const & C_inv ) {
-   //auto const & dt = diff.transpose();
-   //auto const & temp = dt * C_inv;// * diff;
-   //auto const & ret = temp * diff;
-   return std::move(diff.transpose() * C_inv * diff);
+   return diff.transpose() * C_inv * diff;
 }
 
 inline std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen::MatrixXd const & C_inv,
@@ -373,7 +370,6 @@ inline std::tuple<double, int> universeChi2(Eigen::VectorXd const & data, Eigen:
    for (size_t i=0; i<signal.gridsize(); ++i) {
       diff = data - signal.predict(i, true);
       double chi = calcChi(diff, C_inv);
-       //double chi = calcChi(data, signal.predict(i, true), C_inv);
        if (chi<chimin) {
           chimin = chi;
           bestP=i;
@@ -434,12 +430,40 @@ inline Eigen::MatrixXd calcCovarianceMatrix(Eigen::MatrixXd const & M, Eigen::Ve
     return test;
 }
 inline Eigen::MatrixXd calcCovarianceMatrixFast(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec) {
-   //Eigen::MatrixXd ret = M;
-   Eigen::MatrixXd ret(M.cols(), M.cols());// = M;
-   ret.setZero();
-   ret.array()    += M.array()*(spec*spec.transpose()).array();
+   Eigen::MatrixXd ret(M.cols(), M.cols());
+   ret.array()    = M.array()*(spec*spec.transpose()).array();
    ret.diagonal() += spec;
-   return std::move(ret);
+   return ret;
+}
+Eigen::MatrixXd calcMatrix(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec){
+   Eigen::MatrixXd ret(M.cols(), M.cols());
+   ret.array()    = M.array()*(spec*spec.transpose()).array();
+   return ret;
+   }
+
+Eigen::MatrixXd cholD(Eigen::MatrixXd const & M, Eigen::VectorXd const & spec, double tol=1e-7) {
+   auto in = calcMatrix(M, spec);
+   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(in);
+   auto const & EV = eigensolver.eigenvalues();
+
+   for (int i=0;i<EV.rows();++i) {
+       if (EV[i]<=0) {
+         if (fabs(EV[i]) < tol) for (int a=0; a<in.cols(); ++a) in(a,a) += EV[i];
+       }
+       if (fabs(EV[i])< tol) for (int a =0; a<in.cols(); a++) in(a,a) += tol;
+   }
+   Eigen::LLT<Eigen::MatrixXd> llt(in);
+   return llt.matrixL();
+}
+
+
+Eigen::VectorXd sample(Eigen::VectorXd const & spec, Eigen::MatrixXd const & LMAT, std::mt19937 & rng) {
+
+   std::normal_distribution<double> dist_normal(0,1);
+   Eigen::VectorXd RDM(spec.rows());
+   for (int i=0;i<spec.rows();++i) RDM[i] = dist_normal(rng);
+
+   return LMAT*RDM + spec;
 }
 
 // Cholesky decomposition and solve for inverted matrix --- fastest
@@ -469,7 +493,7 @@ inline Eigen::MatrixXd collapseSubchannels(Eigen::MatrixXd const & EE, sbn::SBNc
         mcol     += conf.num_subchannels[ic]*conf.num_bins[ic];
         mcol_out += conf.num_bins[ic];
     } // end of row loop
-    return std::move(retMat);
+    return retMat;
 }
 
 inline Eigen::MatrixXd collapseDetectors(Eigen::MatrixXd const & M, sbn::SBNconfig const & conf){
@@ -481,7 +505,7 @@ inline Eigen::MatrixXd collapseDetectors(Eigen::MatrixXd const & M, sbn::SBNconf
             retMat.block(n*crow, m*crow, crow, crow).noalias() = collapseSubchannels(M.block(n*nrow, m*nrow, nrow, nrow), conf);
         }
     }
-    return std::move(retMat);
+    return retMat;
 }
 
 
@@ -533,7 +557,84 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    float this_chi = calcChi(fake_data, v_coll, invcov);
 
    FitResult fr = {n_iter, best_grid_point, last_chi_min, this_chi-last_chi_min}; 
-   return std::move(fr);
+   return fr;
+}
+
+void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
+      sbn::SBNconfig const & myconf,
+      Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
+      Eigen::VectorXd const & ecore, SignalGenerator signal,
+      HighFive::File* file, std::vector<int> const & rankwork, 
+      double tol, size_t iter, bool debug)
+{
+
+    double starttime, endtime;
+    std::vector<FitResult> results;
+    std::vector<int> v_grid, v_univ, v_iter, v_best;
+    std::vector<double> v_last, v_dchi;
+    
+    results.reserve(rankwork.size());
+    v_grid.reserve(rankwork.size());
+    v_univ.reserve(rankwork.size());
+    v_iter.reserve(rankwork.size());
+    v_best.reserve(rankwork.size());
+    v_last.reserve(rankwork.size());
+    v_dchi.reserve(rankwork.size());
+    
+    system_clock::time_point t_init = system_clock::now();
+    for (int i_grid : rankwork) {
+
+       if (debug && i_grid!=0) return;
+       auto const & specfull_e = signal.predict(i_grid, false);
+       auto const & speccoll   = collapseVectorEigen(specfull_e, myconf);
+       auto const & corecoll   = collapseVectorEigen(ecore, myconf);
+
+       starttime = MPI_Wtime();
+
+       results.push_back(coreFC(corecoll, speccoll,
+                signal, INVCOVBG, ECOV, myconf, tol, iter));
+
+       v_univ.push_back(0);
+       v_grid.push_back(i_grid);
+       
+       endtime   = MPI_Wtime();
+       system_clock::time_point now = system_clock::now();
+
+       auto t_elapsed = now - t_init;
+       auto t_togo = t_elapsed * (int(rankwork.size()) - i_grid)/(i_grid+1);
+       auto t_eta = now + t_togo;
+       std::time_t t = system_clock::to_time_t(t_eta);
+
+       if (rank==0 && i_grid%100==0) fmt::print(stderr, "[{}] gridp {}/{} took {} seconds. ETA: {}",cp.gid(), i_grid, rankwork.size(), endtime-starttime, std::ctime(&t));
+    }
+
+    // Write to HDF5
+    starttime   = MPI_Wtime();
+    HighFive::DataSet d_last_chi_min    = file->getDataSet("last_chi_min"   );
+    HighFive::DataSet d_delta_chi       = file->getDataSet("delta_chi"      );
+    HighFive::DataSet d_best_grid_point = file->getDataSet("best_grid_point");
+    HighFive::DataSet d_n_iter          = file->getDataSet("n_iter"         );
+    // write out this grid and universe
+    HighFive::DataSet d_i_grid          = file->getDataSet("i_grid");
+    HighFive::DataSet d_i_univ          = file->getDataSet("i_univ");
+    // This is for the fake data dump
+
+    size_t d_bgn = rankwork[0];
+    for (auto res : results) {
+       v_iter.push_back(res.n_iter);
+       v_best.push_back(res.best_grid_point);
+       v_last.push_back(res.last_chi_min);
+       v_dchi.push_back(res.delta_chi);
+    }
+
+    d_last_chi_min.select(     {d_bgn, 0}, {size_t(v_last.size()), 1}).write(v_last);
+    d_delta_chi.select(        {d_bgn, 0}, {size_t(v_dchi.size()), 1}).write(v_dchi);
+    d_best_grid_point.select(  {d_bgn, 0}, {size_t(v_best.size()), 1}).write(v_best);
+    d_n_iter.select(           {d_bgn, 0}, {size_t(v_iter.size()), 1}).write(v_iter);
+    d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
+    d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
+    endtime   = MPI_Wtime();
+    if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
 }
 
 // TODO add size_t writeEvery to prevent memory overload
@@ -562,6 +663,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     
     //Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
 
+    system_clock::time_point t_init = system_clock::now();
     for (int i_grid : rankwork) {
 
        if (debug && i_grid!=0) return;
@@ -569,13 +671,16 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        //std::vector<double> specfull(specfull_e.data(), specfull_e.data() + specfull_e.rows() * specfull_e.cols());
        auto const & speccoll = collapseVectorEigen(specfull_e, myconf);
        //std::vector<double> speccoll = collapseVectorStd(specfull, myconf);
-       sbn::SBNchi mychi(covmat, xmldata, false);
-       mychi.InitRandomNumberSeeds(double(cp.gid()));
+       //sbn::SBNchi mychi(covmat, xmldata, false);
+       //mychi.InitRandomNumberSeeds(double(cp.gid()));
+       std::mt19937 rng(cp.gid()); // Mersenne twister
+       Eigen::MatrixXd const & LMAT = cholD(ECOV, specfull_e);
+       
 
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
-
-          auto const & fake_data = mychi.SampleCovariance(specfull_e);
+          //auto const & fake_data = mychi.SampleCovariance(specfull_e);
+          auto const & fake_data = sample(specfull_e, LMAT, rng);//
           auto const & fake_dataC = collapseVectorEigen(fake_data, myconf); 
           results.push_back(coreFC(fake_dataC, speccoll,
                    signal, INVCOVBG, ECOV, myconf, tol, iter));
@@ -583,8 +688,15 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
        }
-       endtime   = MPI_Wtime(); 
-       if (rank==0) fmt::print(stderr, "[{}] gridp {}/{} ({} universes) took {} seconds\n",cp.gid(), i_grid, rankwork.size(), nUniverses, endtime-starttime);
+       endtime   = MPI_Wtime();
+       system_clock::time_point now = system_clock::now();
+
+       auto t_elapsed = now - t_init;
+       auto t_togo = t_elapsed * (int(rankwork.size()) - i_grid)/(i_grid+1);
+       auto t_eta = now + t_togo;
+       std::time_t t = system_clock::to_time_t(t_eta);
+
+       if (rank==0 && i_grid%100==0) fmt::print(stderr, "[{}] gridp {}/{} ({} universes) took {} seconds. ETA: {}",cp.gid(), i_grid, rankwork.size(), nUniverses, endtime-starttime, std::ctime(&t));
     }
 
     if (!noWrite) {
@@ -630,7 +742,7 @@ int main(int argc, char* argv[]) {
     diy::mpi::communicator world;
 
     size_t nPoints=-1;
-    int mockFactor=1;
+    int mode=0;
     size_t nUniverses=1;
     int NTEST(0);
     std::string out_file="test.hdf5";
@@ -638,6 +750,7 @@ int main(int argc, char* argv[]) {
     std::string f_CV="BOTHv2_CV.SBNspec.root";
     std::string f_COV="BOTHv2.SBNcovar.root";
     std::string tag="";
+    std::string d_in="";
     std::string xml="";
     double xmin(-1.0);
     double xmax(1.1);
@@ -657,6 +770,7 @@ int main(int argc, char* argv[]) {
     ops >> Option("tol",             tol,        "Minimiser tolerance");
     ops >> Option("iter",            iter,       "Max number of iterations.");
     ops >> Option('t', "tag",        tag,        "Tag.");
+    ops >> Option('i', "indir",      d_in,       "Input file directory.");
     ops >> Option("core",            f_CV,       "Central values filename.");
     ops >> Option('b', "background", f_BG,       "Backgrounds filename.");
     ops >> Option('c', "covmat",     f_COV,      "Covariance matrix filename.");
@@ -666,10 +780,11 @@ int main(int argc, char* argv[]) {
     ops >> Option("ymin",            ymin,       "ymin");
     ops >> Option("ymax",            ymax,       "ymax");
     ops >> Option("ywidth",          ywidth,     "ywidth");
-    ops >> Option("mock",            mockFactor, "Mockfactor");
+    ops >> Option("mode",            mode, "Mode 0 is default --- dimension 2 is elecron,, mode 1 is muon");
     bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
     bool statonly    = ops >> Present("stat", "Statistical errors only");
     bool nowrite    = ops >> Present("nowrite", "Don't write output --- for performance estimates only");
+    bool simplescan    = ops >> Present("scan", "Simple scan, no FC");
     if (ops >> Present('h', "help", "Show help")) {
         std::cout << "Usage:  [OPTIONS]\n";
         std::cout << ops;
@@ -680,11 +795,9 @@ int main(int argc, char* argv[]) {
       fmt::print(stderr, "\n*** This is diy running SBN Feldman Cousins ***\n");
     }
 
-
-
     // Whole bunch of tests
     if ( world.rank() == 0 ) {
-       if (world.size() > nPoints) {
+       if (int(world.size()) > nPoints) {
           std::cerr << "Impossible to run on more ranks than grid points, exiting.\n";
           exit(1);
        }
@@ -697,6 +810,10 @@ int main(int argc, char* argv[]) {
        }
        if (tag=="") {
           std::cerr << "tag (-t, --tag) cannot be undefined, exiting\n";
+          exit(1);
+       }
+       if (d_in=="") {
+          std::cerr << "Input dir (-i, --indor) cannot be undefined, exiting\n";
           exit(1);
        }
     }
@@ -721,16 +838,26 @@ int main(int argc, char* argv[]) {
 
     // Pre-oscillated spectra
     std::vector<double> sinsqvec, sinvec;
+    std::vector<float> msqsplittings;
     std::vector<Eigen::VectorXd > sinsqvec_eig, sinvec_eig;
     int nFilesIn(0);
     if (world.rank()==0) {
-       auto const & temp =mkHistoVecStd(tag+"_SINSQ_dm_", myconf.fullnames);
-       nFilesIn = temp.size();
-       sinsqvec = asVector(temp);
-       sinvec   = asVector(mkHistoVecStd(tag+"_SIN_dm_"  , myconf.fullnames));
+       auto temp = mkHistoVecStd(d_in, tag, "_SINSQ_", myconf.fullnames, xmin, xmax);
+       sinsqvec = asVector(std::get<0>(temp));
+       msqsplittings = std::get<1>(temp);
+       
+       auto temp2 = mkHistoVecStd(d_in, tag, "_SIN_", myconf.fullnames, xmin, xmax);
+       sinvec   = asVector(std::get<0>(temp2));
+       if (sinsqvec.size() != sinvec.size()) {
+          std::cerr << "Error, number of input files for _SINSQ_ (" << sinsqvec.size() << ") differs from _SIN_ (" << sinvec.size() << ") exiting.\n";
+          exit(1);
+       }
+       nFilesIn = msqsplittings.size();
+
     }
     diy::mpi::broadcast(world, sinsqvec, 0);
     diy::mpi::broadcast(world, sinvec,   0);
+    diy::mpi::broadcast(world, msqsplittings,   0);
     diy::mpi::broadcast(world, nFilesIn, 0);
     for (auto v : splitVector(sinsqvec, nFilesIn)) sinsqvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
     for (auto v : splitVector(sinvec  , nFilesIn))   sinvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
@@ -791,15 +918,38 @@ int main(int argc, char* argv[]) {
 
     // Setup grid
     NGrid mygrid;
-    mygrid.AddDimension("m4",  xmin, xmax, xwidth);//0.1 --- can't change easily --- sterile mass
-    mygrid.AddDimension("ue4", ymin, ymax, ywidth);//0.1 --- arbirtrarily dense! mixing angle nu_e --- can change ywidth. Try 20^6
-    mygrid.AddFixedDimension("um4", 0.0);
+    size_t dim2(0);
+
+    double mmin = msqsplittings.front()*0.5;
+    double mmax = msqsplittings.back()*0.5;
+    double mwidth = (msqsplittings[1] - msqsplittings[0])*0.5;
+
+    std::cerr << "Mass setup for input grid: " << mmin << " < " << mmax << " width: " << mwidth << "\n";
+
+    mygrid.AddDimension("m4", mmin, mmax, mwidth );
+    //mygrid.AddDimension("m4",  xmin, xmax, xwidth); // Sterile mass ultimately limited by input files
+    if (mode==0) {
+       mygrid.AddDimension("ue4", ymin, ymax, ywidth);// arbirtrarily dense! mixing angle nu_e
+       mygrid.AddFixedDimension("um4", 0.0);
+       dim2 = mygrid.f_dimensions[1].f_N;
+    }
+    else if (mode==1) {
+       mygrid.AddFixedDimension("ue4", 0.0);
+       mygrid.AddDimension("um4", ymin, ymax, ywidth);
+       dim2 = mygrid.f_dimensions[2].f_N;
+    }
+    else {
+       std::cerr << "Error, the mode must be either 0 or 1 a the moment: " << mode << "\n";
+       exit(1);
+    }
     nPoints = mygrid.f_num_total_points;
     GridPoints GP(mygrid.GetGrid());
 
+    mygrid.Print();
+    //abort();
+
     // Finally, the signal generator
-    //SignalGeneratorC    signalc    = {myconf, GP, mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore};
-    SignalGenerator     signal(myconf, mygrid.GetGrid(), mygrid.f_dimensions[1].f_N, sinsqvec_eig, sinvec_eig, ecore);
+    SignalGenerator     signal(myconf, mygrid.GetGrid(), dim2, sinsqvec_eig, sinvec_eig, ecore, mode);
     
     double time1 = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] Input preparation took {} seconds\n",world.rank(), time1 - time0);
@@ -854,7 +1004,7 @@ int main(int argc, char* argv[]) {
     createDataSets(f_out, nPoints, nUniverses);
    
     // First rank also writes the grid so we know what the poins actually are
-    if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid());
+    if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid(), mode);
 
     //// Now more blocks as we have universes
     size_t blocks = world.size();//nPoints;//*nUniverses;
@@ -876,11 +1026,18 @@ int main(int argc, char* argv[]) {
     work.shrink_to_fit();
 
     double starttime = MPI_Wtime();
-    if (world.rank()==0) fmt::print(stderr, "Start FC\n");
-    fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite](Block* b, const diy::Master::ProxyWithLink& cp)
-                           { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite); });
+    if (simplescan) {
+       if (world.rank()==0) fmt::print(stderr, "Start simple scan\n");
+       fc_master.foreach([world, ECOVMAT, INVCOVBG, ecore, myconf,  f_out, rankwork, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
+                              { doScan(b, cp, world.rank(), myconf, ECOVMAT, INVCOVBG, ecore, signal, f_out, rankwork, tol, iter, debug); });
+    }
+    else {
+       if (world.rank()==0) fmt::print(stderr, "Start FC\n");
+       fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite](Block* b, const diy::Master::ProxyWithLink& cp)
+                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite); });
+    }
     double endtime   = MPI_Wtime(); 
-    if (world.rank()==0) fmt::print(stderr, "[{}] FC took {} seconds\n",world.rank(), endtime-starttime);
+    if (world.rank()==0) fmt::print(stderr, "[{}] that took {} seconds\n",world.rank(), endtime-starttime);
     if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
 
     delete f_out;
