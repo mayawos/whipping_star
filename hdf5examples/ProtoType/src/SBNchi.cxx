@@ -159,6 +159,20 @@ void SBNchi::InitRandomNumberSeeds(){
 }
     
 void SBNchi::InitRandomNumberSeeds(double seed){
+    if(seed<0){
+         rangen_twister = new std::mt19937(random_device_seed());
+         rangen_linear = new std::minstd_rand(random_device_seed());
+         rangen_carry = new std::ranlux24_base(random_device_seed());
+         rangen = new TRandom3(0);
+    }else{
+         rangen_twister = new std::mt19937(seed);
+         rangen_linear = new std::minstd_rand(seed);
+         rangen_carry = new std::ranlux24_base(seed);
+         rangen = new TRandom3(seed);
+    }
+
+}
+void SBNchi::InitRandomNumberSeeds(int seed){
     
     if(seed<0){
          rangen_twister = new std::mt19937(random_device_seed());
@@ -705,8 +719,6 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double> const & M, TVecto
 
 
 TMatrixT<double> SBNchi::InvertMatrix(TMatrixT<double> &M){
-
-    double invdet=0;
 
     TMatrixT<double> McI(M.GetNrows(),M.GetNrows());
     McI.Zero();
@@ -1551,7 +1563,7 @@ std::vector<double> SBNchi::SampleCovariance(std::vector<double> const & specful
     std::normal_distribution<double> dist_normal(0,1);
 
     for(int i=0; i<n_t; i++) u(i) = specfull[i];
-    for(int a=0; a<n_t; a++) gaus_sample(a) = dist_normal(*rangen_twister);	
+    for(int a=0; a<n_t; a++) gaus_sample(a) = dist_normal(*rangen_twister);
 
     multi_sample = u + matrix_lower_triangularD*gaus_sample;
 
@@ -1572,7 +1584,7 @@ Eigen::VectorXd SBNchi::SampleCovariance(Eigen::VectorXd const & specfull) {
     TVectorT<double> multi_sample(n_t);
 
     std::normal_distribution<double> dist_normal(0,1);
-    for(int a=0; a<n_t; a++) gaus_sample[a] = dist_normal(*rangen_twister);	
+    for(int a=0; a<n_t; a++) gaus_sample[a] = dist_normal(*rangen_twister);
     multi_sample = matrix_lower_triangularD*gaus_sample;
 
     Eigen::VectorXd ret = specfull;

@@ -92,6 +92,7 @@ class SBNchi : public SBNconfig{
     std::ranlux24_base * rangen_carry;
     void InitRandomNumberSeeds();
     void InitRandomNumberSeeds(double);
+    void InitRandomNumberSeeds(int);
     TRandom3 * rangen;
 
 	/*********************************** Member Functions ********************************/	
