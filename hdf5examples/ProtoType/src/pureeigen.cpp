@@ -643,7 +643,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
       TMatrixD const & covmat, Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
       SignalGenerator signal,
       HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
-      double tol, size_t iter, bool debug, bool noWrite=false)
+      double tol, size_t iter, bool debug, bool noWrite=false, int msg_every=100)
 {
 
     double starttime, endtime;
@@ -696,7 +696,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        auto t_eta = now + t_togo;
        std::time_t t = system_clock::to_time_t(t_eta);
 
-       if (rank==0 && i_grid%100==0) fmt::print(stderr, "[{}] gridp {}/{} ({} universes) took {} seconds. ETA: {}",cp.gid(), i_grid, rankwork.size(), nUniverses, endtime-starttime, std::ctime(&t));
+       if (rank==0 && i_grid%msg_every==0) fmt::print(stderr, "[{}] gridp {}/{} ({} universes) took {} seconds. ETA: {}",cp.gid(), i_grid, rankwork.size(), nUniverses, endtime-starttime, std::ctime(&t));
     }
 
     if (!noWrite) {
@@ -743,6 +743,7 @@ int main(int argc, char* argv[]) {
 
     size_t nPoints=-1;
     int mode=0;
+    int msg_every=100;
     size_t nUniverses=1;
     int NTEST(0);
     std::string out_file="test.hdf5";
@@ -780,7 +781,8 @@ int main(int argc, char* argv[]) {
     ops >> Option("ymin",            ymin,       "ymin");
     ops >> Option("ymax",            ymax,       "ymax");
     ops >> Option("ywidth",          ywidth,     "ywidth");
-    ops >> Option("mode",            mode, "Mode 0 is default --- dimension 2 is elecron,, mode 1 is muon");
+    ops >> Option("msg",             msg_every,  "Prin a progress message every m gridpoints on rank 0 to stderr.");
+    ops >> Option("mode",            mode, "Mode 0 is default --- dimension 2 is electron, mode 1 is muon");
     bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
     bool statonly    = ops >> Present("stat", "Statistical errors only");
     bool nowrite    = ops >> Present("nowrite", "Don't write output --- for performance estimates only");
@@ -924,7 +926,7 @@ int main(int argc, char* argv[]) {
     double mmax = msqsplittings.back()*0.5;
     double mwidth = (msqsplittings[1] - msqsplittings[0])*0.5;
 
-    std::cerr << "Mass setup for input grid: " << mmin << " < " << mmax << " width: " << mwidth << "\n";
+    if (world.rank()==0) std::cerr << "Mass setup for input grid: " << mmin << " < " << mmax << " width: " << mwidth << "\n";
 
     mygrid.AddDimension("m4", mmin, mmax, mwidth );
     //mygrid.AddDimension("m4",  xmin, xmax, xwidth); // Sterile mass ultimately limited by input files
@@ -945,8 +947,7 @@ int main(int argc, char* argv[]) {
     nPoints = mygrid.f_num_total_points;
     GridPoints GP(mygrid.GetGrid());
 
-    mygrid.Print();
-    //abort();
+    if (world.rank()==0) mygrid.Print();
 
     // Finally, the signal generator
     SignalGenerator     signal(myconf, mygrid.GetGrid(), dim2, sinsqvec_eig, sinvec_eig, ecore, mode);
@@ -1033,8 +1034,8 @@ int main(int argc, char* argv[]) {
     }
     else {
        if (world.rank()==0) fmt::print(stderr, "Start FC\n");
-       fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite](Block* b, const diy::Master::ProxyWithLink& cp)
-                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite); });
+       fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite, msg_every](Block* b, const diy::Master::ProxyWithLink& cp)
+                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite, msg_every); });
     }
     double endtime   = MPI_Wtime(); 
     if (world.rank()==0) fmt::print(stderr, "[{}] that took {} seconds\n",world.rank(), endtime-starttime);
