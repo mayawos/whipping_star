@@ -466,6 +466,15 @@ Eigen::VectorXd sample(Eigen::VectorXd const & spec, Eigen::MatrixXd const & LMA
    return LMAT*RDM + spec;
 }
 
+Eigen::VectorXd poisson_fluctuate(Eigen::VectorXd const & spec, std::mt19937 & rng) {
+   Eigen::VectorXd RDM(spec.rows());
+   for (int i=0;i<spec.rows();++i) {
+      std::poisson_distribution<int> dist_pois(spec[i]);
+      RDM[i] = double(dist_pois(rng));
+   }
+   return RDM;
+}
+
 // Cholesky decomposition and solve for inverted matrix --- fastest
 inline Eigen::MatrixXd invertMatrixEigen3(Eigen::MatrixXd const & M){
     return M.llt().solve(Eigen::MatrixXd::Identity(M.rows(), M.rows()));
@@ -680,7 +689,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
           //auto const & fake_data = mychi.SampleCovariance(specfull_e);
-          auto const & fake_data = sample(specfull_e, LMAT, rng);//
+          auto const & fake_data = poisson_fluctuate(sample(specfull_e, LMAT, rng), rng);//
           auto const & fake_dataC = collapseVectorEigen(fake_data, myconf); 
           results.push_back(coreFC(fake_dataC, speccoll,
                    signal, INVCOVBG, ECOV, myconf, tol, iter));
