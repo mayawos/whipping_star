@@ -136,7 +136,8 @@ class SignalGenerator {
 
    Eigen::VectorXd predict(size_t i_grid, bool compressed) {
       auto const & gp = m_gridpoints.Get(i_grid);
-      sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
+      //sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
+      sbn::NeutrinoModel this_model(gp[0]*gp[0], 0.0, gp[2], false);
       int m_idx = massindex(i_grid);
       //std::cerr << "i_grid: " << i_grid << " mass index " << m_idx << " dim2: " << m_dim2 << " GP:" << gp <<  "\n";
       Oscillate(m_sinsq[m_idx], m_sin[m_idx], this_model);
@@ -239,6 +240,7 @@ void createDataSets(HighFive::File* file, size_t nPoints, size_t nUniverses) {
     file->createDataSet<double>("delta_chi",    HighFive::DataSpace( { nPoints*nUniverses,       1} ));
     file->createDataSet<int>("best_grid_point", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
     file->createDataSet<int>("n_iter",          HighFive::DataSpace( { nPoints*nUniverses,       1} ));
+    file->createDataSet<double>("n_events",          HighFive::DataSpace( { nPoints*nUniverses,       1} ));
     // Some bookkeeping why not
     file->createDataSet<int>("i_grid",          HighFive::DataSpace( {nPoints*nUniverses,        1} ));
     file->createDataSet<int>("i_univ",          HighFive::DataSpace( {nPoints*nUniverses,        1} ));
@@ -658,7 +660,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     double starttime, endtime;
     std::vector<FitResult> results;
     std::vector<int> v_grid, v_univ, v_iter, v_best;
-    std::vector<double> v_last, v_dchi;
+    std::vector<double> v_last, v_dchi, v_nevents;
     
     if (!noWrite) {
        results.reserve(rankwork.size()*nUniverses);
@@ -668,6 +670,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        v_best.reserve(rankwork.size()*nUniverses);
        v_last.reserve(rankwork.size()*nUniverses);
        v_dchi.reserve(rankwork.size()*nUniverses);
+       v_nevents.reserve(rankwork.size()*nUniverses);
     }
     
     //Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
@@ -694,8 +697,11 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
           results.push_back(coreFC(fake_dataC, speccoll,
                    signal, INVCOVBG, ECOV, myconf, tol, iter));
 
+          //double _nev = std::accumulate(fake_data.begin(), fake_data.end(), 0.0);
+          //double _nev = std::accumulate(fake_data.begin(), fake_data.end(), 0.0);
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
+          v_nevents.push_back(fake_data.sum());
        }
        endtime   = MPI_Wtime();
        system_clock::time_point now = system_clock::now();
@@ -716,6 +722,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        HighFive::DataSet d_delta_chi       = file->getDataSet("delta_chi"      );
        HighFive::DataSet d_best_grid_point = file->getDataSet("best_grid_point");
        HighFive::DataSet d_n_iter          = file->getDataSet("n_iter"         );
+       HighFive::DataSet d_n_events        = file->getDataSet("n_events"       );
        // write out this grid and universe
        HighFive::DataSet d_i_grid          = file->getDataSet("i_grid");
        HighFive::DataSet d_i_univ          = file->getDataSet("i_univ");
@@ -733,6 +740,7 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        d_delta_chi.select(        {d_bgn, 0}, {size_t(v_dchi.size()), 1}).write(v_dchi);
        d_best_grid_point.select(  {d_bgn, 0}, {size_t(v_best.size()), 1}).write(v_best);
        d_n_iter.select(           {d_bgn, 0}, {size_t(v_iter.size()), 1}).write(v_iter);
+       d_n_events.select(         {d_bgn, 0}, {size_t(v_nevents.size()), 1}).write(v_nevents);
        d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
        d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
        endtime   = MPI_Wtime();
