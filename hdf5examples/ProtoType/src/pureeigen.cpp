@@ -74,6 +74,7 @@ struct Block
 
 typedef std::array<double, 3> GridPoint;
 
+// TODO what if fixed param is exactly 0 --- pow(10, x) is dangerous then
 class GridPoints {
    public:
       GridPoints() {}
@@ -137,9 +138,8 @@ class SignalGenerator {
    Eigen::VectorXd predict(size_t i_grid, bool compressed) {
       auto const & gp = m_gridpoints.Get(i_grid);
       //sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
-      sbn::NeutrinoModel this_model(gp[0]*gp[0], 0.0, gp[2], false);
+      sbn::NeutrinoModel this_model(gp[0]*gp[0], 0.0, gp[2], false);   // FIXME deal with ==0
       int m_idx = massindex(i_grid);
-      //std::cerr << "i_grid: " << i_grid << " mass index " << m_idx << " dim2: " << m_dim2 << " GP:" << gp <<  "\n";
       Oscillate(m_sinsq[m_idx], m_sin[m_idx], this_model);
 
       if (compressed) return collapseVectorEigen(m_core+retVec, m_conf);
@@ -283,9 +283,7 @@ TMatrixD readFracCovMat(std::string const & rootfile){
 std::vector<TH1D> readHistos(std::string const & rootfile, std::vector<string> const & fullnames) {
     std::vector<TH1D > hist;
     TFile f(rootfile.c_str(),"read");
-    for (auto fn: fullnames) {
-       hist.push_back(*((TH1D*)f.Get(fn.c_str())));
-    }
+    for (auto fn: fullnames) hist.push_back(*((TH1D*)f.Get(fn.c_str())));
     f.Close();
     return hist;
 }
@@ -540,8 +538,6 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    size_t n_iter = 0;
 
    Eigen::MatrixXd invcov = INVCOV;//std::vector<double> temp;
-   //auto const & goodpoints  = initialScan(fake_data, Eigen::MatrixXd::Identity(INVCOV.rows(), INVCOV.rows()), signal, 1e4);
-   //auto const & goodpoints  = initialScan(fake_data, invcov, signal, 1e6);
    
    for(n_iter = 0; n_iter < max_number_iterations; n_iter++){
        if(n_iter!=0){
@@ -575,7 +571,7 @@ void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
       sbn::SBNconfig const & myconf,
       Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
       Eigen::VectorXd const & ecore, SignalGenerator signal,
-      HighFive::File* file, std::vector<int> const & rankwork, 
+      HighFive::File* file, std::vector<size_t> const & rankwork, 
       double tol, size_t iter, bool debug)
 {
 
@@ -680,25 +676,17 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
 
        if (debug && i_grid!=0) return;
        auto const & specfull_e = signal.predict(i_grid, false);
-       //std::vector<double> specfull(specfull_e.data(), specfull_e.data() + specfull_e.rows() * specfull_e.cols());
        auto const & speccoll = collapseVectorEigen(specfull_e, myconf);
-       //std::vector<double> speccoll = collapseVectorStd(specfull, myconf);
-       //sbn::SBNchi mychi(covmat, xmldata, false);
-       //mychi.InitRandomNumberSeeds(double(cp.gid()));
        std::mt19937 rng(cp.gid()); // Mersenne twister
        Eigen::MatrixXd const & LMAT = cholD(ECOV, specfull_e);
        
 
        starttime = MPI_Wtime();
        for (int uu=0; uu<nUniverses;++uu) {
-          //auto const & fake_data = mychi.SampleCovariance(specfull_e);
           auto const & fake_data = poisson_fluctuate(sample(specfull_e, LMAT, rng), rng);//
           auto const & fake_dataC = collapseVectorEigen(fake_data, myconf); 
           results.push_back(coreFC(fake_dataC, speccoll,
                    signal, INVCOVBG, ECOV, myconf, tol, iter));
-
-          //double _nev = std::accumulate(fake_data.begin(), fake_data.end(), 0.0);
-          //double _nev = std::accumulate(fake_data.begin(), fake_data.end(), 0.0);
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
           v_nevents.push_back(fake_data.sum());
@@ -747,6 +735,127 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
     }
 }
+
+
+void doFCLoadBalanced(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
+      const char * xmldata, sbn::SBNconfig const & myconf,
+      TMatrixD const & covmat, Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
+      SignalGenerator signal,
+      HighFive::File* file, std::vector<size_t> const & rankwork, int nUniverses, 
+      double tol, size_t iter, bool debug, bool noWrite=false, int msg_every=100)
+{
+
+    double starttime, endtime;
+    std::vector<FitResult> results;
+    std::vector<int> v_grid, v_univ, v_iter, v_best;
+    std::vector<double> v_last, v_dchi, v_nevents;
+
+    size_t pStart = rankwork[0];
+    size_t uStart = rankwork[1];
+    size_t pLast  = rankwork[2];
+    size_t uLast  = rankwork[3];
+
+    size_t i_begin = pStart * nUniverses + uStart;
+    size_t i_end   = pLast  * nUniverses + uLast;
+
+    //fmt::print(stderr, "[{}] a,b,c,d: {} {} {} {} start at {} end at {}  lends {}\n", rank, pStart, uStart, pLast, uLast, i_begin, i_end, i_end-i_begin);
+    size_t lenDS = i_end - i_begin;
+
+    if (!noWrite) {
+       results.reserve(lenDS);
+       v_grid.reserve(lenDS);
+       v_univ.reserve(lenDS);
+       v_iter.reserve(lenDS);
+       v_best.reserve(lenDS);
+       v_last.reserve(lenDS);
+       v_dchi.reserve(lenDS);
+       v_nevents.reserve(lenDS);
+    }
+
+    std::vector<std::vector<size_t> > RW;
+    if (pStart == pLast) RW.push_back({pStart, uStart, uLast});
+    else {
+      RW.push_back({pStart, uStart, nUniverses});
+       for (size_t _p = pStart+1; _p<pLast;++_p) {
+          RW.push_back({_p, 0, nUniverses});
+       }
+       if (uLast>0) RW.push_back({pLast, 0, uLast});
+
+    }
+
+    for (auto r: RW) {
+       fmt::print(stderr, "[{}]  {}: {} -- {} \n", rank, r[0], r[1], r[2]);
+    }
+
+    
+    ////Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
+
+    system_clock::time_point t_init = system_clock::now();
+    std::mt19937 rng(cp.gid()); // Mersenne twister
+    for (auto r : RW) {
+
+       size_t i_grid = r[0];
+
+       if (debug && i_grid!=0) return;
+       auto const & specfull_e = signal.predict(i_grid, false);
+       auto const & speccoll = collapseVectorEigen(specfull_e, myconf);
+       Eigen::MatrixXd const & LMAT = cholD(ECOV, specfull_e);
+
+       starttime = MPI_Wtime();
+       for (size_t uu=r[1]; uu<r[2];++uu) {
+          auto const & fake_data = poisson_fluctuate(sample(specfull_e, LMAT, rng), rng);//
+          auto const & fake_dataC = collapseVectorEigen(fake_data, myconf); 
+          results.push_back(coreFC(fake_dataC, speccoll,
+                   signal, INVCOVBG, ECOV, myconf, tol, iter));
+          v_univ.push_back(uu);
+          v_grid.push_back(i_grid);
+          v_nevents.push_back(fake_data.sum());
+       }
+       endtime   = MPI_Wtime();
+       system_clock::time_point now = system_clock::now();
+
+       auto t_elapsed = now - t_init;
+       auto t_togo = t_elapsed * (lenDS - results.size())/(results.size()+1);
+       auto t_eta = now + t_togo;
+       std::time_t t = system_clock::to_time_t(t_eta);
+
+       if (rank==0 && results.size()%msg_every==0) fmt::print(stderr, "[{}] gridp {}/{} took {} seconds. ETA: {}",cp.gid(), results.size(), lenDS, endtime-starttime, std::ctime(&t));
+    }
+
+    if (!noWrite) {
+
+       // Write to HDF5
+       starttime   = MPI_Wtime();
+       HighFive::DataSet d_last_chi_min    = file->getDataSet("last_chi_min"   );
+       HighFive::DataSet d_delta_chi       = file->getDataSet("delta_chi"      );
+       HighFive::DataSet d_best_grid_point = file->getDataSet("best_grid_point");
+       HighFive::DataSet d_n_iter          = file->getDataSet("n_iter"         );
+       HighFive::DataSet d_n_events        = file->getDataSet("n_events"       );
+       // write out this grid and universe
+       HighFive::DataSet d_i_grid          = file->getDataSet("i_grid");
+       HighFive::DataSet d_i_univ          = file->getDataSet("i_univ");
+       // This is for the fake data dump
+
+       size_t d_bgn = i_begin;//rankwork[0]*nUniverses;
+       for (auto res : results) {
+          v_iter.push_back(res.n_iter);
+          v_best.push_back(res.best_grid_point);
+          v_last.push_back(res.last_chi_min);
+          v_dchi.push_back(res.delta_chi);
+       }
+
+       d_last_chi_min.select(     {d_bgn, 0}, {size_t(v_last.size()), 1}).write(v_last);
+       d_delta_chi.select(        {d_bgn, 0}, {size_t(v_dchi.size()), 1}).write(v_dchi);
+       d_best_grid_point.select(  {d_bgn, 0}, {size_t(v_best.size()), 1}).write(v_best);
+       d_n_iter.select(           {d_bgn, 0}, {size_t(v_iter.size()), 1}).write(v_iter);
+       d_n_events.select(         {d_bgn, 0}, {size_t(v_nevents.size()), 1}).write(v_nevents);
+       d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
+       d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
+       endtime   = MPI_Wtime();
+       if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
+    }
+}
+
 
 inline bool file_exists (const std::string& name) {
     ifstream f(name.c_str());
@@ -1037,25 +1146,81 @@ int main(int argc, char* argv[]) {
     diy::Master                    fc_master(world, 1, -1, &Block::create, &Block::destroy);
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
 
-    std::vector<int> work(nPoints);
-    std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
-    std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
-    work.clear();
-    work.shrink_to_fit();
+    //std::vector<int> work(nPoints);
+    //std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
+    //std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
+    //work.clear();
+    //work.shrink_to_fit();
+
+
+    // Somehow this feels overly complicatd
+    size_t _S(nPoints*nUniverses);
+    std::vector<size_t> _L;
+    size_t maxwork = size_t(ceil(_S/world.size()));
+    for (size_t r=0; r <                _S%world.size(); ++r) _L.push_back(maxwork + 1);
+    for (size_t r=0; r < world.size() - _S%world.size(); ++r) _L.push_back(maxwork    );
+
+
+    std::vector<size_t> _bp, _bu;
+    _bp.push_back(0);
+    _bu.push_back(0);
+
+    size_t _n(0), _temp(0);
+    for (size_t i=0; i<nPoints;++i) {
+       for (size_t j=0; j<nUniverses;++j) {
+          if (_temp == _L[_n]) {
+             _bp.push_back(i);
+             _bu.push_back(j);
+             _temp = 0;
+             _n+=1;
+          }
+          _temp+=1;
+       }
+    }
+    _bp.push_back(nPoints-1);
+    _bu.push_back(nUniverses);
+    
+    std::vector<size_t> rankworkbl;
+    fmt::print(stderr, "[{}] Got {} ranks and {} sets of work {}\n", world.rank(), world.size(), _bu.size() -1, _bp.size() -1);
+    world.barrier();
+    rankworkbl.push_back(_bp[world.rank()]);
+    rankworkbl.push_back(_bu[world.rank()]);
+    rankworkbl.push_back(_bp[world.rank()+1]);
+    rankworkbl.push_back(_bu[world.rank()+1]);
+
+
+    //fmt::print(stderr, "Got maxwork {}\n", maxwork);
+    //for (int gp=0;gp<nPoints;++gp) {
+       //for (int uv=0;uv<nUniverses;++uv) {
+          //if (_n%maxwork ==0) {
+             //_bp.push_back(gp);
+             //_bu.push_back(uv);
+          //}
+          //_n++;
+       //}
+    //}
+    //_bp.push_back(nPoints-1);
+    //_bu.push_back(nUniverses-1);
+    //std::vector<int> rankworkbl;
+
+    //fmt::print(stderr, "[{}] Got {} ranks and {} sets of work {}\n", world.rank(), world.size(), _bu.size() -1, _bp.size() -1);
+    //exit(0);
+
+
 
     double starttime = MPI_Wtime();
     if (simplescan) {
        if (world.rank()==0) fmt::print(stderr, "Start simple scan\n");
-       fc_master.foreach([world, ECOVMAT, INVCOVBG, ecore, myconf,  f_out, rankwork, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
-                              { doScan(b, cp, world.rank(), myconf, ECOVMAT, INVCOVBG, ecore, signal, f_out, rankwork, tol, iter, debug); });
+       fc_master.foreach([world, ECOVMAT, INVCOVBG, ecore, myconf,  f_out, rankworkbl, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
+                              { doScan(b, cp, world.rank(), myconf, ECOVMAT, INVCOVBG, ecore, signal, f_out, rankworkbl, tol, iter, debug); });
     }
     else {
        if (world.rank()==0) fmt::print(stderr, "Start FC\n");
-       fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite, msg_every](Block* b, const diy::Master::ProxyWithLink& cp)
-                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite, msg_every); });
+       fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankworkbl, tol, iter, debug, signal, nowrite, msg_every](Block* b, const diy::Master::ProxyWithLink& cp)
+                              { doFCLoadBalanced(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankworkbl, nUniverses, tol, iter, debug, nowrite, msg_every); });
     }
     double endtime   = MPI_Wtime(); 
-    if (world.rank()==0) fmt::print(stderr, "[{}] that took {} seconds\n",world.rank(), endtime-starttime);
+    if (world.rank()==0 || world.rank()==world.size()-1) fmt::print(stderr, "[{}] that took {} seconds\n", world.rank(), endtime-starttime);
     if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
 
     delete f_out;
