@@ -783,9 +783,9 @@ void doFCLoadBalanced(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
 
     }
 
-    for (auto r: RW) {
-       fmt::print(stderr, "[{}]  {}: {} -- {} \n", rank, r[0], r[1], r[2]);
-    }
+    //for (auto r: RW) {
+       //fmt::print(stderr, "[{}]  {}: {} -- {} \n", rank, r[0], r[1], r[2]);
+    //}
 
     
     ////Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
@@ -1181,7 +1181,7 @@ int main(int argc, char* argv[]) {
     _bu.push_back(nUniverses);
     
     std::vector<size_t> rankworkbl;
-    fmt::print(stderr, "[{}] Got {} ranks and {} sets of work {}\n", world.rank(), world.size(), _bu.size() -1, _bp.size() -1);
+    //fmt::print(stderr, "[{}] Got {} ranks and {} sets of work {}\n", world.rank(), world.size(), _bu.size() -1, _bp.size() -1);
     world.barrier();
     rankworkbl.push_back(_bp[world.rank()]);
     rankworkbl.push_back(_bu[world.rank()]);
