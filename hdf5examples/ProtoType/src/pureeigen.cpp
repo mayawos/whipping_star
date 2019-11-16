@@ -296,7 +296,7 @@ std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
    return ret;
 }
 
-std::vector<std::tuple<std::string, float> > getFilesAndDm(std::string const & inDir, std::string const & tag, std::string const & subthing, double const & m_min, double const & m_max ) {
+std::vector<std::tuple<std::string, float> > getFilesAndDm(std::string const & inDir, std::string const & tag, std::string const & subthing, double const & m_min, double const & m_max, bool debug=false) {
     const std::regex re("[-+]?([0-9]*\\.[0-9]+|[0-9]+)");
     std::smatch match;
     std::string result;
@@ -314,21 +314,21 @@ std::vector<std::tuple<std::string, float> > getFilesAndDm(std::string const & i
         if (std::regex_search(_test, match, re) && match.size() > 1) {
            float lgmsq = std::stof(match.str(0));
            if (lgmsq > m_max || lgmsq < m_min) {
-              std::cerr << "\t NOT using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
+              if (debug) std::cerr << "\t NOT using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
               continue;
            }
            ret.push_back({test, lgmsq});
-           std::cerr << "\t Using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
+           if (debug) std::cerr << "\t Using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
         }
       }
     }
     return ret;
 }
 
-std::tuple< std::vector<std::vector<double>>, std::vector<float>> mkHistoVecStd(std::string const & inDir, std::string const & tag, std::string const & objname, std::vector<string> const & fullnames, double const & m_min, double const & m_max ) {
+std::tuple< std::vector<std::vector<double>>, std::vector<float>> mkHistoVecStd(std::string const & inDir, std::string const & tag, std::string const & objname, std::vector<string> const & fullnames, double const & m_min, double const & m_max, bool debug=false ) {
 
    // The input files come unordered
-   auto const & inputs = getFilesAndDm(inDir, tag, objname, m_min, m_max);
+   auto const & inputs = getFilesAndDm(inDir, tag, objname, m_min, m_max, debug);
    std::vector<std::vector<double> > temp(inputs.size());
 
    if (inputs.size() ==0) {
@@ -867,6 +867,10 @@ int main(int argc, char* argv[]) {
     diy::mpi::environment env(argc, argv);
     diy::mpi::communicator world;
 
+    time_t now;
+    time (&now);
+    if (world.rank()==0) fmt::print(stderr, "Start at {}", std::ctime(&now));
+
     size_t nPoints=-1;
     int mode=0;
     int msg_every=100;
@@ -970,11 +974,11 @@ int main(int argc, char* argv[]) {
     std::vector<Eigen::VectorXd > sinsqvec_eig, sinvec_eig;
     int nFilesIn(0);
     if (world.rank()==0) {
-       auto temp = mkHistoVecStd(d_in, tag, "_SINSQ_", myconf.fullnames, xmin, xmax);
+       auto temp = mkHistoVecStd(d_in, tag, "_SINSQ_", myconf.fullnames, xmin, xmax, debug);
        sinsqvec = asVector(std::get<0>(temp));
        msqsplittings = std::get<1>(temp);
        
-       auto temp2 = mkHistoVecStd(d_in, tag, "_SIN_", myconf.fullnames, xmin, xmax);
+       auto temp2 = mkHistoVecStd(d_in, tag, "_SIN_", myconf.fullnames, xmin, xmax, debug);
        sinvec   = asVector(std::get<0>(temp2));
        if (sinsqvec.size() != sinvec.size()) {
           std::cerr << "Error, number of input files for _SINSQ_ (" << sinsqvec.size() << ") differs from _SIN_ (" << sinvec.size() << ") exiting.\n";
@@ -1219,10 +1223,19 @@ int main(int argc, char* argv[]) {
        fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankworkbl, tol, iter, debug, signal, nowrite, msg_every](Block* b, const diy::Master::ProxyWithLink& cp)
                               { doFCLoadBalanced(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankworkbl, nUniverses, tol, iter, debug, nowrite, msg_every); });
     }
-    double endtime   = MPI_Wtime(); 
-    if (world.rank()==0 || world.rank()==world.size()-1) fmt::print(stderr, "[{}] that took {} seconds\n", world.rank(), endtime-starttime);
+    double endtime   = MPI_Wtime();
+
+    float _FCtime = endtime-starttime;
+    float FCtime_max, FCtime_min, FCtime_sum;
+    MPI_Reduce(&_FCtime, &FCtime_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&_FCtime, &FCtime_min, 1, MPI_FLOAT, MPI_MIN, 0, MPI_COMM_WORLD);
+
+
+    if (world.rank()==0) fmt::print(stderr, "[{}] that took {} ... {} seconds\n", world.rank(), FCtime_min, FCtime_max);
     if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
 
     delete f_out;
+    time (&now);
+    if (world.rank()==0) fmt::print(stderr, "End at {}", std::ctime(&now));
     return 0;
 }
