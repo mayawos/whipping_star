@@ -866,10 +866,16 @@ inline bool file_exists (const std::string& name) {
 int main(int argc, char* argv[]) {
     diy::mpi::environment env(argc, argv);
     diy::mpi::communicator world;
+    double T0   = MPI_Wtime();
 
     time_t now;
     time (&now);
     if (world.rank()==0) fmt::print(stderr, "Start at {}", std::ctime(&now));
+
+
+
+    //std::cerr << MPI_COMM_WORLD.size() <<"\n";
+    //createTimingDataSets(f_time);
 
     size_t nPoints=-1;
     int mode=0;
@@ -877,6 +883,7 @@ int main(int argc, char* argv[]) {
     size_t nUniverses=1;
     int NTEST(0);
     std::string out_file="test.hdf5";
+    std::string time_file="timestamps.h5";
     std::string f_BG="BOTHv2_BKG_ONLY.SBNspec.root";
     std::string f_CV="BOTHv2_CV.SBNspec.root";
     std::string f_COV="BOTHv2.SBNcovar.root";
@@ -894,6 +901,7 @@ int main(int argc, char* argv[]) {
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
+    ops >> Option("timefile",     time_file,   "Output filename for timestamps.");
     ops >> Option('o', "output",     out_file,   "Output filename.");
     ops >> Option('u', "nuniverse",  nUniverses, "Number of universes");
     ops >> Option("ntest", NTEST , "Number of universes");
@@ -950,6 +958,7 @@ int main(int argc, char* argv[]) {
        }
     }
     
+    double T1   = MPI_Wtime();
     double time0 = MPI_Wtime();
 
     // Read the xml file on rank 0
@@ -964,10 +973,12 @@ int main(int argc, char* argv[]) {
     if ( world.rank() != 0 ) text.resize(textsize);
     MPI_Bcast(const_cast<char*>(text.data()), textsize, MPI_CHAR, 0, world);
 
+    double T2   = MPI_Wtime();
     // Central configuration object
     const char* xmldata = text.c_str();
     sbn::SBNconfig myconf(xmldata, false);
 
+    double T3   = MPI_Wtime();
     // Pre-oscillated spectra
     std::vector<double> sinsqvec, sinvec;
     std::vector<float> msqsplittings;
@@ -987,10 +998,12 @@ int main(int argc, char* argv[]) {
        nFilesIn = msqsplittings.size();
 
     }
+    double T4   = MPI_Wtime();
     diy::mpi::broadcast(world, sinsqvec, 0);
     diy::mpi::broadcast(world, sinvec,   0);
     diy::mpi::broadcast(world, msqsplittings,   0);
     diy::mpi::broadcast(world, nFilesIn, 0);
+    double T5   = MPI_Wtime();
     for (auto v : splitVector(sinsqvec, nFilesIn)) sinsqvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
     for (auto v : splitVector(sinvec  , nFilesIn))   sinvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
 
@@ -1013,6 +1026,7 @@ int main(int argc, char* argv[]) {
        bghist.shrink_to_fit();
     }
     diy::mpi::broadcast(world, bgvec, 0);
+    double T6   = MPI_Wtime();
 
     // Read the covariance matrix on rank 0 --- broadcast and subsequently buid from array
     TMatrixD covmat;
@@ -1048,6 +1062,7 @@ int main(int argc, char* argv[]) {
     auto const & _covcol = collapseDetectors(ecov, myconf);
     auto const & INVCOVBG = invertMatrixEigen3(_covcol);
 
+    double T7   = MPI_Wtime();
     // Setup grid
     NGrid mygrid;
     size_t dim2(0);
@@ -1076,11 +1091,13 @@ int main(int argc, char* argv[]) {
     }
     nPoints = mygrid.f_num_total_points;
     GridPoints GP(mygrid.GetGrid());
+    double T8   = MPI_Wtime();
 
     if (world.rank()==0) mygrid.Print();
 
     // Finally, the signal generator
     SignalGenerator     signal(myconf, mygrid.GetGrid(), dim2, sinsqvec_eig, sinvec_eig, ecore, mode);
+    double T9   = MPI_Wtime();
     
     double time1 = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] Input preparation took {} seconds\n",world.rank(), time1 - time0);
@@ -1133,6 +1150,7 @@ int main(int argc, char* argv[]) {
 
     // Create datasets needed TODO nbinsC --- can we get that from somewhere?
     createDataSets(f_out, nPoints, nUniverses);
+    double T10   = MPI_Wtime();
    
     // First rank also writes the grid so we know what the poins actually are
     if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid(), mode);
@@ -1149,6 +1167,7 @@ int main(int argc, char* argv[]) {
     diy::RegularMergePartners      fc_partners(fc_decomposer, 2, true);
     diy::Master                    fc_master(world, 1, -1, &Block::create, &Block::destroy);
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
+    double T11   = MPI_Wtime();
 
     //std::vector<int> work(nPoints);
     //std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
@@ -1193,6 +1212,10 @@ int main(int argc, char* argv[]) {
     rankworkbl.push_back(_bu[world.rank()+1]);
 
 
+
+
+    double T12   = MPI_Wtime();
+
     //fmt::print(stderr, "Got maxwork {}\n", maxwork);
     //for (int gp=0;gp<nPoints;++gp) {
        //for (int uv=0;uv<nUniverses;++uv) {
@@ -1212,6 +1235,7 @@ int main(int argc, char* argv[]) {
 
 
 
+    double T13   = MPI_Wtime();
     double starttime = MPI_Wtime();
     if (simplescan) {
        if (world.rank()==0) fmt::print(stderr, "Start simple scan\n");
@@ -1225,6 +1249,7 @@ int main(int argc, char* argv[]) {
     }
     double endtime   = MPI_Wtime();
 
+    double T14   = MPI_Wtime();
     float _FCtime = endtime-starttime;
     float FCtime_max, FCtime_min, FCtime_sum;
     MPI_Reduce(&_FCtime, &FCtime_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
@@ -1237,5 +1262,40 @@ int main(int argc, char* argv[]) {
     delete f_out;
     time (&now);
     if (world.rank()==0) fmt::print(stderr, "End at {}", std::ctime(&now));
+    double T15   = MPI_Wtime();
+    std::vector<double> ts;
+    ts.push_back(T0);
+    ts.push_back(T1);
+    ts.push_back(T2);
+    ts.push_back(T3);
+    ts.push_back(T4);
+    ts.push_back(T5);
+    ts.push_back(T6);
+    ts.push_back(T7);
+    ts.push_back(T8);
+    ts.push_back(T9);
+    ts.push_back(T10);
+    ts.push_back(T11);
+    ts.push_back(T12);
+    ts.push_back(T13);
+    ts.push_back(T14);
+    ts.push_back(T15);
+    size_t pStart = rankworkbl[0];
+    size_t uStart = rankworkbl[1];
+    size_t pLast  = rankworkbl[2];
+    size_t uLast  = rankworkbl[3];
+    size_t i_begin = pStart * nUniverses + uStart;
+    size_t i_end   = pLast  * nUniverses + uLast;
+    size_t lenDS = i_end - i_begin;
+
+    HighFive::File* f_time  = new HighFive::File(time_file,
+                        HighFive::File::ReadWrite|HighFive::File::Create|HighFive::File::Truncate,
+                        HighFive::MPIOFileDriver(MPI_COMM_WORLD,MPI_INFO_NULL));
+    f_time->createDataSet<double>("timestamps", HighFive::DataSpace( { 16,       world.size()} ));
+    f_time->createDataSet<size_t>("work", HighFive::DataSpace( { 1,       world.size()} ));
+    HighFive::DataSet d_ts = f_time->getDataSet("timestamps");
+    HighFive::DataSet d_wk = f_time->getDataSet("work");
+    d_ts.select(     {0, world.rank()}, {ts.size(), 1}).write(ts);
+    d_wk.select(     {0, world.rank()}, {1, 1}).write(lenDS);
     return 0;
 }
