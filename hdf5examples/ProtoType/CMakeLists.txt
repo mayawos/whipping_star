@@ -7,7 +7,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_FLAGS "-march=native -Wall -O2 -DNDEBUG")# -fPermissive")
+set(CMAKE_CXX_FLAGS "-march=${ARCH} -mtune=${ARCH} -Wall -O2 -DNDEBUG")# -fPermissive")
 #set (CMAKE_CXX_FLAGS_DEBUG " -fno-omit-frame-pointer -fsanitize=address ${CMAKE_CXX_FLAGS_DEBUG}")
 #set (CMAKE_LINKER_FLAGS_DEBUG "-fno-omit-frame-pointer -fsanitize=address ${CMAKE_LINKER_FLAGS_DEBUG})")
 #set(CMAKE_CXX_FLAGS_RELEASE "-O3")
