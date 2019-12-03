@@ -999,6 +999,7 @@ int main(int argc, char* argv[]) {
           exit(1);
        }
        nFilesIn = msqsplittings.size();
+       //std::cerr << "Error, number of input files for _SINSQ_ (" << sinsqvec.size() << ") differs from _SIN_ (" << sinvec.size() << ") exiting.\n";
 
     }
     double T4   = MPI_Wtime();
@@ -1071,8 +1072,9 @@ int main(int argc, char* argv[]) {
     size_t dim2(0);
 
     double mmin = msqsplittings.front()*0.5;
-    double mmax = msqsplittings.back()*0.5;
+    //double mmax = msqsplittings.back()*0.5;
     double mwidth = (msqsplittings[1] - msqsplittings[0])*0.5;
+    double mmax = msqsplittings.back()*0.5 + mwidth;
 
     if (world.rank()==0) std::cerr << "Mass setup for input grid: " << mmin << " < " << mmax << " width: " << mwidth << "\n";
 
@@ -1094,6 +1096,7 @@ int main(int argc, char* argv[]) {
        std::cerr << "Error, the mode must be either 0 or 1 a the moment: " << mode << "\n";
        exit(1);
     }
+    mygrid.Print();
     nPoints = mygrid.f_num_total_points;
     GridPoints GP(mygrid.GetGrid(), setZero);
     double T8   = MPI_Wtime();
