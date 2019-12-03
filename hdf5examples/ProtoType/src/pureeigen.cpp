@@ -78,9 +78,12 @@ typedef std::array<double, 3> GridPoint;
 class GridPoints {
    public:
       GridPoints() {}
-      GridPoints(std::vector<std::vector<double>> const & m_vec_grid) {
-         for (auto gp : m_vec_grid)
-            _gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
+      GridPoints(std::vector<std::vector<double>> const & m_vec_grid, int setZero=-1) {
+         for (auto gp : m_vec_grid) {
+            GridPoint P = {pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])};
+            if (setZero>=0) P[setZero] =0;//_gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
+            _gridpoints.push_back(P);//{pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
+         }
       }
 
       size_t NPoints()         { return _gridpoints.size(); }
@@ -137,8 +140,8 @@ class SignalGenerator {
 
    Eigen::VectorXd predict(size_t i_grid, bool compressed) {
       auto const & gp = m_gridpoints.Get(i_grid);
-      //sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
-      sbn::NeutrinoModel this_model(gp[0]*gp[0], 0.0, gp[2], false);   // FIXME deal with ==0
+      sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
+      //sbn::NeutrinoModel this_model(gp[0]*gp[0], 0.0, gp[2], false);   // FIXME deal with ==0
       int m_idx = massindex(i_grid);
       Oscillate(m_sinsq[m_idx], m_sin[m_idx], this_model);
 
@@ -1073,16 +1076,18 @@ int main(int argc, char* argv[]) {
 
     if (world.rank()==0) std::cerr << "Mass setup for input grid: " << mmin << " < " << mmax << " width: " << mwidth << "\n";
 
+    int setZero=-1;
     mygrid.AddDimension("m4", mmin, mmax, mwidth );
-    //mygrid.AddDimension("m4",  xmin, xmax, xwidth); // Sterile mass ultimately limited by input files
     if (mode==0) {
        mygrid.AddDimension("ue4", ymin, ymax, ywidth);// arbirtrarily dense! mixing angle nu_e
        mygrid.AddFixedDimension("um4", 0.0);
+       setZero=2;
        dim2 = mygrid.f_dimensions[1].f_N;
     }
     else if (mode==1) {
        mygrid.AddFixedDimension("ue4", 0.0);
        mygrid.AddDimension("um4", ymin, ymax, ywidth);
+       setZero=1;
        dim2 = mygrid.f_dimensions[2].f_N;
     }
     else {
@@ -1090,7 +1095,7 @@ int main(int argc, char* argv[]) {
        exit(1);
     }
     nPoints = mygrid.f_num_total_points;
-    GridPoints GP(mygrid.GetGrid());
+    GridPoints GP(mygrid.GetGrid(), setZero);
     double T8   = MPI_Wtime();
 
     if (world.rank()==0) mygrid.Print();
