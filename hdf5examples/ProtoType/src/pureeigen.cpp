@@ -1096,7 +1096,6 @@ int main(int argc, char* argv[]) {
        std::cerr << "Error, the mode must be either 0 or 1 a the moment: " << mode << "\n";
        exit(1);
     }
-    mygrid.Print();
     nPoints = mygrid.f_num_total_points;
     GridPoints GP(mygrid.GetGrid(), setZero);
     double T8   = MPI_Wtime();
