@@ -64,7 +64,7 @@ var="Reconstructed Visible Energy [MeV]"
 
 for n in $number; do
 
-    mkdir -p /uboone/data/users/wospakrk/logs
+    mkdir -p /uboone/data/users/${USER}/logs
 
     if [[ "$keep" == "true" ]]
     then
@@ -96,18 +96,18 @@ for n in $number; do
     if [[ "$simple" == "true" ]]
     then
         echo "will do simple hypothesis testing..."
-        [ -e /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_StatsOnly.log ] && rm /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_StatsOnly.log
-        ./sbnfit_lee_frequentist_study --xml ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml --signal ${sample}_reco_energy_fakedata${n}_MC.SBNspec.root --background ${sample}_reco_energy_fakedata${n}_MC_BKG.SBNspec.root --fakedata ${sample}_reco_energy_fakedata${n}_DATA.SBNspec.root --poisson --tag ${sample}_reco_energy_fakedata${n}_StatsOnly >& /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_StatsOnly.log
-        [ -e /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_H0matrix.log ] && rm /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_H0matrix.log
-        ./sbnfit_lee_frequentist_study --xml ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml --signal ${sample}_reco_energy_fakedata${n}_MC.SBNspec.root --background ${sample}_reco_energy_fakedata${n}_MC_BKG.SBNspec.root --fakedata ${sample}_reco_energy_fakedata${n}_DATA.SBNspec.root --covariance ${sample}_reco_energy_fakedata${n}_nolee_MC.SBNcovar.root -e 1e-8 -f 20 --tag ${sample}_reco_energy_fakedata${n}_H0matrix >& /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_H0matrix.log
-	    [ -e /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_H1matrix.log ] && rm /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_H1matrix.log
-        ./sbnfit_lee_frequentist_study --xml ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml --signal ${sample}_reco_energy_fakedata${n}_MC.SBNspec.root --background ${sample}_reco_energy_fakedata${n}_MC_BKG.SBNspec.root --fakedata ${sample}_reco_energy_fakedata${n}_DATA.SBNspec.root --covariance ${sample}_reco_energy_fakedata${n}_MC.SBNcovar.root -e 1e-8 -f 20 --tag ${sample}_reco_energy_fakedata${n}_MC_H1matrix >& /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_H1matrix.log
+        [ -e /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_StatsOnly.log ] && rm /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_StatsOnly.log
+        ./sbnfit_lee_frequentist_study --xml ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml --signal ${sample}_reco_energy_fakedata${n}_MC.SBNspec.root --background ${sample}_reco_energy_fakedata${n}_MC_BKG.SBNspec.root --fakedata ${sample}_reco_energy_fakedata${n}_DATA.SBNspec.root --poisson --tag ${sample}_reco_energy_fakedata${n}_StatsOnly >& /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_StatsOnly.log
+        [ -e /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_H0matrix.log ] && rm /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_H0matrix.log
+        ./sbnfit_lee_frequentist_study --xml ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml --signal ${sample}_reco_energy_fakedata${n}_MC.SBNspec.root --background ${sample}_reco_energy_fakedata${n}_MC_BKG.SBNspec.root --fakedata ${sample}_reco_energy_fakedata${n}_DATA.SBNspec.root --covariance ${sample}_reco_energy_fakedata${n}_nolee_MC.SBNcovar.root -e 1e-8 -f 20 --tag ${sample}_reco_energy_fakedata${n}_H0matrix >& /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_H0matrix.log
+	    [ -e /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_H1matrix.log ] && rm /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_H1matrix.log
+        ./sbnfit_lee_frequentist_study --xml ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml --signal ${sample}_reco_energy_fakedata${n}_MC.SBNspec.root --background ${sample}_reco_energy_fakedata${n}_MC_BKG.SBNspec.root --fakedata ${sample}_reco_energy_fakedata${n}_DATA.SBNspec.root --covariance ${sample}_reco_energy_fakedata${n}_MC.SBNcovar.root -e 1e-8 -f 20 --tag ${sample}_reco_energy_fakedata${n}_MC_H1matrix >& /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_H1matrix.log
     fi	
     if [[ "$feldman" == "true" ]]
     then
-        #[ -e /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_FC_StatsOnly.log ] && rm /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_FC_StatsOnly.log
-        #./sbnfit_uboone_scaling_fc -x ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml -t ${sample}_reco_energy_fakedata${n}_MC -i lee -g "0 4 25" -m feldman --cnp --stat >& /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_FC_StatsOnly.log 
-        [ -e /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_FC.log ] && rm /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_FC.log
-        ./sbnfit_uboone_scaling_fc -x ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml -t ${sample}_reco_energy_fakedata${n}_MC -i lee -g "0 4 25" -m feldman --cnp --detsys >& /uboone/data/users/wospakrk/logs/${sample}_reco_energy_fakedata${n}_MC_FC.log 
+        [ -e /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_FC_StatsOnly.log ] && rm /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_FC_StatsOnly.log
+        ./sbnfit_uboone_scaling_fc -x ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml -t ${sample}_reco_energy_fakedata${n}_MC -i lee -g "0 4 25" -m feldman --cnp --stat >& /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_FC_StatsOnly.log 
+        [ -e /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_FC.log ] && rm /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_FC.log
+        ./sbnfit_uboone_scaling_fc -x ../../xml/PELEE/Fakedata/${sample}_reco_energy_fakedata${n}_MC.xml -t ${sample}_reco_energy_fakedata${n}_MC -i lee -g "0 4 25" -m feldman --cnp --detsys >& /uboone/data/users/${USER}/logs/${sample}_reco_energy_fakedata${n}_MC_FC.log 
     fi
 done
