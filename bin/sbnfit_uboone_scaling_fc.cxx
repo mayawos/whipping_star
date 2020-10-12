@@ -321,7 +321,7 @@ int main(int argc, char* argv[])
             //Whats the critical value?
             TTree *t =  (TTree*)fin->Get(("ttree_"+std::to_string(i)).c_str());
             TH1D * cumul = (TH1D*)fin->Get(("delta_chi2_"+std::to_string(i)+"_cumulative").c_str());
-            TH1D * h_bfval = (TH1D*)fin->Get(("bf_value_"+std::to_string(i)).c_str());//Added by Ivan
+            TH1D * h_bfval = (TH1D*)fin->Get(("bf_gridvalue_"+std::to_string(i)).c_str());//Added by Ivan
 
             for(int p =0; p< plotting_pvals.size(); ++p){
                 double plotting_pval = plotting_pvals[p];
