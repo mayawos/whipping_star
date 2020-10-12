@@ -68,6 +68,8 @@ void runHelp(){
                 std::cout<<"\t-r\t--randomseed\t\tRandomNumber Seed (default from machine)"<<std::endl; 
                 std::cout<<"\t-c\t--cnp\t\tuse a Combined Newman Pearson chi2 (default false)"<<std::endl;
                 std::cout<<"\t-d\t--data\t\ta data SBNspec file to input, use with mode data"<<std::endl;
+                std::cout<<"\t-f\t--frequentist\t\t, perform an equivalent of lee frequentist study, grid dimension is fixed to '1e-6 2 2'"<<std::endl;
+                std::cout<<"\t-y\t--detsys\t\t, add detector systematics matrix to the default covariance matrix"<<std::endl;
                 std::cout<<"\t-h\t--help\t\tThis help menu."<<std::endl;
                 std::cout<<"---------------------------------------------------"<<std::endl;
     return;
@@ -95,6 +97,8 @@ int main(int argc, char* argv[])
         {"data",        required_argument, 0 ,'d'},
         {"input",       required_argument, 0 ,'i'},
         {"randomseed",        required_argument, 0 ,'r'},
+        {"frequentist",        no_argument, 0 ,'f'},
+        {"detsys",        no_argument, 0 ,'y'},
         {"help", 		no_argument,	0, 'h'},
         {0,			    no_argument, 		0,  0},
     };
@@ -110,6 +114,8 @@ int main(int argc, char* argv[])
     int number = 2500;
     double random_number_seed = -1;
     bool use_cnp = false;
+    bool do_simple_hypothesis = false;
+    bool detsys = false;
         
     std::string grid_string = "1e-4 8.0 33";
     std::string input_scale_subchannel = "unset";
@@ -117,7 +123,7 @@ int main(int argc, char* argv[])
 
     while(iarg != -1)
     {
-        iarg = getopt_long(argc,argv, "x:t:m:n:r:d:p:i:g:sch", longopts, &index);
+        iarg = getopt_long(argc,argv, "x:t:m:n:r:d:p:i:g:schfy", longopts, &index);
 
         switch(iarg)
         {
@@ -153,6 +159,12 @@ int main(int argc, char* argv[])
             case 's':
                 bool_stat_only = true;
                 break;
+            case 'f':
+                do_simple_hypothesis = true;
+                break;
+            case 'y':
+                detsys = true;
+                break;
             case '?':
             case 'h':
                 runHelp(); 
@@ -179,25 +191,44 @@ int main(int argc, char* argv[])
     }
     
     NGrid mygrid;
-    mygrid.AddDimension("NCDeltaRadOverlaySM",grid_string);
-   
+    if( do_simple_hypothesis ) mygrid.AddDimension(input_scale_subchannel.c_str(),"0. 2. 2");
+    else mygrid.AddDimension(input_scale_subchannel.c_str(),grid_string);
 
     mygrid.Print();
     SBNfeld myfeld(mygrid,tag,xml);
 
     if(mode_option == "feldman"){
 
-        std::cout<<"Begininning a full Feldman-Cousins analysis for tag : "<<tag<<std::endl;
+        //setup covariance matrix 
+        TFile * fsys;
+        TFile * fdetsys;
+        TMatrixD * cov;
+        TMatrixD * covdetsys;
 
-        myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
-        //myfeld.SetFractionalCovarianceMatrix(Msys);
-        //myfeld.SetStatOnly();
+        //allows for stats-only test
+        std::cout<<"Begininning a full Feldman-Cousins analysis for tag : "<<tag<<std::endl;
+        if(bool_stat_only){
+            myfeld.SetEmptyFractionalCovarianceMatrix();
+            myfeld.SetStatOnly();
+            std::cout<<"RUNNING Statistics uncertainty only!"<<std::endl;
+        }else{
+            fsys = new TFile(Form("%s.SBNcovar.root",tag.c_str()),"read");
+            cov = (TMatrixD*)fsys->Get("frac_covariance");
+            fdetsys = new TFile(Form("/uboone/data/users/wospakrk/PeLEE/SBNfit/Fakedata/%s_detsys.root",tag.c_str()),"read");
+            covdetsys = (TMatrixD*)fsys->Get("frac_covariance");
+            if(detsys) (*cov) = (*cov)+(*covdetsys);
+            myfeld.SetFractionalCovarianceMatrix(cov);
+        }
+
+        if(use_cnp) myfeld.UseCNP();
+        if(do_simple_hypothesis) myfeld.doSimpleHypothesis();
+
         myfeld.m_subchannel_to_scale = input_scale_subchannel;
 
         myfeld.SetCoreSpectrum(tag+"_CV.SBNspec.root");
         myfeld.SetBackgroundSpectrum(tag+"_CV.SBNspec.root",input_scale_subchannel,0.0);
         myfeld.GenerateScaledSpectra();
-
+        
         std::cout<<"Setting random seed "<<random_number_seed<<std::endl;
         myfeld.SetRandomSeed(random_number_seed);
         myfeld.SetNumUniverses(number);
@@ -208,6 +239,7 @@ int main(int argc, char* argv[])
 
         std::cout<<"Beginning to peform FullFeldmanCousins analysis"<<std::endl;
         myfeld.FullFeldmanCousins();
+
 
     }else if(mode_option=="data"){
 
@@ -259,6 +291,7 @@ int main(int argc, char* argv[])
         std::vector<std::vector<double>> vec_grid = mygrid.GetGrid();
 
         TFile *fin = new TFile(("SBNfeld_output_"+tag+".root").c_str(),"read");
+        //TFile *fin = new TFile("/uboone/data/users/wospakrk/FCplots/SBNfeld_output_nue_1e0p_numu_reco_e_H1_mc_fakedata1.root","read");
 
         //Some Manual Color Changing and such
         int plotting_true_gridpoint = 5;
@@ -279,6 +312,7 @@ int main(int argc, char* argv[])
 
         std::cout<<"MPrinting stuff"<<std::endl;
         TH2D * f_FC = new TH2D("f_FC","f_FC",vec_grid.size(),vec_grid.front()[0],vec_grid.back()[0],vec_grid.size(),vec_grid.front()[0],vec_grid.back()[0]);
+        double bfval_v[vec_grid.size()];
 
         for(int i=0; i< vec_grid.size(); i++){
 
@@ -287,6 +321,7 @@ int main(int argc, char* argv[])
             //Whats the critical value?
             TTree *t =  (TTree*)fin->Get(("ttree_"+std::to_string(i)).c_str());
             TH1D * cumul = (TH1D*)fin->Get(("delta_chi2_"+std::to_string(i)+"_cumulative").c_str());
+            TH1D * h_bfval = (TH1D*)fin->Get(("bf_value_"+std::to_string(i)).c_str());//Added by Ivan
 
             for(int p =0; p< plotting_pvals.size(); ++p){
                 double plotting_pval = plotting_pvals[p];
@@ -299,7 +334,7 @@ int main(int argc, char* argv[])
                         critical_delta_chi2_mid = cumul->GetBinCenter(c);
                         critical_delta_chi2 = lin_interp(cumul->GetBinContent(c+1), cumul->GetBinContent(c), cumul->GetBinLowEdge(c+1), cumul->GetBinLowEdge(c)+cumul->GetBinWidth(c), plotting_pval);
                         break;
-                    }
+                   }
                 }
 
                 std::cout<<"Grid point "<<i<<" has a critical delta chi of "<<critical_delta_chi2<<"("<<critical_delta_chi2_mid<<") for a pval of "<<plotting_pval<<std::endl; 
@@ -316,6 +351,16 @@ int main(int argc, char* argv[])
                     v_max[p].push_back( *(std::max_element(x, x+nentries)) );
                 }
             }//end pval loop
+
+            //adding median best-fit values to confidence belt plot 
+            h_bfval->ComputeIntegral();
+            std::vector<double> pvalues = { 0.5 };
+            std::vector<double> bf_val_quantiles(pvalues.size());
+            h_bfval->GetQuantiles(pvalues.size(),&bf_val_quantiles[0], &pvalues[0]);
+            double bfval = bf_val_quantiles[0];
+            //double bfval = h_bfval->GetMean(); //Added by Ivan
+            bfval_v[i] = bfval;
+
             delete cumul;
         }
 
@@ -363,22 +408,36 @@ int main(int argc, char* argv[])
         pad->cd();
         mg->Draw("ALF");
         
-        mg->GetXaxis()->SetTitle("Measured #Delta Radiative Rate (#hat{x}_{#Delta})");
-        mg->GetYaxis()->SetTitle("True #Delta Radiative Rate (x_{#Delta})");
+        mg->GetXaxis()->SetTitle("Measured Signal Strength (#hat{#mu})");
+        mg->GetYaxis()->SetTitle("True Signal Strength (#mu)");
         mg->SetMinimum(v_true.front());
         mg->SetMinimum(v_true.front());
 
-        double mplot = 7.0;
+        //calculate the 2d points based on grid dimension and resolution
+        double npoints = vec_grid.size();
+        double maxpt = vec_grid.back()[0];
+        double scale = (npoints-1)/maxpt;
 
-        mg->GetXaxis()->SetLimits(v_true.front(),mplot);      
-        mg->GetHistogram()->SetMaximum(mplot);//v_true.back());          
+        mg->GetXaxis()->SetLimits(v_true.front(),maxpt);      
+        mg->GetHistogram()->SetMaximum(maxpt);//v_true.back());          
         mg->GetHistogram()->SetMinimum(v_true.front());     
  
         for(auto &g:gmins)g->Draw("l same");
         for(auto &g:gmaxs)g->Draw("l same");
+        double u_measured[vec_grid.size()];
+        double uexp = 0;
 
+        std::cout << "//////////HERE!!!!!!!! vec_grid.size() = " << vec_grid.size() << std::endl;
+        for(int k = 0; k < npoints; k++){
+            uexp = ((double) k)/scale;
+            std::cout << "//////////HERE!!!!!!!! k, uexp, median = " << k << ", " << uexp << ", " << bfval_v[k] << std::endl;
+            u_measured[k] = uexp;
+        }
+
+        TGraph *bf_vals_g = new TGraph(vec_grid.size(),u_measured,bfval_v);
+        bf_vals_g->Draw("same *");
         
-        TLine lcross(v_true.front(),v_true.front(),mplot, mplot);
+        TLine lcross(v_true.front(),v_true.front(),npoints, npoints);
         lcross.SetLineStyle(9);
         lcross.SetLineWidth(1);
         lcross.SetLineColor(kBlack);

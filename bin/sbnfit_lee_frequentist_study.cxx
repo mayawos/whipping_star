@@ -46,7 +46,6 @@ int main(int argc, char* argv[])
     int iarg = 0;
     opterr=1;
     int index;
-    bool sample_with_gaussian = false;
     bool sample_from_covariance = true;
     bool sample_from_collapsed = false;
     bool remove_correlations = false;
@@ -60,6 +59,7 @@ int main(int argc, char* argv[])
     std::string signal_file = "EMPTY";
     std::string background_file = "EMPTY";
     std::string covariance_file = "EMPTY";
+    std::string fakedata_file = "EMPTY";
 
     bool bool_flat_det_sys = false;
     double flat_det_sys_percent = 0.0;
@@ -67,11 +67,6 @@ int main(int argc, char* argv[])
     bool zero_off_diag = false;
     bool tester=false;
     double epsilon = 1e-12;
-
-    bool reverse_colors = false;
-    std::string legends = "H_{0}|H_{1}";
-
-    std::string real_data_string = "null";
 
     const struct option longopts[] =
     {
@@ -81,15 +76,12 @@ int main(int argc, char* argv[])
         {"signal", 		required_argument,	0,'s'},
         {"mode", 	    	required_argument,	0,'m'},
         {"background", 	required_argument,	0,'b'},
+        {"fakedata", 	required_argument,	0,'d'},
         {"tag", 	    required_argument,	0,'t'},
         {"epsilon", required_argument,0,'e'},
-        {"legend",required_argument,0,'l'},
         {"cnp",no_argument,0,'a'},
         {"zero",no_argument,0,'z'},
-        {"gaussian",no_argument,0,'g'},
-        {"data",required_argument,0,'d'},
         {"tester",no_argument,0,'k'},
-        {"reverse",no_argument,0,'r'},
         {"poisson", no_argument,0,'p'},
         {"flat", required_argument,0,'f'},
         {"help",no_argument,0,'h'},
@@ -98,7 +90,7 @@ int main(int argc, char* argv[])
 
     while(iarg != -1)
     {
-        iarg = getopt_long(argc,argv, "m:d:a:x:n:s:e:b:c:l:f:t:u:q:pjgrkzh", longopts, &index);
+        iarg = getopt_long(argc,argv, "m:a:x:n:s:e:b:d:c:f:t:pjkzh", longopts, &index);
 
         switch(iarg)
         {
@@ -114,12 +106,6 @@ int main(int argc, char* argv[])
             case 'm':
                 which_mode = (int)strtod(optarg,NULL);
                 break;
-            case 'l':
-                legends = optarg;
-                break;
-            case 'r':
-                reverse_colors = true;
-                break;
             case 'x':
                 xml = optarg;
                 break;
@@ -128,6 +114,9 @@ int main(int argc, char* argv[])
                 break;
             case 'b':
                 background_file = optarg;
+                break;
+            case 'd':
+                fakedata_file = optarg;
                 break;
             case 'f':
                 bool_flat_det_sys = true;
@@ -145,17 +134,11 @@ int main(int argc, char* argv[])
             case 'c':
                 covariance_file = optarg;
                 break;
-            case 'g':
-                sample_with_gaussian  = true;
-                break;
             case 'n':
                 num_MC_events = (int)strtod(optarg,NULL);
                 break;
             case 'p':
                 sample_from_covariance = false;
-                break;
-            case 'd':
-                real_data_string = optarg;
                 break;
             case '?':
             case 'h':
@@ -167,6 +150,7 @@ int main(int argc, char* argv[])
                 std::cout<<"\t-t\t--tag\t\t\tA unique tag to identify the outputs [Default to TEST]"<<std::endl;
                 std::cout<<"\t-s\t--signal\t\tInput signal SBNspec.root file"<<std::endl;
                 std::cout<<"\t-b\t--background\t\tInput background only SBNspec.root file"<<std::endl;
+                std::cout<<"\t-d\t--fakedata\t\tInput fakedata SBNspec.root file"<<std::endl;
                 std::cout<<"\t-c\t--covariance\t\tInput Fractional Covariance Matrix SBNcovar.root file. If not passed, defaults to stats only!"<<std::endl;
                 std::cout<<"--- Optional arguments: ---"<<std::endl;
                 std::cout<<"\t-j\t--collapse\t\tSample from collapsed rather than full covariance matrix (default false, experimental!)"<<std::endl;
@@ -174,10 +158,8 @@ int main(int argc, char* argv[])
                 std::cout<<"\t-z\t--zero\t\tZero out all off diagonal elements of the systematics covariance matrix (default false, experimental!)"<<std::endl;
                 std::cout<<"\t-e\t--epsilon\t\tEpsilon tolerance by which to add back to diagonal of covariance matrix if determinant is 0 (default 1e-12)"<<std::endl;
                 std::cout<<"\t-n\t--number\t\tNumber of MC events for frequentist studies (default 100k)"<<std::endl;
-                std::cout<<"\t-g\t--gaussian\t\tSample by adding sqrt(N) to covariance rather than 2-step Poisson sampling (default: false)"<<std::endl;
                 std::cout<<"\t-m\t--mode\t\tMode for test statistics 0: absolute chi^2, 1: delta chi^2 (default Delta Chi| obsolete, runs all concurrently)"<<std::endl;
                 std::cout<<"\t-p\t--poisson\t\tUse Poissonian draws for pseudo experiments instead of from covariance matrix"<<std::endl;
-                std::cout<<"\t-d\t--data\t\tReal Data"<<std::endl;
                 std::cout<<"\t-h\t--help\t\t\tThis help menu."<<std::endl;
                 std::cout<<"---------------------------------------------------"<<std::endl;
                 return 0;	
@@ -206,83 +188,119 @@ int main(int argc, char* argv[])
     std::cout<<"Loading background file : "<<background_file<<" with xml "<<xml<<std::endl;
     SBNspec bkg(background_file,xml);
 
-    std::cout<<"Legends are being set to "<<legends<<std::endl;
-
     std::cout<<"Loading fractional covariance matrix from "<<covariance_file<<std::endl;
-
+    std::cout << "loading frac cov matrix" << std::endl;
     TFile * fsys;
     TMatrixD * cov;
+
     
     if(!stats_only){
         fsys = new TFile(covariance_file.c_str(),"read");
         cov = (TMatrixD*)fsys->Get("frac_covariance");
     }
+    std::cout << "found frac cov matrix: " << cov << std::endl;
 
 
+    //PeLEE hacks for incorporating fake data
+    TFile * fdata;
+    TH1D * h_fakedata_1eNp;
+    TH1D * h_fakedata_1e0p;
+    TH1D * h_fakedata_numu;
+    
+    if(fakedata_file != "EMPTY"){
+      std::cout << "Loading fakedata file: " << fakedata_file << std::endl;
+      fdata = new TFile(fakedata_file.c_str(),"read");
+      h_fakedata_1eNp = (TH1D*)fdata->Get("nu_uBooNE_nue_data");
+      h_fakedata_1e0p = (TH1D*)fdata->Get("nu_uBooNE_1e0p_data");
+      h_fakedata_numu = (TH1D*)fdata->Get("nu_uBooNE_numu_data");
+    }
+    
+    //create vector of fakedata:
+    std::vector<float> fakedata;
+    if( h_fakedata_1eNp ){ for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
+    if( h_fakedata_1e0p ){ for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
+    if( h_fakedata_numu ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
+    if( h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; }
+    if( h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; }
+    if( h_fakedata_numu ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_numu->GetBinContent k " << k << " = " <<  h_fakedata_numu->GetBinContent(k) << std::endl; }
+    
+    std::cout << "size of fakedata vector: " << fakedata.size() << std::endl;
+    //End of PeLEE hacks for incorporating fake data
+    
+    
+    
+    //PELEE hack -- use the actual PELEE diagonal errors for detsys instead of flat systematics
     TMatrixD frac_flat_matrix(bkg.num_bins_total, bkg.num_bins_total);
-
+    
+    //BDT
+    std::vector<double> sig_detsys = {0.203,0.163,0.257,0.092,0.122,0.128,0.186,0.110,0.126,0.186,0.226,0.260,0.166,0.325};
+    //numu
+    std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261};
+    
     if(bool_flat_det_sys){
-	    std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
-	    frac_flat_matrix.ResizeTo(bkg.num_bins_total,bkg.num_bins_total);
-	    frac_flat_matrix.Zero();//(bkg.num_bins_total,bkg.num_bins_total);
-	    for(int i=0 ; i< bkg.num_bins_total; i++){
-               frac_flat_matrix(i,i)=flat_det_sys_percent*flat_det_sys_percent/10000.;
+      //std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
+      std::cout << "RUNNING with PELEE systematics!" << std::endl;
+      
+      frac_flat_matrix.ResizeTo(bkg.num_bins_total,bkg.num_bins_total);
+      frac_flat_matrix.Zero();//(bkg.num_bins_total,bkg.num_bins_total);
+      int j=0;     
+      
+      for(auto& h: bkg.hist){
+        std::string hname = h.GetName();
+        for( int i=1; i < h.GetNbinsX()+1; i++ ){
+          if( hname.find("nue_intrinsic") != std::string::npos ){
+            //std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j;
+            frac_flat_matrix(j,j) = sig_detsys[i-1]*sig_detsys[i-1];
+            //std::cout << ", " << sig_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << frac_flat_matrix(j,j) << std::endl;
+          }
+          else if( hname.find("numu_bnb") != std::string::npos ){
+            //std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            frac_flat_matrix(j,j) = numu_detsys[i-1]*numu_detsys[i-1];
+            //std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << frac_flat_matrix(j,j) << std::endl;
+          }
+	  else if( hname.find("extbnb") == std::string::npos && hname.find("lee") == std::string::npos ){
+            //std::cout << "Fill bg detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            frac_flat_matrix(j,j) = 0.2*0.2;
+            //std::cout << ", 0.2 , " << frac_flat_matrix(j,j) << std::endl;
+          }
+          j++; 
         }
-        std::cout<<"Just Before"<<std::endl;
-        (*cov) = (*cov)+(frac_flat_matrix);
+      }
+      /*for(int i=0 ; i< bkg.num_bins_total; i++){
+	frac_flat_matrix(i,i)=flat_det_sys_percent*flat_det_sys_percent/10000.;
+	}*/
+      std::cout<<"Just Before"<<std::endl;
+      (*cov) = (*cov)+(frac_flat_matrix);
     }
-
-
+    std::cout << "Done with systematics!" << std::endl;
+    
     if(remove_correlations){
-        std::cout<<"WARNING! We are running in   `Remove All Off Diagional Covariances/Correlations Mode` make sure this is what you want. "<<std::endl;
-        for(int i=0; i<bkg.num_bins_total;i++){ 
-            for(int j=0; j<bkg.num_bins_total;j++){ 
-                if(i==j)continue;
-                (*cov)(i,j) =0.0;
-            }
-        }
+      std::cout<<"WARNING! We are running in   `Remove All Off Diagional Covariances/Correlations Mode` make sure this is what you want. "<<std::endl;
+      for(int i=0; i<bkg.num_bins_total;i++){ 
+	for(int j=0; j<bkg.num_bins_total;j++){ 
+	  if(i==j)continue;
+	  (*cov)(i,j) =0.0;
+	}
+      }
     }
-
-
-
-
+    
+    
     if(!stats_only){
-        std::cout<<"Not running in stats only mode"<<std::endl;
-        SBNcls cls_factory(&bkg, &sig,*cov);
+        SBNcls cls_factory(&bkg, &sig, fakedata, *cov);
         cls_factory.SetTolerance(epsilon);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
         if(sample_from_covariance) cls_factory.SetSampleCovariance();
-        if(sample_with_gaussian) cls_factory.SetGaussianSampling();
-        if(reverse_colors)cls_factory.ReverseColours();
-        cls_factory.SetLegends(legends);
-
         cls_factory.setMode(which_mode);
         if(tester){cls_factory.runConstraintTest();return 0;}
         cls_factory.CalcCLS(num_MC_events, tag);
-
-        if(real_data_string!="null"){
-            SBNspec *data = new SBNspec(real_data_string,xml);
-            cls_factory.compareToRealData(data);
-            TMatrixD empty(data->num_bins_total_compressed,data->num_bins_total_compressed);
-            empty.Zero();
-            sig.CompareSBNspecs(empty,data,tag+"_datamc");
-        }
-
     }else{
-        SBNcls cls_factory(&bkg, &sig);
+        SBNcls cls_factory(&bkg, &sig, fakedata);
         cls_factory.SetTolerance(epsilon);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
-        if(sample_with_gaussian) cls_factory.SetGaussianSampling();
-        if(reverse_colors)cls_factory.ReverseColours();
         cls_factory.setMode(which_mode);
-        
         if(tester){cls_factory.runConstraintTest();return 0;}
-
-        cls_factory.SetLegends(legends);
         cls_factory.CalcCLS(num_MC_events, tag);
     }
-
-
 
     return 0;
 }

@@ -225,6 +225,10 @@ namespace sbn{
             int PrintMatricies(std::string);
             int DrawSampleCovariance(std::string);
 
+
+            //pelee fakedata and detsys specific function
+            std::vector<CLSresult> Mike_NP_fakedata(SBNspec *specin, std::vector<float> fakedata, std::vector<float> &chidata, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id);
+            void FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool useBDT = true );
     };
 
 

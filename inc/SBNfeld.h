@@ -67,6 +67,7 @@ namespace sbn{
         bool m_bool_print_comparasons;
 
         bool m_use_CNP;
+        bool m_bool_simple_hypothesis; //added for pelee validation
 
         int m_max_number_iterations;
         double m_chi_min_convergance_tolerance;
@@ -90,6 +91,7 @@ namespace sbn{
             m_random_seed = -1;
             m_max_number_iterations = 5;
             m_use_CNP = false;
+            m_bool_simple_hypothesis = false; //pelee validation
 
             global_scale = 1;//5.81731e19/6.6e20;
             //global_scale = 4.51931e+19/6.6e20;
@@ -106,6 +108,7 @@ namespace sbn{
 
 
         int UseCNP(){m_use_CNP = true;};
+        int doSimpleHypothesis(){m_bool_simple_hypothesis = true;}; //pelee validation
         int FullFeldmanCousins();
         int CompareToData(SBNspec *datain);
         int PointFeldmanCousins(size_t);
