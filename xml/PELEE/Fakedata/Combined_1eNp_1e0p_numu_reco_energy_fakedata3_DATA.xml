@@ -73,7 +73,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_intrinsic"
+         associated_subchannel="nu_uBooNE_1eNp_intrinsic"
          additional_weight="weightSplineTimesTune"
       />
  </MultisimFile>
