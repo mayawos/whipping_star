@@ -55,7 +55,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_data"
+         associated_subchannel="nu_uBooNE_nue_data"
       />
  </MultisimFile>
 

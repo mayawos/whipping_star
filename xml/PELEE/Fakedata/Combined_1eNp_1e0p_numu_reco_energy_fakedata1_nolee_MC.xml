@@ -1,4 +1,4 @@
-<?xml version="weightSplineTimesTune" ?>
+<?xml version="1.0" ?>
 
 <!-- For this simple example we have one mode: Neutrino mode (nu) and one detector (uBooNE) -->
 <mode name="nu" />
@@ -44,16 +44,20 @@
     <subchannel name="bnb" />
     <subchannel name="data" />
 </channel>
+    <subchannel name="bnb" />
+    <!--subchannel name="data" /-->
+</channel>
 
 <plotpot value=5.01e20/>
 
 <!-- ############################# BUILDING A COVARIANCE MATRIX  #####################################################-->
 <!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
+
  <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/nue_1eNp_fakedata1.root" scale= "1.0" pot = "1.77e23" > 
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_intrinsic"
+         associated_subchannel="nu_uBooNE_nue_intrinsic"
          additional_weight="weightSplineTimesTune"
       />
  </MultisimFile>
@@ -62,7 +66,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_lee"
+         associated_subchannel="nu_uBooNE_nue_lee"
          additional_weight="0.0*leeweight*weightSplineTimesTune"
       />
  </MultisimFile>
@@ -71,7 +75,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_nu"
+         associated_subchannel="nu_uBooNE_nue_nu"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -80,7 +84,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_CCmuNoPi"
+         associated_subchannel="nu_uBooNE_nue_CCmuNoPi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -89,7 +93,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_ccpi0"
+         associated_subchannel="nu_uBooNE_nue_ccpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -98,7 +102,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_NCcPiNoPi0"
+         associated_subchannel="nu_uBooNE_nue_NCcPiNoPi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -107,7 +111,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_ncnopi"
+         associated_subchannel="nu_uBooNE_nue_ncnopi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -116,7 +120,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_ncpi0"
+         associated_subchannel="nu_uBooNE_nue_ncpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -125,7 +129,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_CCmuCPiNoPi0"
+         associated_subchannel="nu_uBooNE_nue_CCmuCPiNoPi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -145,7 +149,7 @@
          name="reco_e_d"
          type="double"
          associated_subchannel="nu_uBooNE_1e0p_lee"
-         additional_weight="leeweight*weightSplineTimesTune"
+         additional_weight="0.0*leeweight*weightSplineTimesTune"
       />
  </MultisimFile>
 
@@ -216,8 +220,16 @@
 
  <WeightMaps>
     <variation pattern="_AllGenie" weight_formula="1.0/weightTune"/>
+    <!--
+    <variation pattern="_Genie" weight_formula="weightSpline"/>
+    <variation pattern="_PrimaryHadron" weight_formula="weightSplineTimesTune" />
+    <variation pattern="_FluxUnisim" weight_formula="weightSplineTimesTune"/>
+    -->
  </WeightMaps>
- 
- <variation_list>
-    <blacklist>XSecShape_CCMEC_Genie</blacklist>
- </variation_list>
+<WeightMaps>
+   <variation pattern="_AllGenie" weight_formula="1.0/weightTune"/>
+</WeightMaps>
+
+<variation_list>
+   <blacklist>XSecShape_CCMEC_Genie</blacklist>
+</variation_list>

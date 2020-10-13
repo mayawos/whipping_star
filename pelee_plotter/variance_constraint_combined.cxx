@@ -589,7 +589,29 @@ int main(int argc, char* argv[])
         plot_one(FracConstMatrix, h_nue_total, h_numu, "SBNfit_constrained_fractional_covariance_matrix_variancemethod_"+tag1+"_mc");
         plot_one(CorrConstMatrix, h_nue_total, h_numu, "SBNfit_constrained_correlation_matrix_variancemethod_"+tag1+"_mc");
 
-        fconstr->Close();	
+        fconstr->Close();
+	
+        //create root file containing the constrained matrix no lee
+	TFile * fconstr_nolee = new TFile(Form("variancemethod_constrained_%s_nolee.SBNcovar.root",tag1.c_str()),"recreate");	
+        TMatrixD ConstMatrix_nolee(h_nue_total->GetNbinsX(),h_nue_total->GetNbinsX()); 
+        TMatrixD FracConstMatrix_nolee(h_nue_total->GetNbinsX(),h_nue_total->GetNbinsX()); 
+        TMatrixD CorrConstMatrix_nolee(h_nue_total->GetNbinsX(),h_nue_total->GetNbinsX()); 
+        for( int i = 0; i < ConstMatrix_nolee.GetNrows(); i++ ){
+          for( int j = 0; j < ConstMatrix_nolee.GetNcols(); j++ ){
+            ConstMatrix_nolee(i,j) = constnuematrix_nolee(i,j);
+            FracConstMatrix_nolee(i,j) = constnuematrix_nolee(i,j)/(input_vec_scaled_nolee[i]*input_vec_scaled_nolee[j]);
+            CorrConstMatrix_nolee(i,j) = constnuematrix_nolee(i,j)/(sqrt(constnuematrix_nolee(i,i))*sqrt(constnuematrix_nolee(j,j)));
+          }
+        }
+        (TMatrixD*)ConstMatrix_nolee.Write("full_covariance");
+        (TMatrixD*)FracConstMatrix_nolee.Write("frac_covariance");
+        (TMatrixD*)CorrConstMatrix_nolee.Write("full_correlation");
+    
+        plot_one(ConstMatrix_nolee, h_nue_total, h_numu, "SBNfit_constrained_covariance_matrix_variancemethod_"+tag1+"_nolee_mc");
+        plot_one(FracConstMatrix_nolee, h_nue_total, h_numu, "SBNfit_constrained_fractional_covariance_matrix_variancemethod_"+tag1+"_nolee_mc");
+        plot_one(CorrConstMatrix_nolee, h_nue_total, h_numu, "SBNfit_constrained_correlation_matrix_variancemethod_"+tag1+"_nolee_mc");
+
+        fconstr_nolee->Close();	
         //create root file containing the lee
         std::cout << "write TH1D h_nue_scaled" << std::endl;
 
