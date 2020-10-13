@@ -212,11 +212,14 @@ int main(int argc, char* argv[])
             myfeld.SetStatOnly();
             std::cout<<"RUNNING Statistics uncertainty only!"<<std::endl;
         }else{
+            std::cout<<"RUNNING Systematics Covariance Matrix!"<<std::endl;
             fsys = new TFile(Form("%s.SBNcovar.root",tag.c_str()),"read");
             cov = (TMatrixD*)fsys->Get("frac_covariance");
-            fdetsys = new TFile(Form("/uboone/data/users/wospakrk/PeLEE/SBNfit/Fakedata/%s_detsys.root",tag.c_str()),"read");
-            covdetsys = (TMatrixD*)fsys->Get("frac_covariance");
-            if(detsys) (*cov) = (*cov)+(*covdetsys);
+            if(detsys){
+	      fdetsys = new TFile(Form("/uboone/data/users/wospakrk/PeLEE/SBNfit/Fakedata/%s_detsys.root",tag.c_str()),"read");
+	      covdetsys = (TMatrixD*)fdetsys->Get("full_frac_covariance_matrix");
+	      *cov = *cov + *covdetsys;
+	    }
             myfeld.SetFractionalCovarianceMatrix(cov);
         }
 

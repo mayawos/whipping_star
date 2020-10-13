@@ -153,6 +153,7 @@ int SBNfeld::SetFractionalCovarianceMatrix(TMatrixT<double> * in){
 
 int SBNfeld::SetEmptyFractionalCovarianceMatrix(){
 
+    std::cout << "RUNNING IN STATS MODE!" << std::endl;
     m_full_fractional_covariance_matrix = new TMatrixT<double>(num_bins_total,num_bins_total);
     m_full_fractional_covariance_matrix->Zero();
     return 0;
