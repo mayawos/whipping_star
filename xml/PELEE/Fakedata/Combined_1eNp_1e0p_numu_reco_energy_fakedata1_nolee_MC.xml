@@ -57,7 +57,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_intrinsic"
+         associated_subchannel="nu_uBooNE_1eNp_intrinsic"
          additional_weight="weightSplineTimesTune"
       />
  </MultisimFile>
@@ -66,7 +66,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_lee"
+         associated_subchannel="nu_uBooNE_1eNp_lee"
          additional_weight="0.0*leeweight*weightSplineTimesTune"
       />
  </MultisimFile>
@@ -75,7 +75,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_nu"
+         associated_subchannel="nu_uBooNE_1eNp_nu"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -84,7 +84,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_CCmuNoPi"
+         associated_subchannel="nu_uBooNE_1eNp_CCmuNoPi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -93,7 +93,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_ccpi0"
+         associated_subchannel="nu_uBooNE_1eNp_ccpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -102,7 +102,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_NCcPiNoPi0"
+         associated_subchannel="nu_uBooNE_1eNp_NCcPiNoPi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -111,7 +111,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_ncnopi"
+         associated_subchannel="nu_uBooNE_1eNp_ncnopi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -120,7 +120,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_ncpi0"
+         associated_subchannel="nu_uBooNE_1eNp_ncpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -129,7 +129,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_nue_CCmuCPiNoPi0"
+         associated_subchannel="nu_uBooNE_1eNp_CCmuCPiNoPi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
