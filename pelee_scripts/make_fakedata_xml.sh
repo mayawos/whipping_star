@@ -44,7 +44,8 @@ for n in $number; do
             head -226 ${dir_in}/${file_in[i]} | tail -182 >> $dir_out/${file_out[i]}
             cat fakedata_tail.xml >> $dir_out/${file_out[i]}
         else
-                head -60 ${dir_in}/${file_in[i]} | tail -33 >> $dir_out/${file_out[i]}
+             head -60 ${dir_in}/${file_in[i]} | tail -33 >> $dir_out/${file_out[i]}
         fi
+        sed -i 's/uBooNE_nue/uBooNE_1eNp/' $dir_out/${file_out[i]}
     done
 done

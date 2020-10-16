@@ -437,7 +437,8 @@ int main(int argc, char* argv[])
             u_measured[k] = uexp;
         }
 
-        TGraph *bf_vals_g = new TGraph(vec_grid.size(),u_measured,bfval_v);
+        //TGraph *bf_vals_g = new TGraph(vec_grid.size(),u_measured,bfval_v);
+        TGraph *bf_vals_g = new TGraph(vec_grid.size(), bfval_v, &v_true[0]); //Given a true value, i.e Y axis point, whats the median reconstructed best fit point
         bf_vals_g->Draw("same *");
         
         TLine lcross(v_true.front(),v_true.front(),npoints, npoints);
