@@ -197,6 +197,10 @@ int main(int argc, char* argv[])
     mygrid.Print();
     SBNfeld myfeld(mygrid,tag,xml);
 
+//check if running constraint?
+bool use_constraint = false;
+if(tag.find("constrained") != std::string::npos ) use_constraint = true;
+
     if(mode_option == "feldman"){
 
         //setup covariance matrix 
@@ -213,9 +217,11 @@ int main(int argc, char* argv[])
             std::cout<<"RUNNING Statistics uncertainty only!"<<std::endl;
         }else{
             std::cout<<"RUNNING Systematics Covariance Matrix!"<<std::endl;
-            fsys = new TFile(Form("%s.SBNcovar.root",tag.c_str()),"read");
+            std::string tagcovar = tag;
+            if(detsys && use_constraint) tagcovar = tagcovar + "_detsys";
+            fsys = new TFile(Form("%s.SBNcovar.root",tagcovar.c_str()),"read");
             cov = (TMatrixD*)fsys->Get("frac_covariance");
-            if(detsys){
+            if( detsys && !use_constraint){
 	      fdetsys = new TFile(Form("/uboone/data/users/wospakrk/PeLEE/SBNfit/Fakedata/%s_detsys.root",tag.c_str()),"read");
 	      covdetsys = (TMatrixD*)fdetsys->Get("full_frac_covariance_matrix");
 	      *cov = *cov + *covdetsys;
@@ -279,7 +285,7 @@ int main(int argc, char* argv[])
         myfeld.m_subchannel_to_scale = input_scale_subchannel;
 
         if(use_cnp) myfeld.UseCNP();
-
+/*
         myfeld.SetCoreSpectrum(tag+"_CV.SBNspec.root");
         myfeld.SetBackgroundSpectrum(tag+"_CV.SBNspec.root",input_scale_subchannel,1.0);
         myfeld.GenerateScaledSpectra();
@@ -287,7 +293,7 @@ int main(int argc, char* argv[])
         std::cout<<"Calculating the necessary SBNchi objects"<<std::endl;
         myfeld.CalcSBNchis();
         std::cout <<"DONE calculating the necessary SBNchi objects at : " << difftime(time(0), start_time)/60.0 << " Minutes.\n";
-
+*/
         TFile *f = new TFile("scan.root","recreate");
         f->cd();
         std::cout<<"Starting to peform a globalScan analysis"<<std::endl;
