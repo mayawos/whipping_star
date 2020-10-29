@@ -622,6 +622,7 @@ std::vector<double> SBNfeld::PerformIterativeGridFit(const std::vector<float> &d
     double this_chi   = this->CalcChi(datavec, m_cv_spec_grid[grid_pt]->collapsed_vector, inverse_current_collapsed_covariance_matrix);
     double this_chi_alt = 0.0;
     if( m_bool_simple_hypothesis ){
+      UpdateInverseCovarianceMatrixCNP(grid_pt, datavec, inverse_current_collapsed_covariance_matrix ,grid_chi);
       for(int bin=0; bin < inverse_current_collapsed_covariance_matrix.GetNrows(); bin++) std::cout << "bin " << bin << " = " << inverse_current_collapsed_covariance_matrix(bin,bin) << std::endl; 
       int grid_pt_alt;
       if(grid_pt==0) grid_pt_alt=1;
