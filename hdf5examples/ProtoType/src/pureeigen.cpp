@@ -20,7 +20,6 @@
 #include <chrono>
 #include <ctime>
 
-
 #include <diy/master.hpp>
 #include <diy/reduce.hpp>
 #include <diy/partners/merge.hpp>
@@ -30,86 +29,270 @@
 #include <diy/serialization.hpp>
 #include <diy/partners/broadcast.hpp>
 #include <diy/reduce-operations.hpp>
+#include <diy/io/block.hpp>
 
 #include <highfive/H5File.hpp>
 #include <highfive/H5DataSet.hpp>
 #include <highfive/H5DataSpace.hpp>
- 
+#include <highfive/H5Easy.hpp>
+
+#include <cppoptlib/meta.h>
+#include <cppoptlib/problem.h>
+#include <cppoptlib/function.h>
+#include <cppoptlib/solver/bfgssolver.h>
+#include <cppoptlib/solver/lbfgssolver.h>
+#include <cppoptlib/solver/lbfgsbsolver.h>
+#include <cppoptlib/solver/newtondescentsolver.h>
+#include <cppoptlib/solver/cmaessolver.h>
+#include <cppoptlib/solver/neldermeadsolver.h>
+#include <cppoptlib/solver/conjugatedgradientdescentsolver.h>
+#include <cppoptlib/solver/gradientdescentsolver.h>
+
+#include <Eigen/Dense>
+#include <vector>
+#include <set>
+#include <iostream>
+
 #include "TMatrixT.h"
 #include "TH1D.h"
 
 #include "params.h"
 #include "SBNconfig.h"
 #include "SBNchi.h"
+#include <Eigen/Eigen>
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 #include "tools.h"
 #include "prob.h"
 #include "ngrid.h"
 
+#include <mfa/mfa.hpp>
+#include <mfa/block_base.hpp>
+
+
 //#undef basic_string_view
 using namespace std;
 namespace fs = std::filesystem;
 using namespace std::chrono;
 
-
 #include "opts.h"
 
-typedef diy::DiscreteBounds Bounds;
+// set input and ouptut precision here, float or double
+#if 0
+typedef float                          real_t;
+#else
+typedef double                         real_t;
+#endif
+
+using namespace cppoptlib;
+
+class Rosenbrock : public Problem<double> {
+  public:
+    double value(const Eigen::VectorXd &x) {
+        const double t1 = (1 - x[0]);
+        const double t2 = (x[1] - x[0] * x[0]);
+        return   t1 * t1 + 100 * t2 * t2;
+    }
+};
 
 struct FitResult {
    size_t n_iter;
    int best_grid_point;
    double last_chi_min, delta_chi;
+   std::vector<double> fakedataC, collspec;
 };
 
-struct Block
+// arguments to block foreach functions
+struct DomainArgs : public ModelInfo
 {
-    static void*    create()            { return new Block; }
-    static void     destroy(void* b)    { delete static_cast<Block*>(b); }
+    DomainArgs(int dom_dim, int pt_dim) :
+        ModelInfo(dom_dim, pt_dim)
+    {
+        starts.resize(dom_dim);
+        full_dom_pts.resize(dom_dim);
+        min.resize(dom_dim);
+        max.resize(dom_dim);
+        s.resize(pt_dim);
+        f.resize(pt_dim);
+    }
+    vector<int>         starts;                     // starting offsets of ndom_pts (optional, usually assumed 0)
+    vector<int>         full_dom_pts;               // number of points in full domain in case a subset is taken
+    vector<real_t>      min;                        // minimum corner of domain
+    vector<real_t>      max;                        // maximum corner of domain
+    vector<real_t>      s;                          // scaling factor for each variable or any other usage
+    real_t              r;                          // x-y rotation of domain or any other usage
+    vector<real_t>      f;                          // frequency multiplier for each variable or any other usage
+    real_t              t;                          // waviness of domain edges or any other usage
+    real_t              n;                          // noise factor [0.0 - 1.0]
+    string              infile;                     // input filename
+    bool                multiblock;                 // multiblock domain, get bounds from block
+};
 
-    std::vector<double> last_chi_min, delta_chi;
-    std::vector<int> best_grid_point, n_iter, i_grid, i_univ;
+
+// block
+template <typename T>
+struct Block : public BlockBase<T>
+{
+    static
+        void* create()              { return mfa::create<Block>(); }
+
+    static
+        void destroy(void* b)       { mfa::destroy<Block>(b); }
+
+    static
+        void add(                                   // add the block to the decomposition
+            int                 gid,                // block global id
+            const Bounds<T>&    core,               // block bounds without any ghost added
+            const Bounds<T>&    bounds,             // block bounds including any ghost region added
+            const Bounds<T>&    domain,             // global data bounds
+            const RCLink<T>&    link,               // neighborhood
+            diy::Master&        master,             // diy master
+            int                 dom_dim,            // domain dimensionality
+            int                 pt_dim,             // point dimensionality
+            T                   ghost_factor = 0.0) // amount of ghost zone overlap as a factor of block size (0.0 - 1.0)
+    {
+        mfa::add<Block, T>(gid, core, bounds, domain, link, master, dom_dim, pt_dim, ghost_factor);
+    }
+
+    static
+        void save(const void* b_, diy::BinaryBuffer& bb)    { mfa::save<Block, T>(b_, bb); }
+    static
+        void load(void* b_, diy::BinaryBuffer& bb)          { mfa::load<Block, T>(b_, bb); }
+
+
+    // read a floating point 2d scalar dataset from HDF5
+    // reads masses for geometry dimension 0 from same HDF5 file
+    // assigns integer values for the geometry dimension 1 from 0 to n_pts - 1
+    // f = (mass, y, value)
+    //template <typename V>               // type of science value being read
+    void read_2d_data(
+            const       diy::Master::ProxyWithLink& cp,
+            DomainArgs& args,
+            Eigen::VectorXd   vals,
+            Eigen::VectorXd   masses,
+            bool        rescale)            // rescale science values
+    {
+        DomainArgs* a = &args;
+        int tot_ndom_pts = 1;
+        this->geometry.min_dim = 0;
+        this->geometry.max_dim = this->dom_dim - 1;
+        int nvars = 1;
+        this->vars.resize(nvars);
+        this->max_errs.resize(nvars);
+        this->sum_sq_errs.resize(nvars);
+        this->vars[0].min_dim = this->dom_dim;
+        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+        VectorXi ndom_pts(this->dom_dim);
+        this->bounds_mins.resize(this->pt_dim);
+        this->bounds_maxs.resize(this->pt_dim);
+        for (int i = 0; i < this->dom_dim; i++)
+        {
+            ndom_pts(i)     =  a->ndom_pts[i];
+            tot_ndom_pts    *= ndom_pts(i);
+        }
+        this->domain.resize(tot_ndom_pts, this->pt_dim);
+	
+        //check mass has the same dimension
+        assert(mass_dims[0] == ndom_pts(1));
+        //check value has the same dimension
+        assert(val_dims[0] == ndom_pts(1));
+        assert(val_dims[1] == ndom_pts(0));
+        
+        for (size_t i = 0; i < vals.size(); i++)
+          this->domain(i, 2) = vals[i];
+        
+        // set geometry values
+        int n = 0;
+        for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+          {
+            for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+              {
+                this->domain(n, 0) = i;
+                this->domain(n, 1) = masses[j];
+                n++;
+              }
+          }
+
+        // find extent of masses and values
+        for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+          {
+            if (i == 0 || this->domain(i, 0) < this->bounds_mins(0))
+              this->bounds_mins(0) = this->domain(i, 0);
+            if (i == 0 || this->domain(i, 0) > this->bounds_maxs(0))
+              this->bounds_maxs(0) = this->domain(i, 0);
+            if (i == 0 || this->domain(i, 2) < this->bounds_mins(2))
+              this->bounds_mins(2) = this->domain(i, 2);
+            if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
+              this->bounds_maxs(2) = this->domain(i, 2);
+          }
+        
+        // extents
+        this->bounds_mins(1) = 0.0;
+        this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
+        this->core_mins.resize(this->dom_dim);
+        this->core_maxs.resize(this->dom_dim);
+        for (int i = 0; i < this->dom_dim; i++)
+          {
+            this->core_mins(i) = this->bounds_mins(i);
+            this->core_maxs(i) = this->bounds_maxs(i);
+          }
+        
+        this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
+        
+        // normalize the science variable to the same extent as max of geometry
+        if (rescale)
+          {
+            double extent[3];
+            extent[0] = this->bounds_maxs(0) - this->bounds_mins(0);
+            extent[1] = this->bounds_maxs(1) - this->bounds_mins(1);
+            extent[2] = this->bounds_maxs(2) - this->bounds_mins(2);
+            double scale = extent[0] > extent[1] ? extent[0] : extent[1];
+            cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << endl;
+            for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
+              this->domain(i, 2) = this->domain(i, 2) / extent[2] * scale;
+          }
+        
+        // debug
+        cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+    }
+  
+  
 };
 
 typedef std::array<double, 3> GridPoint;
 
-// TODO what if fixed param is exactly 0 --- pow(10, x) is dangerous then
 class GridPoints {
-   public:
-      GridPoints() {}
-      GridPoints(std::vector<std::vector<double>> const & m_vec_grid, int setZero=-1) {
-         for (auto gp : m_vec_grid) {
-            GridPoint P = {pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])};
-            if (setZero>=0) P[setZero] =0;//_gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
-            _gridpoints.push_back(P);//{pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
-         }
-      }
-
-      size_t NPoints()         { return _gridpoints.size(); }
-      GridPoint Get(size_t index) { return _gridpoints[index]; }
-
-   private:
-      std::vector<GridPoint> _gridpoints;
-
+public:
+  GridPoints() {}
+  GridPoints(std::vector<std::vector<double>> const & m_vec_grid) {
+    for (auto gp : m_vec_grid)
+      _gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
+  }
+  size_t NPoints()         { return _gridpoints.size(); }
+  GridPoint Get(size_t index) { return _gridpoints[index]; }
+  
+private:
+  std::vector<GridPoint> _gridpoints;
+  
 };
- 
+
 std::ostream& operator << (std::ostream& os, GridPoint const & p) {
-   os << "\t0: " << p[0]  << " 1: " << p[1]  << " 2: " << p[2] <<  "\n";
-   return os;
+  os << "\t0: " << p[0]  << " 1: " << p[1]  << " 2: " << p[2] <<  "\n";
+  return os;
 }
 
 inline Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd  const & vin, sbn::SBNconfig const & conf){
-   // All we want is a representation with the subchannels added together
-   Eigen::VectorXd cvec(conf.num_bins_total_compressed);
-   cvec.setZero();
-   for (int d=0; d<conf.num_detectors;++d) {
-      size_t offset_in(0), offset_out(0);
-      for (int i=0; i<conf.num_channels; i++) {
-          size_t nbins_chan = conf.num_bins[i];
-          for (int j=0; j<conf.num_subchannels[i]; j++) {
-             size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
-             size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
+  
+  // All we want is a representation with the subchannels added together
+  Eigen::VectorXd cvec(conf.num_bins_total_compressed);
+  cvec.setZero();
+  for (int d=0; d<conf.num_detectors;++d) {
+    size_t offset_in(0), offset_out(0);
+    for (int i=0; i<conf.num_channels; i++) {
+      size_t nbins_chan = conf.num_bins[i];
+      for (int j=0; j<conf.num_subchannels[i]; j++) {
+        size_t first_in   = d*conf.num_bins_detector_block            + offset_in;
+        size_t first_out  = d*conf.num_bins_detector_block_compressed + offset_out;
              cvec.segment(first_out, nbins_chan).noalias() += vin.segment(first_in, nbins_chan);
              offset_in +=nbins_chan;
           }
@@ -120,173 +303,249 @@ inline Eigen::VectorXd collapseVectorEigen(Eigen::VectorXd  const & vin, sbn::SB
 }
 
 class SignalGenerator {
-   public:
-      SignalGenerator(
-            sbn::SBNconfig const & conf, std::vector<std::vector<double>> const & vec_grid, size_t dim2,
-            std::vector<Eigen::VectorXd>  const & sinsq,
-            std::vector<Eigen::VectorXd>  const & sin,
-            Eigen::VectorXd const & core, int oscmode
-            ) 
-      {
-         m_conf = conf;
-         m_dim2 = dim2;
-         m_gridpoints=GridPoints(vec_grid);
-         m_sinsq = sinsq;
-         m_sin = sin;
-         m_core = core;
-         m_oscmode = oscmode;
-         retVec = Eigen::VectorXd(m_conf.num_bins_total);
-      }
-
-   Eigen::VectorXd predict(size_t i_grid, bool compressed) {
-      auto const & gp = m_gridpoints.Get(i_grid);
-      sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
-      //sbn::NeutrinoModel this_model(gp[0]*gp[0], 0.0, gp[2], false);   // FIXME deal with ==0
-      int m_idx = massindex(i_grid);
-      Oscillate(m_sinsq[m_idx], m_sin[m_idx], this_model);
-
-      if (compressed) return collapseVectorEigen(m_core+retVec, m_conf);
-      else return m_core+retVec;
-   }
-   
-   int massindex(size_t igrd) {return int(floor( (igrd) / m_dim2 ));}
-   size_t gridsize() {return m_gridpoints.NPoints();}
-
-   void Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::VectorXd const & sf_sin, 
-         sbn::NeutrinoModel & working_model) 
-   {
-       retVec.setZero(); // !!!
-       int which_dm = 41; // FIXME This must not be hardcoded!!! 41 is the value to be used in the 1 sterile case
-
-       double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
-
-       // TODO Make this logic nice
-       if (m_oscmode==0) {
-          prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
-          prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
-          prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
-          prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
-       }
-
-       else if (m_oscmode==1) prob_mumu = working_model.oscAmp(2,2,which_dm,2);
-       else {
-          std::cerr << "oscillation mode has to be either 0 or 1: " << m_oscmode << "\n";
-          exit(1);
-       }
-
-
-
-       double osc_amp(0), osc_amp_sq(0);
-       int osc_pattern(0);
-           // Iterate over channels
-        size_t offset(0);
-        for (int i=0; i<m_conf.num_channels; i++) {
-            size_t nbins_chan = m_conf.num_bins[i];
-            auto const & thisPattern = m_conf.subchannel_osc_patterns[i];
-            for (int j=0; j<m_conf.num_subchannels[i]; j++){
-                osc_pattern = thisPattern[j];
-                switch (osc_pattern){
-                    case 11:
-                        osc_amp_sq = prob_ee;
-                        osc_amp = 0;
-                        break;
-                    case -11:
-                        osc_amp_sq = prob_ee;
-                        osc_amp = 0;
-                        break;
-                    case 22:
-                        osc_amp_sq = prob_mumu;
-                        osc_amp = 0;
-                        break;
-                    case -22:
-                        osc_amp_sq = prob_mumu;
-                        osc_amp = 0;
-                        break;
-                    case 21:
-                        osc_amp    = prob_mue;
-                        osc_amp_sq = prob_mue_sq;
-                        break;
-                    case -21:
-                        osc_amp    = prob_muebar;
-                        osc_amp_sq = prob_muebar_sq;
-                        break;
-                    case 0:  // TODO ask Mark about actual logic
-                        osc_amp = 0;
-                        osc_amp_sq = 0;
-                    default:
-                        break;
-                }
-
-                // Iterate over detectors
-                for (int d=0; d<m_conf.num_detectors;++d) {
-                  size_t first  = d*m_conf.num_bins_detector_block + offset;
-                  retVec.segment(first, nbins_chan).noalias() += osc_amp   *  sf_sin.segment(first, nbins_chan);
-                  retVec.segment(first, nbins_chan).noalias() += osc_amp_sq*sf_sinsq.segment(first, nbins_chan);
-                }
-                offset +=nbins_chan;
-            }
+public:
+  SignalGenerator( sbn::SBNconfig const & conf, std::vector<std::vector<double>> const & vec_grid, size_t dim2,
+                   Eigen::MatrixXd const & sinsq,
+                   Eigen::MatrixXd const & sin,
+                   Eigen::VectorXd const & core, int oscmode
+                   ) 
+  {
+    m_conf = conf;
+    m_dim2 = dim2;
+    m_gridpoints=GridPoints(vec_grid);
+    m_sinsq = sinsq;
+    m_sin = sin;
+    m_core = core;
+    m_oscmode = oscmode;
+    retVec = Eigen::VectorXd(m_conf.num_bins_total);
+  }
+  
+  Eigen::VectorXd predict(size_t i_grid, bool compressed) {
+    auto const & gp = m_gridpoints.Get(i_grid);
+    sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
+    int m_idx = massindex(i_grid);
+    //std::cerr << "i_grid: " << i_grid << " mass index " << m_idx << " dim2: " << m_dim2 << " GP:" << gp <<  "\n";
+    Oscillate(m_sinsq.row(m_idx), m_sin.row(m_idx), this_model);
+    
+    if (compressed) return collapseVectorEigen(m_core+retVec, m_conf);
+    else return m_core+retVec;
+  }
+  
+  int massindex(size_t igrd) {return int(floor( (igrd) / m_dim2 ));}
+  size_t gridsize() {return m_gridpoints.NPoints();}
+  
+  void Oscillate(Eigen::VectorXd const & sf_sinsq, Eigen::VectorXd const & sf_sin, 
+                 sbn::NeutrinoModel & working_model) 
+  {
+    retVec.setZero(); // !!!
+    int which_dm = 41; // FIXME This must not be hardcoded!!! 41 is the value to be used in the 1 sterile case
+    
+    double prob_mumu(0), prob_ee(0), prob_mue(0), prob_mue_sq(0), prob_muebar(0), prob_muebar_sq(0);
+    
+    // TODO Make this logic nice
+    if (m_oscmode==0) {
+      prob_mue       = working_model.oscAmp( 2,  1, which_dm, 1);
+      prob_mue_sq    = working_model.oscAmp( 2,  1, which_dm, 2);
+      prob_muebar    = working_model.oscAmp(-2, -1, which_dm, 1);
+      prob_muebar_sq = working_model.oscAmp(-2, -1, which_dm, 2);
+    }
+    
+    else if (m_oscmode==1) prob_mumu = working_model.oscAmp(2,2,which_dm,2);
+    else {
+      std::cerr << "oscillation mode has to be either 0 or 1: " << m_oscmode << "\n";
+      exit(1);
+    }
+    
+    double osc_amp(0), osc_amp_sq(0);
+    int osc_pattern(0);
+    // Iterate over channels
+    size_t offset(0);
+    for (int i=0; i<m_conf.num_channels; i++) {
+      size_t nbins_chan = m_conf.num_bins[i];
+      auto const & thisPattern = m_conf.subchannel_osc_patterns[i];
+      for (int j=0; j<m_conf.num_subchannels[i]; j++){
+        osc_pattern = thisPattern[j];
+        switch (osc_pattern){
+        case 11:
+          osc_amp_sq = prob_ee;
+          osc_amp = 0;
+          break;
+        case -11:
+          osc_amp_sq = prob_ee;
+          osc_amp = 0;
+          break;
+        case 22:
+          osc_amp_sq = prob_mumu;
+          osc_amp = 0;
+          break;
+        case -22:
+          osc_amp_sq = prob_mumu;
+          osc_amp = 0;
+          break;
+        case 21:
+          osc_amp    = prob_mue;
+          osc_amp_sq = prob_mue_sq;
+          break;
+        case -21:
+          osc_amp    = prob_muebar;
+          osc_amp_sq = prob_muebar_sq;
+          break;
+        case 0:  // TODO ask Mark about actual logic
+          osc_amp = 0;
+          osc_amp_sq = 0;
+        default:
+          break;
         }
-   }
-
-   private:
-      sbn::SBNconfig m_conf;
-      GridPoints m_gridpoints;
-      size_t m_dim2;
-      std::vector<Eigen::VectorXd> m_sinsq, m_sin;
-      Eigen::VectorXd m_core, retVec;
-      int m_oscmode;
+        
+        // Iterate over detectors
+        for (int d=0; d<m_conf.num_detectors;++d) {
+          size_t first  = d*m_conf.num_bins_detector_block + offset;
+          retVec.segment(first, nbins_chan).noalias() += osc_amp   *  sf_sin.segment(first, nbins_chan);
+          retVec.segment(first, nbins_chan).noalias() += osc_amp_sq*sf_sinsq.segment(first, nbins_chan);
+        }
+        offset +=nbins_chan;
+      }
+    }
+  }
+  
+private:
+  sbn::SBNconfig m_conf;
+  GridPoints m_gridpoints;
+  size_t m_dim2;
+  //std::vector<Eigen::VectorXd> m_sinsq, m_sin;
+  Eigen::MatrixXd m_sinsq, m_sin;
+  Eigen::VectorXd m_core, retVec;
+  int m_oscmode;
 };
 
+inline void makeSignalModel(Block<real_t>* b,  diy::Master::ProxyWithLink const& cp, SignalGenerator signal, int nbins)
+{
+
+    // default command line arguments
+    int    pt_dim       = 3;                    // dimension of input points
+    int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
+    int    geom_degree  = 1;                    // degree for geometry (same for all dims)
+    int    vars_degree  = 2;                    // degree for science variables (same for all dims)
+    int    ndomp        = nbins;                // input number of domain points (same for all dims)
+    int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
+    int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
+    int    weighted     = 1;                   // input number of control points for all science variables (same for all dims)
+    real_t noise        = 0.0;                  // fraction of noise
+    // set default args for diy foreach callback functions
+    DomainArgs d_args(dom_dim, pt_dim);
+    d_args.weighted     = weighted;
+    d_args.n            = noise;
+    d_args.multiblock   = false;
+    d_args.verbose      = 1;
+    for (int i = 0; i < pt_dim - dom_dim; i++)
+        d_args.f[i] = 1.0;
+    for (int i = 0; i < dom_dim; i++)
+    {
+        d_args.geom_p[i]            = geom_degree;
+        d_args.vars_p[0][i]         = vars_degree;  // assuming one science variable, vars_p[0]
+        d_args.ndom_pts[i]          = ndomp;
+        d_args.geom_nctrl_pts[i]    = geom_nctrl;
+        d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
+    }
+
+   Eigen::VectorXd values(signal.gridsize(),ndomp);	
+   Eigen::VectorXd masses(signal.gridsize());	
+   for (size_t i=0; i<signal.gridsize(); ++i) {
+      values.row(i) = signal.predict(i, true);
+      masses[i] = signal.massindex(i);
+   }
+   b->read_2d_data(cp,d_args,values,masses,true);
+   b->fixed_encode_block(cp,d_args);
+
+}
+
+void loadData(const char* fname, std::string what, std::vector<double> & v_buffer, int & n_rows, int & n_cols) {
+  H5Easy::File file(fname, H5Easy::File::ReadOnly);
+  Eigen::MatrixXd _mat = H5Easy::load<Eigen::MatrixXd>(file, what);
+  n_rows = _mat.rows();
+  n_cols = _mat.cols();
+  v_buffer = std::vector<double>(_mat.data(), _mat.data() + _mat.rows() * _mat.cols());
+}
+
+void loadData(const char* fname, std::string what, std::vector<int> & v_buffer, int & n_rows, int & n_cols) {
+  H5Easy::File file(fname, H5Easy::File::ReadOnly);
+  Eigen::MatrixXi _mat      = H5Easy::load<Eigen::MatrixXi>(file, what);
+  n_rows = _mat.rows();
+  n_cols = _mat.cols();
+  v_buffer = std::vector<int>(_mat.data(), _mat.data() + _mat.rows() * _mat.cols());
+}
+
+Eigen::MatrixXd bcMatrixXd(diy::mpi::communicator world, std::vector<double>  v_buffer, int  n_rows, int  n_cols) {
+  diy::mpi::broadcast(world, v_buffer, 0);
+  diy::mpi::broadcast(world, n_rows,   0);
+  diy::mpi::broadcast(world, n_cols,   0);
+
+  Eigen::Map<Eigen::MatrixXd> mat(v_buffer.data(), n_rows, n_cols);
+  return mat;
+}
+
+Eigen::MatrixXi bcMatrixXi(diy::mpi::communicator world, std::vector<int>  v_buffer, int  n_rows, int  n_cols) {
+  diy::mpi::broadcast(world, v_buffer, 0);
+  diy::mpi::broadcast(world, n_rows,   0);
+  diy::mpi::broadcast(world, n_cols,   0);
+  
+  Eigen::Map<Eigen::MatrixXi> mat(v_buffer.data(), n_rows, n_cols);
+  return mat;
+}
 
 void createDataSets(HighFive::File* file, size_t nPoints, size_t nUniverses) {
-    file->createDataSet<double>("last_chi_min", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
-    file->createDataSet<double>("delta_chi",    HighFive::DataSpace( { nPoints*nUniverses,       1} ));
-    file->createDataSet<int>("best_grid_point", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
-    file->createDataSet<int>("n_iter",          HighFive::DataSpace( { nPoints*nUniverses,       1} ));
-    file->createDataSet<double>("n_events",          HighFive::DataSpace( { nPoints*nUniverses,       1} ));
-    // Some bookkeeping why not
-    file->createDataSet<int>("i_grid",          HighFive::DataSpace( {nPoints*nUniverses,        1} ));
-    file->createDataSet<int>("i_univ",          HighFive::DataSpace( {nPoints*nUniverses,        1} ));
-    file->createDataSet<double>("gridx",        HighFive::DataSpace( {nPoints,                   1} ));
-    file->createDataSet<double>("gridy",        HighFive::DataSpace( {nPoints,                   1} ));
+  file->createDataSet<double>("last_chi_min", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
+  file->createDataSet<double>("delta_chi",    HighFive::DataSpace( { nPoints*nUniverses,       1} ));
+  file->createDataSet<int>("best_grid_point", HighFive::DataSpace( { nPoints*nUniverses,       1} ));
+  file->createDataSet<int>("n_iter",          HighFive::DataSpace( { nPoints*nUniverses,       1} ));
+  file->createDataSet<double>("fakedataC",    HighFive::DataSpace( { nPoints*nUniverses,       57} ));
+  file->createDataSet<double>("collspec",     HighFive::DataSpace( { nPoints*nUniverses,      57} ));
+  // Some bookkeeping why not
+  file->createDataSet<int>("i_grid",          HighFive::DataSpace( {nPoints*nUniverses,        1} ));
+  file->createDataSet<int>("i_univ",          HighFive::DataSpace( {nPoints*nUniverses,        1} ));
+  file->createDataSet<double>("gridx",        HighFive::DataSpace( {nPoints,                   1} ));
+  file->createDataSet<double>("gridy",        HighFive::DataSpace( {nPoints,                   1} ));
 }
 
 void writeGrid(HighFive::File* file, std::vector<std::vector<double> > const & coords, int mode) {
-    std::vector<double> xcoord;
-    std::vector<double> ycoord;
-
-    for (size_t i=0; i< coords.size(); i++) {
-       xcoord.push_back(coords[i][0]);
-       if (mode==0) ycoord.push_back(coords[i][1]);
-       else if (mode==1) ycoord.push_back(coords[i][2]);
-       else {
-          std::cerr << "Error, the mode must be either 0 or 1 a the moment: " << mode << "\n";
-          exit(1);
-       }
+  std::vector<double> xcoord;
+  std::vector<double> ycoord;
+  
+  for (size_t i=0; i< coords.size(); i++) {
+    xcoord.push_back(coords[i][0]);
+    if (mode==0) ycoord.push_back(coords[i][1]);
+    else if (mode==1) ycoord.push_back(coords[i][2]);
+    else {
+      std::cerr << "Error, the mode must be either 0 or 1 a the moment: " << mode << "\n";
+      exit(1);
     }
-    HighFive::DataSet d_gridx          = file->getDataSet("gridx");
-    HighFive::DataSet d_gridy          = file->getDataSet("gridy");
-    d_gridx.select(   {0, 0}, {xcoord.size(), 1}).write(xcoord);
-    d_gridy.select(   {0, 0}, {ycoord.size(), 1}).write(ycoord);
+  }
+  HighFive::DataSet d_gridx          = file->getDataSet("gridx");
+  HighFive::DataSet d_gridy          = file->getDataSet("gridy");
+  d_gridx.select(   {0, 0}, {xcoord.size(), 1}).write(xcoord);
+  d_gridy.select(   {0, 0}, {ycoord.size(), 1}).write(ycoord);
 }
 
 TMatrixD readFracCovMat(std::string const & rootfile){
-    TFile  fsys(rootfile.c_str(),"read");
-    TMatrixD cov =  *(TMatrixD*)fsys.Get("frac_covariance");
-    fsys.Close();
-
-    for(int i =0; i<cov.GetNcols(); i++) {
-        for(int j =0; j<cov.GetNrows(); j++) {
-            if ( std::isnan( cov(i,j) ) )  cov(i,j) = 0.0;
-        }
+  TFile  fsys(rootfile.c_str(),"read");
+  TMatrixD cov =  *(TMatrixD*)fsys.Get("frac_covariance");
+  fsys.Close();
+  
+  for(int i =0; i<cov.GetNcols(); i++) {
+    for(int j =0; j<cov.GetNrows(); j++) {
+      
+      if ( std::isnan( cov(i,j) ) )  cov(i,j) = 0.0;
     }
-    return cov;
+  }
+  return cov;
 }
 
 std::vector<TH1D> readHistos(std::string const & rootfile, std::vector<string> const & fullnames) {
     std::vector<TH1D > hist;
     TFile f(rootfile.c_str(),"read");
-    for (auto fn: fullnames) hist.push_back(*((TH1D*)f.Get(fn.c_str())));
+    for (auto fn: fullnames) {
+       hist.push_back(*((TH1D*)f.Get(fn.c_str())));
+    }
     f.Close();
     return hist;
 }
@@ -299,7 +558,7 @@ std::vector<double> flattenHistos(std::vector<TH1D> const & v_hist) {
    return ret;
 }
 
-std::vector<std::tuple<std::string, float> > getFilesAndDm(std::string const & inDir, std::string const & tag, std::string const & subthing, double const & m_min, double const & m_max, bool debug=false) {
+std::vector<std::tuple<std::string, float> > getFilesAndDm(std::string const & inDir, std::string const & tag, std::string const & subthing, double const & m_min, double const & m_max ) {
     const std::regex re("[-+]?([0-9]*\\.[0-9]+|[0-9]+)");
     std::smatch match;
     std::string result;
@@ -317,21 +576,21 @@ std::vector<std::tuple<std::string, float> > getFilesAndDm(std::string const & i
         if (std::regex_search(_test, match, re) && match.size() > 1) {
            float lgmsq = std::stof(match.str(0));
            if (lgmsq > m_max || lgmsq < m_min) {
-              if (debug) std::cerr << "\t NOT using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
+              std::cerr << "\t NOT using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
               continue;
            }
            ret.push_back({test, lgmsq});
-           if (debug) std::cerr << "\t Using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
+           std::cerr << "\t Using file " << test << " with " << match.str(0) << " " << lgmsq << "\n";
         }
       }
     }
     return ret;
 }
 
-std::tuple< std::vector<std::vector<double>>, std::vector<float>> mkHistoVecStd(std::string const & inDir, std::string const & tag, std::string const & objname, std::vector<string> const & fullnames, double const & m_min, double const & m_max, bool debug=false ) {
+std::tuple< std::vector<std::vector<double>>, std::vector<float>> mkHistoVecStd(std::string const & inDir, std::string const & tag, std::string const & objname, std::vector<string> const & fullnames, double const & m_min, double const & m_max ) {
 
    // The input files come unordered
-   auto const & inputs = getFilesAndDm(inDir, tag, objname, m_min, m_max, debug);
+   auto const & inputs = getFilesAndDm(inDir, tag, objname, m_min, m_max);
    std::vector<std::vector<double> > temp(inputs.size());
 
    if (inputs.size() ==0) {
@@ -469,15 +728,6 @@ Eigen::VectorXd sample(Eigen::VectorXd const & spec, Eigen::MatrixXd const & LMA
    return LMAT*RDM + spec;
 }
 
-Eigen::VectorXd poisson_fluctuate(Eigen::VectorXd const & spec, std::mt19937 & rng) {
-   Eigen::VectorXd RDM(spec.rows());
-   for (int i=0;i<spec.rows();++i) {
-      std::poisson_distribution<int> dist_pois(spec[i]);
-      RDM[i] = double(dist_pois(rng));
-   }
-   return RDM;
-}
-
 // Cholesky decomposition and solve for inverted matrix --- fastest
 inline Eigen::MatrixXd invertMatrixEigen3(Eigen::MatrixXd const & M){
     return M.llt().solve(Eigen::MatrixXd::Identity(M.rows(), M.rows()));
@@ -527,6 +777,77 @@ inline Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::Vecto
     return invertMatrixEigen3(out);
 }
 
+//need to figure out the proper way to propagate the MFA model
+namespace cppoptlib {
+template<typename T>
+class LLR : public Problem<T> {
+    private:
+	using typename Problem<T>::TVector;
+        const Block<real_t>*     b;            //block encoded with MFA model
+        diy::Master::ProxyWithLink const& cp;
+        TVector           data;
+	const MatrixX<T>   M;
+	VectorX<real_t>    param;
+
+  public:
+    //need mfa model, fake_data, and inverse covariance matrix
+    LLR(const Block<real_t>* b_,  
+		    diy::Master::ProxyWithLink const& cp_,
+		    TVector data_, 
+		    MatrixX<T> M_) : b(b_), 
+				     cp(cp_),	
+				     data(data_),	
+				     M(M_) 	
+	{}
+    //TO DO: Figure out the correct way to pass the MFA 
+    T value(const TVector &x) {
+	//to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
+    	// evaluate point
+	TVector diff(data.size());
+	for(int p=0; p<data.size(); p++){
+		//scale to 1
+		double _p=p/data.size();
+		param(0) = _p;
+	    	param(1) = x[1];
+	    	int dom_dim = b->dom_dim;
+    		int pt_dim  = b->pt_dim;
+    		VectorX<real_t> out_pt(pt_dim);
+   		// parameters of input point to evaluate
+    		VectorX<real_t> in_param(dom_dim);
+    		for (auto i = 0; i < dom_dim; i++){
+        		in_param(i) = param[i];
+    		}
+		b->decode_point(cp, in_param, out_pt);
+    		diff[p] = data[p]-out_pt(2);
+	}
+	return (diff.transpose())*M*(diff);
+    }
+
+    void gradient(const TVector &x, TVectorD &grad) {
+	for(int p=0; p<data.size(); p++){
+		//scale to 1
+		double _p=p/data.size();
+		param(0) = _p;
+		param(1) = x[1];
+		int dom_dim = b->dom_dim;
+		int pt_dim  = b->pt_dim;
+		// evaluate point
+		VectorX<real_t> out_pt(pt_dim);
+		VectorX<real_t> out_pt_deriv(pt_dim);
+		// parameters of input point to evaluate
+		VectorX<real_t> in_param(dom_dim);
+    		for (auto i = 0; i < dom_dim; i++){
+        		in_param(i) = param[i];
+    		}
+		b->decode_point(cp, in_param, out_pt); 
+		b->differentiate_point(cp, x, 1, x(1), -1, out_pt_deriv);
+	        grad[p] = 2*out_pt_deriv(pt_dim - 1)*M*(out_pt(2));
+	}
+    }
+
+};
+}
+
 inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
       SignalGenerator signal,
       Eigen::MatrixXd const & INVCOV,
@@ -541,6 +862,8 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    size_t n_iter = 0;
 
    Eigen::MatrixXd invcov = INVCOV;//std::vector<double> temp;
+   //auto const & goodpoints  = initialScan(fake_data, Eigen::MatrixXd::Identity(INVCOV.rows(), INVCOV.rows()), signal, 1e4);
+   //auto const & goodpoints  = initialScan(fake_data, invcov, signal, 1e6);
    
    for(n_iter = 0; n_iter < max_number_iterations; n_iter++){
        if(n_iter!=0){
@@ -565,16 +888,71 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
 
    //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
    float this_chi = calcChi(fake_data, v_coll, invcov);
+   //convert eigen vector to regular vector since I don't know how to converge it with create_datasets
+   //assert that fakedataC should have the same dimension as collspec
+   if(fake_data.size() != v_coll.size() ) std::cout << "check the collapsing method!" << std::endl;
+   std::vector<double> fakedataC, collspec;
+   for(uint i=0; i < fake_data.size(); i++) fakedataC.push_back(fake_data(i));
+   for(uint i=0; i < v_coll.size(); i++) collspec.push_back(v_coll(i));
 
-   FitResult fr = {n_iter, best_grid_point, last_chi_min, this_chi-last_chi_min}; 
+   FitResult fr = {n_iter, best_grid_point, last_chi_min, this_chi-last_chi_min, fakedataC, collspec}; 
    return fr;
 }
 
-void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
+//new implementation using MFA 
+inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
+      Block<real_t>* b, //replace with block that has encoded MFA model
+      diy::Master::ProxyWithLink const& cp,
+      int i_grid,
+      Eigen::MatrixXd const & INVCOV,
+      Eigen::MatrixXd const & covmat,
+      sbn::SBNconfig const & myconf,
+      double chi_min_convergance_tolerance = 0.001,
+      size_t max_number_iterations = 5
+      )
+{
+   float global_chi_min = FLT_MAX;
+   int best_grid_point = -99;
+   size_t n_iter = 0;
+
+   Eigen::MatrixXd invcov = INVCOV;//std::vector<double> temp;
+
+   float chi_min = FLT_MAX;
+   //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan previously
+   //implement optimizer
+   typedef double T;
+   using typename cppoptlib::Problem<T>::TVector;
+   //want to pass the mfa model here which is already encode in the block
+   typedef LLR<T> llr;
+   llr f(b, cp, fake_data, INVCOV);
+   cppoptlib::LbfgsSolver<llr> solver;
+   //minimize the function
+
+   Eigen::VectorXd x(2); 
+   for( int p=0; p < fake_data.size(); p++) x << (0, i_grid);
+   solver.minimize(f,x);
+  
+   //store the result here
+   //global_chi_min = f(x); //the global minimum chi2
+   //best_grid_point = x; //point in grid which gives the minimum chi2
+
+   //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
+   float this_chi = calcChi(fake_data, v_coll, invcov);
+   //assert that fakedataC should have the same dimension as collspec
+   if(fake_data.size() != v_coll.size() ) std::cout << "check the collapsing method!" << std::endl;
+   std::vector<double> fakedataC, collspec;
+   for(uint i=0; i < fake_data.size(); i++) fakedataC.push_back(fake_data(i));
+   for(uint i=0; i < v_coll.size(); i++) collspec.push_back(v_coll(i));
+
+   FitResult fr = {n_iter, best_grid_point, global_chi_min, this_chi-global_chi_min, fakedataC, collspec}; 
+   return fr;
+}
+
+void doScan(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
       sbn::SBNconfig const & myconf,
       Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
       Eigen::VectorXd const & ecore, SignalGenerator signal,
-      HighFive::File* file, std::vector<size_t> const & rankwork, 
+      HighFive::File* file, std::vector<int> const & rankwork, 
       double tol, size_t iter, bool debug)
 {
 
@@ -582,6 +960,7 @@ void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     std::vector<FitResult> results;
     std::vector<int> v_grid, v_univ, v_iter, v_best;
     std::vector<double> v_last, v_dchi;
+    std::vector<std::vector<double> > v_fakedataC, v_collspec;
     
     results.reserve(rankwork.size());
     v_grid.reserve(rankwork.size());
@@ -590,7 +969,14 @@ void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     v_best.reserve(rankwork.size());
     v_last.reserve(rankwork.size());
     v_dchi.reserve(rankwork.size());
-    
+    v_fakedataC.reserve(rankwork.size());
+    v_collspec.reserve(rankwork.size());
+   
+    //validation
+    Eigen::MatrixXd specfull_e_mat(rankwork.size(),57); 
+    Eigen::MatrixXd speccoll_mat(rankwork.size(),57); 
+    Eigen::MatrixXd corecoll_mat(rankwork.size(),57);
+
     system_clock::time_point t_init = system_clock::now();
     for (int i_grid : rankwork) {
 
@@ -598,6 +984,11 @@ void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        auto const & specfull_e = signal.predict(i_grid, false);
        auto const & speccoll   = collapseVectorEigen(specfull_e, myconf);
        auto const & corecoll   = collapseVectorEigen(ecore, myconf);
+       
+       //Eigen
+       specfull_e_mat.row(i_grid) = Eigen::VectorXd::Map(&specfull_e[i_grid], specfull_e_mat.size());
+       speccoll_mat.row(i_grid) = Eigen::VectorXd::Map(&speccoll[0], speccoll.size());
+       corecoll_mat.row(i_grid) = Eigen::VectorXd::Map(&corecoll[0], corecoll.size());
 
        starttime = MPI_Wtime();
 
@@ -635,6 +1026,8 @@ void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        v_best.push_back(res.best_grid_point);
        v_last.push_back(res.last_chi_min);
        v_dchi.push_back(res.delta_chi);
+       v_fakedataC.push_back(res.fakedataC);
+       v_collspec.push_back(res.collspec);
     }
 
     d_last_chi_min.select(     {d_bgn, 0}, {size_t(v_last.size()), 1}).write(v_last);
@@ -644,11 +1037,28 @@ void doScan(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
     d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
     endtime   = MPI_Wtime();
+    //if (world.rank()==0){
+	H5Easy::File file1("/code/src/comparespectrum_mpi.h5", H5Easy::File::Overwrite);
+  	H5Easy::dump(file1, "specfull", specfull_e_mat);
+  	H5Easy::dump(file1, "colspec", speccoll_mat);
+  	H5Easy::dump(file1, "colcore", corecoll_mat); 
+    //}
     if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
 }
 
+void doMin(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
+      const char * xmldata, sbn::SBNconfig const & myconf,
+      TMatrixD const & covmat, Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
+      SignalGenerator signal,
+      HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
+      double tol, size_t iter, bool debug, bool noWrite=false, int msg_every=100)
+{ 
+
+    //return 0;
+}
+
 // TODO add size_t writeEvery to prevent memory overload
-void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
+void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
       const char * xmldata, sbn::SBNconfig const & myconf,
       TMatrixD const & covmat, Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
       SignalGenerator signal,
@@ -659,7 +1069,8 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
     double starttime, endtime;
     std::vector<FitResult> results;
     std::vector<int> v_grid, v_univ, v_iter, v_best;
-    std::vector<double> v_last, v_dchi, v_nevents;
+    std::vector<double> v_last, v_dchi;
+    std::vector<std::vector<double> > v_fakedataC, v_collspec;
     
     if (!noWrite) {
        results.reserve(rankwork.size()*nUniverses);
@@ -669,10 +1080,14 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        v_best.reserve(rankwork.size()*nUniverses);
        v_last.reserve(rankwork.size()*nUniverses);
        v_dchi.reserve(rankwork.size()*nUniverses);
-       v_nevents.reserve(rankwork.size()*nUniverses);
+       v_fakedataC.reserve(rankwork.size()*nUniverses);
+       v_collspec.reserve(rankwork.size()*nUniverses);
     }
     
-    //Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
+    //validation
+    Eigen::MatrixXd specfull_e_mat(rankwork.size(),57); 
+    Eigen::MatrixXd speccoll_mat(rankwork.size(),57); 
+    Eigen::MatrixXd corecoll_mat(rankwork.size(),57);
 
     system_clock::time_point t_init = system_clock::now();
     for (int i_grid : rankwork) {
@@ -682,17 +1097,25 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        auto const & speccoll = collapseVectorEigen(specfull_e, myconf);
        std::mt19937 rng(cp.gid()); // Mersenne twister
        Eigen::MatrixXd const & LMAT = cholD(ECOV, specfull_e);
-       
+     
+         
+       //Eigen
+       specfull_e_mat.row(i_grid) = Eigen::VectorXd::Map(&specfull_e[i_grid], specfull_e_mat.size());
+       speccoll_mat.row(i_grid) = Eigen::VectorXd::Map(&speccoll[i_grid], speccoll.size());
 
-       starttime = MPI_Wtime();
+        //compute mfa???
+	makeSignalModel(b,cp,signal,myconf.num_bins_detector_block_compressed);
+
        for (int uu=0; uu<nUniverses;++uu) {
-          auto const & fake_data = poisson_fluctuate(sample(specfull_e, LMAT, rng), rng);//
-          auto const & fake_dataC = collapseVectorEigen(fake_data, myconf); 
+          auto const & fake_data = sample(specfull_e, LMAT, rng);//
+          auto const & fake_dataC = collapseVectorEigen(fake_data, myconf);
+
           results.push_back(coreFC(fake_dataC, speccoll,
-                   signal, INVCOVBG, ECOV, myconf, tol, iter));
+                   //signal, INVCOVBG, ECOV, myconf, tol, iter)); //old implementation
+                   b, cp, i_grid, INVCOVBG, ECOV, myconf, tol, iter));
+
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
-          v_nevents.push_back(fake_data.sum());
        }
        endtime   = MPI_Wtime();
        system_clock::time_point now = system_clock::now();
@@ -713,11 +1136,12 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
        HighFive::DataSet d_delta_chi       = file->getDataSet("delta_chi"      );
        HighFive::DataSet d_best_grid_point = file->getDataSet("best_grid_point");
        HighFive::DataSet d_n_iter          = file->getDataSet("n_iter"         );
-       HighFive::DataSet d_n_events        = file->getDataSet("n_events"       );
        // write out this grid and universe
        HighFive::DataSet d_i_grid          = file->getDataSet("i_grid");
        HighFive::DataSet d_i_univ          = file->getDataSet("i_univ");
        // This is for the fake data dump
+       HighFive::DataSet d_fakedataC      = file->getDataSet("fakedataC");
+       HighFive::DataSet d_collspec        = file->getDataSet("collspec");
 
        size_t d_bgn = rankwork[0]*nUniverses;
        for (auto res : results) {
@@ -725,140 +1149,25 @@ void doFC(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
           v_best.push_back(res.best_grid_point);
           v_last.push_back(res.last_chi_min);
           v_dchi.push_back(res.delta_chi);
+	  v_fakedataC.push_back(res.fakedataC);
+	  v_collspec.push_back(res.collspec);
        }
 
        d_last_chi_min.select(     {d_bgn, 0}, {size_t(v_last.size()), 1}).write(v_last);
        d_delta_chi.select(        {d_bgn, 0}, {size_t(v_dchi.size()), 1}).write(v_dchi);
        d_best_grid_point.select(  {d_bgn, 0}, {size_t(v_best.size()), 1}).write(v_best);
        d_n_iter.select(           {d_bgn, 0}, {size_t(v_iter.size()), 1}).write(v_iter);
-       d_n_events.select(         {d_bgn, 0}, {size_t(v_nevents.size()), 1}).write(v_nevents);
        d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
        d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
+       d_fakedataC.select(        {d_bgn, 0}, {size_t(v_fakedataC.size()), 57}).write(v_fakedataC);
+       d_collspec.select(         {d_bgn, 0}, {size_t(v_collspec.size()), 57}).write(v_collspec);
        endtime   = MPI_Wtime();
        if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
+	H5Easy::File file1("/code/src/comparespectrum_mpi.h5", H5Easy::File::Overwrite);
+  	H5Easy::dump(file1, "specfull", specfull_e_mat);
+  	H5Easy::dump(file1, "colspec", speccoll_mat);
     }
 }
-
-
-void doFCLoadBalanced(Block* b, diy::Master::ProxyWithLink const& cp, int rank,
-      const char * xmldata, sbn::SBNconfig const & myconf,
-      TMatrixD const & covmat, Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
-      SignalGenerator signal,
-      HighFive::File* file, std::vector<size_t> const & rankwork, int nUniverses, 
-      double tol, size_t iter, bool debug, bool noWrite=false, int msg_every=100)
-{
-
-    double starttime, endtime;
-    std::vector<FitResult> results;
-    std::vector<int> v_grid, v_univ, v_iter, v_best;
-    std::vector<double> v_last, v_dchi, v_nevents;
-
-    size_t pStart = rankwork[0];
-    size_t uStart = rankwork[1];
-    size_t pLast  = rankwork[2];
-    size_t uLast  = rankwork[3];
-
-    size_t i_begin = pStart * nUniverses + uStart;
-    size_t i_end   = pLast  * nUniverses + uLast;
-
-    //fmt::print(stderr, "[{}] a,b,c,d: {} {} {} {} start at {} end at {}  lends {}\n", rank, pStart, uStart, pLast, uLast, i_begin, i_end, i_end-i_begin);
-    size_t lenDS = i_end - i_begin;
-
-    if (!noWrite) {
-       results.reserve(lenDS);
-       v_grid.reserve(lenDS);
-       v_univ.reserve(lenDS);
-       v_iter.reserve(lenDS);
-       v_best.reserve(lenDS);
-       v_last.reserve(lenDS);
-       v_dchi.reserve(lenDS);
-       v_nevents.reserve(lenDS);
-    }
-
-    std::vector<std::vector<size_t> > RW;
-    if (pStart == pLast) RW.push_back({pStart, uStart, uLast});
-    else {
-      RW.push_back({pStart, uStart, nUniverses});
-       for (size_t _p = pStart+1; _p<pLast;++_p) {
-          RW.push_back({_p, 0, nUniverses});
-       }
-       if (uLast>0) RW.push_back({pLast, 0, uLast});
-
-    }
-
-    //for (auto r: RW) {
-       //fmt::print(stderr, "[{}]  {}: {} -- {} \n", rank, r[0], r[1], r[2]);
-    //}
-
-    
-    ////Eigen::Map<const Eigen::MatrixXd > ECOV(covmat.GetMatrixArray(), covmat.GetNrows(), covmat.GetNrows());
-
-    system_clock::time_point t_init = system_clock::now();
-    std::mt19937 rng(cp.gid()); // Mersenne twister
-    for (auto r : RW) {
-
-       size_t i_grid = r[0];
-
-       if (debug && i_grid!=0) return;
-       auto const & specfull_e = signal.predict(i_grid, false);
-       auto const & speccoll = collapseVectorEigen(specfull_e, myconf);
-       Eigen::MatrixXd const & LMAT = cholD(ECOV, specfull_e);
-
-       starttime = MPI_Wtime();
-       for (size_t uu=r[1]; uu<r[2];++uu) {
-          auto const & fake_data = poisson_fluctuate(sample(specfull_e, LMAT, rng), rng);//
-          auto const & fake_dataC = collapseVectorEigen(fake_data, myconf); 
-          results.push_back(coreFC(fake_dataC, speccoll,
-                   signal, INVCOVBG, ECOV, myconf, tol, iter));
-          v_univ.push_back(uu);
-          v_grid.push_back(i_grid);
-          v_nevents.push_back(fake_data.sum());
-       }
-       endtime   = MPI_Wtime();
-       system_clock::time_point now = system_clock::now();
-
-       auto t_elapsed = now - t_init;
-       auto t_togo = t_elapsed * (lenDS - results.size())/(results.size()+1);
-       auto t_eta = now + t_togo;
-       std::time_t t = system_clock::to_time_t(t_eta);
-
-       if (rank==0 && results.size()%msg_every==0) fmt::print(stderr, "[{}] gridp {}/{} took {} seconds. ETA: {}",cp.gid(), results.size(), lenDS, endtime-starttime, std::ctime(&t));
-    }
-
-    if (!noWrite) {
-
-       // Write to HDF5
-       starttime   = MPI_Wtime();
-       HighFive::DataSet d_last_chi_min    = file->getDataSet("last_chi_min"   );
-       HighFive::DataSet d_delta_chi       = file->getDataSet("delta_chi"      );
-       HighFive::DataSet d_best_grid_point = file->getDataSet("best_grid_point");
-       HighFive::DataSet d_n_iter          = file->getDataSet("n_iter"         );
-       HighFive::DataSet d_n_events        = file->getDataSet("n_events"       );
-       // write out this grid and universe
-       HighFive::DataSet d_i_grid          = file->getDataSet("i_grid");
-       HighFive::DataSet d_i_univ          = file->getDataSet("i_univ");
-       // This is for the fake data dump
-
-       size_t d_bgn = i_begin;//rankwork[0]*nUniverses;
-       for (auto res : results) {
-          v_iter.push_back(res.n_iter);
-          v_best.push_back(res.best_grid_point);
-          v_last.push_back(res.last_chi_min);
-          v_dchi.push_back(res.delta_chi);
-       }
-
-       d_last_chi_min.select(     {d_bgn, 0}, {size_t(v_last.size()), 1}).write(v_last);
-       d_delta_chi.select(        {d_bgn, 0}, {size_t(v_dchi.size()), 1}).write(v_dchi);
-       d_best_grid_point.select(  {d_bgn, 0}, {size_t(v_best.size()), 1}).write(v_best);
-       d_n_iter.select(           {d_bgn, 0}, {size_t(v_iter.size()), 1}).write(v_iter);
-       d_n_events.select(         {d_bgn, 0}, {size_t(v_nevents.size()), 1}).write(v_nevents);
-       d_i_grid.select(           {d_bgn, 0}, {size_t(v_grid.size()), 1}).write(v_grid);
-       d_i_univ.select(           {d_bgn, 0}, {size_t(v_univ.size()), 1}).write(v_univ);
-       endtime   = MPI_Wtime();
-       if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
-    }
-}
-
 
 inline bool file_exists (const std::string& name) {
     ifstream f(name.c_str());
@@ -869,30 +1178,24 @@ inline bool file_exists (const std::string& name) {
 int main(int argc, char* argv[]) {
     diy::mpi::environment env(argc, argv);
     diy::mpi::communicator world;
-    double T0   = MPI_Wtime();
 
-    time_t now;
-    time (&now);
-    if (world.rank()==0) fmt::print(stderr, "Start at {}", std::ctime(&now));
-
-
-
-    //std::cerr << MPI_COMM_WORLD.size() <<"\n";
-    //createTimingDataSets(f_time);
 
     size_t nPoints=-1;
     int mode=0;
     int msg_every=100;
     size_t nUniverses=1;
     int NTEST(0);
-    std::string out_file="test.hdf5";
-    std::string time_file="timestamps.h5";
+    std::string out_file="test.h5";
     std::string f_BG="BOTHv2_BKG_ONLY.SBNspec.root";
     std::string f_CV="BOTHv2_CV.SBNspec.root";
     std::string f_COV="BOTHv2.SBNcovar.root";
     std::string tag="";
     std::string d_in="";
     std::string xml="";
+    std::string infile0  = "corespectrum.h5";                 // h5 input file
+    std::string infile1  = "SIN_mfa_output_deg2.h5";                 // MFA input file
+    std::string infile2  = "SINSQ_mfa_output_deg2.h5";                 // MFA input file
+
     double xmin(-1.0);
     double xmax(1.1);
     double xwidth(0.1);
@@ -904,7 +1207,6 @@ int main(int argc, char* argv[]) {
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
-    ops >> Option("timefile",     time_file,   "Output filename for timestamps.");
     ops >> Option('o', "output",     out_file,   "Output filename.");
     ops >> Option('u', "nuniverse",  nUniverses, "Number of universes");
     ops >> Option("ntest", NTEST , "Number of universes");
@@ -922,12 +1224,13 @@ int main(int argc, char* argv[]) {
     ops >> Option("ymin",            ymin,       "ymin");
     ops >> Option("ymax",            ymax,       "ymax");
     ops >> Option("ywidth",          ywidth,     "ywidth");
-    ops >> Option("msg",             msg_every,  "Prin a progress message every m gridpoints on rank 0 to stderr.");
+    ops >> Option("msg",             msg_every,  "Print a progress message every m gridpoints on rank 0 to stderr.");
     ops >> Option("mode",            mode, "Mode 0 is default --- dimension 2 is electron, mode 1 is muon");
     bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
     bool statonly    = ops >> Present("stat", "Statistical errors only");
     bool nowrite    = ops >> Present("nowrite", "Don't write output --- for performance estimates only");
     bool simplescan    = ops >> Present("scan", "Simple scan, no FC");
+    bool mfa    = ops >> Present("mfa", "Use MFA input file");
     if (ops >> Present('h', "help", "Show help")) {
         std::cout << "Usage:  [OPTIONS]\n";
         std::cout << ops;
@@ -960,8 +1263,28 @@ int main(int argc, char* argv[]) {
           exit(1);
        }
     }
-    
-    double T1   = MPI_Wtime();
+
+
+    std::vector<double> v_buff;
+    int ncols, nrows;
+    if (world.rank()==0) loadData(Form("%s/%s",d_in.c_str(),infile0.c_str()), "core",        v_buff,   nrows, ncols);
+    Eigen::VectorXd _core = bcMatrixXd(world, v_buff, nrows, ncols);
+  
+    if (world.rank()==0) loadData(Form("%s/%s",d_in.c_str(),infile0.c_str()), "covmat",        v_buff,   nrows, ncols);
+    Eigen::MatrixXd _covmat = bcMatrixXd(world, v_buff, nrows, ncols);
+  
+    if (world.rank()==0) loadData(Form("%s/%s",d_in.c_str(),infile0.c_str()), "invcovbg",        v_buff,   nrows, ncols);
+    Eigen::MatrixXd _invcovbg = bcMatrixXd(world, v_buff, nrows, ncols);
+  
+    if (world.rank()==0) loadData(Form("%s/%s",d_in.c_str(),infile1.c_str()), "_SIN_",        v_buff,   nrows, ncols);
+    std::cout << Form("%s/%s",d_in.c_str(),infile1.c_str()) << std::endl;
+    Eigen::MatrixXd _sin = bcMatrixXd(world, v_buff, nrows, ncols);
+  
+    if (world.rank()==0) loadData(Form("%s/%s",d_in.c_str(),infile2.c_str()), "_SINSQ_",        v_buff,   nrows, ncols);
+    Eigen::MatrixXd _sinsq = bcMatrixXd(world, v_buff, nrows, ncols);
+   
+    //std::cout << "_sinsq nrows, ncols = " << nrows << ", " << ncols << std::endl;
+
     double time0 = MPI_Wtime();
 
     // Read the xml file on rank 0
@@ -976,40 +1299,45 @@ int main(int argc, char* argv[]) {
     if ( world.rank() != 0 ) text.resize(textsize);
     MPI_Bcast(const_cast<char*>(text.data()), textsize, MPI_CHAR, 0, world);
 
-    double T2   = MPI_Wtime();
     // Central configuration object
     const char* xmldata = text.c_str();
     sbn::SBNconfig myconf(xmldata, false);
 
-    double T3   = MPI_Wtime();
     // Pre-oscillated spectra
     std::vector<double> sinsqvec, sinvec;
     std::vector<float> msqsplittings;
     std::vector<Eigen::VectorXd > sinsqvec_eig, sinvec_eig;
     int nFilesIn(0);
     if (world.rank()==0) {
-       auto temp = mkHistoVecStd(d_in, tag, "_SINSQ_", myconf.fullnames, xmin, xmax, debug);
+       auto temp = mkHistoVecStd(d_in, tag, "_SINSQ_", myconf.fullnames, xmin, xmax);
        sinsqvec = asVector(std::get<0>(temp));
        msqsplittings = std::get<1>(temp);
        
-       auto temp2 = mkHistoVecStd(d_in, tag, "_SIN_", myconf.fullnames, xmin, xmax, debug);
+       auto temp2 = mkHistoVecStd(d_in, tag, "_SIN_", myconf.fullnames, xmin, xmax);
        sinvec   = asVector(std::get<0>(temp2));
        if (sinsqvec.size() != sinvec.size()) {
           std::cerr << "Error, number of input files for _SINSQ_ (" << sinsqvec.size() << ") differs from _SIN_ (" << sinvec.size() << ") exiting.\n";
           exit(1);
        }
        nFilesIn = msqsplittings.size();
-       //std::cerr << "Error, number of input files for _SINSQ_ (" << sinsqvec.size() << ") differs from _SIN_ (" << sinvec.size() << ") exiting.\n";
 
     }
-    double T4   = MPI_Wtime();
     diy::mpi::broadcast(world, sinsqvec, 0);
     diy::mpi::broadcast(world, sinvec,   0);
     diy::mpi::broadcast(world, msqsplittings,   0);
     diy::mpi::broadcast(world, nFilesIn, 0);
-    double T5   = MPI_Wtime();
     for (auto v : splitVector(sinsqvec, nFilesIn)) sinsqvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
     for (auto v : splitVector(sinvec  , nFilesIn))   sinvec_eig.push_back(Eigen::Map<Eigen::VectorXd> (v.data(), v.size(), 1) );
+
+    std::cout << "sinsqvec size, sinsqvec_eig size = " << sinsqvec.size() << ", " << sinsqvec_eig.size() << std::endl;
+    std::cout << "nrows, ncols = " << nrows << ", " << ncols << std::endl;
+    Eigen::MatrixXd sinsqeig(nrows-1,ncols);
+    Eigen::MatrixXd sineig(nrows-1,ncols);
+
+    for (int i = 0; i < sinsqvec_eig.size(); ++i){
+        sinsqeig.row(i) = Eigen::VectorXd::Map(&sinsqvec_eig[i][0], sinsqvec_eig[0].size());
+        sineig.row(i) = Eigen::VectorXd::Map(&sinvec_eig[i][0], sinvec_eig[0].size());
+    }
 
     // Core spectrum
     std::vector<double> core;
@@ -1030,7 +1358,6 @@ int main(int argc, char* argv[]) {
        bghist.shrink_to_fit();
     }
     diy::mpi::broadcast(world, bgvec, 0);
-    double T6   = MPI_Wtime();
 
     // Read the covariance matrix on rank 0 --- broadcast and subsequently buid from array
     TMatrixD covmat;
@@ -1066,46 +1393,58 @@ int main(int argc, char* argv[]) {
     auto const & _covcol = collapseDetectors(ecov, myconf);
     auto const & INVCOVBG = invertMatrixEigen3(_covcol);
 
-    double T7   = MPI_Wtime();
     // Setup grid
     NGrid mygrid;
     size_t dim2(0);
 
     double mmin = msqsplittings.front()*0.5;
-    //double mmax = msqsplittings.back()*0.5;
+    double mmax = msqsplittings.back()*0.5;
     double mwidth = (msqsplittings[1] - msqsplittings[0])*0.5;
-    double mmax = msqsplittings.back()*0.5 + mwidth;
 
     if (world.rank()==0) std::cerr << "Mass setup for input grid: " << mmin << " < " << mmax << " width: " << mwidth << "\n";
 
-    int setZero=-1;
     mygrid.AddDimension("m4", mmin, mmax, mwidth );
+    //mygrid.AddDimension("m4",  xmin, xmax, xwidth); // Sterile mass ultimately limited by input files
     if (mode==0) {
        mygrid.AddDimension("ue4", ymin, ymax, ywidth);// arbirtrarily dense! mixing angle nu_e
        mygrid.AddFixedDimension("um4", 0.0);
-       setZero=2;
        dim2 = mygrid.f_dimensions[1].f_N;
+       //std::cout << "mode 2, ymin, ymax = " << ymin << ", " << ymax << std::endl;
     }
     else if (mode==1) {
        mygrid.AddFixedDimension("ue4", 0.0);
        mygrid.AddDimension("um4", ymin, ymax, ywidth);
-       setZero=1;
        dim2 = mygrid.f_dimensions[2].f_N;
+       //std::cout << "mode 1, ymin, ymax = " << ymin << ", " << ymax << std::endl;
     }
     else {
        std::cerr << "Error, the mode must be either 0 or 1 a the moment: " << mode << "\n";
        exit(1);
     }
     nPoints = mygrid.f_num_total_points;
-    GridPoints GP(mygrid.GetGrid(), setZero);
-    double T8   = MPI_Wtime();
+    GridPoints GP(mygrid.GetGrid());
 
     if (world.rank()==0) mygrid.Print();
 
     // Finally, the signal generator
-    SignalGenerator     signal(myconf, mygrid.GetGrid(), dim2, sinsqvec_eig, sinvec_eig, ecore, mode);
-    double T9   = MPI_Wtime();
+    Eigen::MatrixXd _sinsq_(nrows,ncols);
+    Eigen::MatrixXd _sin_(nrows,ncols);
+
+    if(!mfa){
+	_sinsq_ = sinsqeig;  
+	_sin_ = sineig;
+    } else {
+	_sinsq_ = _sinsq; 
+	_sin_ = _sin;
+    }
+
+    SignalGenerator  signal(myconf, mygrid.GetGrid(), dim2, _sinsq_, _sin_, ecore, mode);
     
+    //write the mass index and gridpoint
+    //Eigen::MatrixXd masses;
+    //Eigen::MatrixXd masses;
+    //for( uint igrid = 0; igrid < nPoints; igrid++ )	 
+
     double time1 = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] Input preparation took {} seconds\n",world.rank(), time1 - time0);
 
@@ -1157,7 +1496,6 @@ int main(int argc, char* argv[]) {
 
     // Create datasets needed TODO nbinsC --- can we get that from somewhere?
     createDataSets(f_out, nPoints, nUniverses);
-    double T10   = MPI_Wtime();
    
     // First rank also writes the grid so we know what the poins actually are
     if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid(), mode);
@@ -1165,144 +1503,73 @@ int main(int argc, char* argv[]) {
     //// Now more blocks as we have universes
     size_t blocks = world.size();//nPoints;//*nUniverses;
     if (world.rank()==0) fmt::print(stderr, "FC will be done on {} blocks, distributed over {} ranks\n", blocks, world.size());
-    Bounds fc_domain(1);
+    Bounds<real_t> fc_domain(1);
     fc_domain.min[0] = 0;
     fc_domain.max[0] = blocks-1;
+    diy::FileStorage               storage("./DIY.XXXXXX");
     diy::RoundRobinAssigner        fc_assigner(world.size(), blocks);
-    diy::RegularDecomposer<Bounds> fc_decomposer(1, fc_domain, blocks);
+    diy::RegularDecomposer<Bounds<real_t>> fc_decomposer(1, fc_domain, blocks);
     diy::RegularBroadcastPartners  fc_comm(    fc_decomposer, 2, true);
     diy::RegularMergePartners      fc_partners(fc_decomposer, 2, true);
-    diy::Master                    fc_master(world, 1, -1, &Block::create, &Block::destroy);
+    diy::Master                    fc_master(world, 1, -1, &Block<real_t>::create, &Block<real_t>::destroy, &storage, &Block<real_t>::save, &Block<real_t>::load);
     diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
-    double T11   = MPI_Wtime();
 
-    //std::vector<int> work(nPoints);
-    //std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
-    //std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
-    //work.clear();
-    //work.shrink_to_fit();
+    std::vector<int> work(nPoints);
+    std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
+    std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
+    work.clear();
+    work.shrink_to_fit();
 
-
-    // Somehow this feels overly complicatd
-    size_t _S(nPoints*nUniverses);
-    std::vector<size_t> _L;
-    size_t maxwork = size_t(ceil(_S/world.size()));
-    for (size_t r=0; r <                _S%world.size(); ++r) _L.push_back(maxwork + 1);
-    for (size_t r=0; r < world.size() - _S%world.size(); ++r) _L.push_back(maxwork    );
-
-
-    std::vector<size_t> _bp, _bu;
-    _bp.push_back(0);
-    _bu.push_back(0);
-
-    size_t _n(0), _temp(0);
-    for (size_t i=0; i<nPoints;++i) {
-       for (size_t j=0; j<nUniverses;++j) {
-          if (_temp == _L[_n]) {
-             _bp.push_back(i);
-             _bu.push_back(j);
-             _temp = 0;
-             _n+=1;
-          }
-          _temp+=1;
-       }
-    }
-    _bp.push_back(nPoints-1);
-    _bu.push_back(nUniverses);
-    
-    std::vector<size_t> rankworkbl;
-    //fmt::print(stderr, "[{}] Got {} ranks and {} sets of work {}\n", world.rank(), world.size(), _bu.size() -1, _bp.size() -1);
-    world.barrier();
-    rankworkbl.push_back(_bp[world.rank()]);
-    rankworkbl.push_back(_bu[world.rank()]);
-    rankworkbl.push_back(_bp[world.rank()+1]);
-    rankworkbl.push_back(_bu[world.rank()+1]);
-
-
-
-
-    double T12   = MPI_Wtime();
-
-    //fmt::print(stderr, "Got maxwork {}\n", maxwork);
-    //for (int gp=0;gp<nPoints;++gp) {
-       //for (int uv=0;uv<nUniverses;++uv) {
-          //if (_n%maxwork ==0) {
-             //_bp.push_back(gp);
-             //_bu.push_back(uv);
-          //}
-          //_n++;
-       //}
-    //}
-    //_bp.push_back(nPoints-1);
-    //_bu.push_back(nUniverses-1);
-    //std::vector<int> rankworkbl;
-
-    //fmt::print(stderr, "[{}] Got {} ranks and {} sets of work {}\n", world.rank(), world.size(), _bu.size() -1, _bp.size() -1);
-    //exit(0);
-
-
-
-    double T13   = MPI_Wtime();
     double starttime = MPI_Wtime();
     if (simplescan) {
        if (world.rank()==0) fmt::print(stderr, "Start simple scan\n");
-       fc_master.foreach([world, ECOVMAT, INVCOVBG, ecore, myconf,  f_out, rankworkbl, tol, iter, debug, signal](Block* b, const diy::Master::ProxyWithLink& cp)
-                              { doScan(b, cp, world.rank(), myconf, ECOVMAT, INVCOVBG, ecore, signal, f_out, rankworkbl, tol, iter, debug); });
+       if ( !mfa ) { fc_master.foreach([world, ECOVMAT, INVCOVBG, ecore, myconf,  f_out, rankwork, tol, iter, debug, signal](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                              { doScan(b, cp, world.rank(), myconf, ECOVMAT, INVCOVBG, ecore, signal, f_out, rankwork, tol, iter, debug); });}
+       else { fc_master.foreach([world, _covmat, _invcovbg, _core, myconf,  f_out, rankwork, tol, iter, debug, signal](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                              { doScan(b, cp, world.rank(), myconf, _covmat, _invcovbg, _core, signal, f_out, rankwork, tol, iter, debug); });}
     }
     else {
        if (world.rank()==0) fmt::print(stderr, "Start FC\n");
-       fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankworkbl, tol, iter, debug, signal, nowrite, msg_every](Block* b, const diy::Master::ProxyWithLink& cp)
-                              { doFCLoadBalanced(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankworkbl, nUniverses, tol, iter, debug, nowrite, msg_every); });
+       if( !mfa ){ fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite, msg_every](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite, msg_every); });}
+       else { fc_master.foreach([world, covmat, _covmat, xmldata, _invcovbg, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite, msg_every](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, _covmat, _invcovbg, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite, msg_every); });}
     }
+
     double endtime   = MPI_Wtime();
-
-    double T14   = MPI_Wtime();
-    float _FCtime = endtime-starttime;
-    float FCtime_max, FCtime_min, FCtime_sum;
-    MPI_Reduce(&_FCtime, &FCtime_max, 1, MPI_FLOAT, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&_FCtime, &FCtime_min, 1, MPI_FLOAT, MPI_MIN, 0, MPI_COMM_WORLD);
-
-
-    if (world.rank()==0) fmt::print(stderr, "[{}] that took {} ... {} seconds\n", world.rank(), FCtime_min, FCtime_max);
+    if(mfa) std::cout << "This is the MFA implementation!" << std::endl; 
+    if (world.rank()==0) fmt::print(stderr, "[{}] that took {} seconds\n",world.rank(), endtime-starttime);
     if (world.rank()==0) fmt::print(stderr, "Output written to {}\n",out_file);
+    
+
+    //Print comparisons before FC procedure 
+    std::string filename;
+    if(!mfa) filename="/code/src/comparesinsinsq.h5";
+    else filename="/code/src/comparesinsinsq_mfa.h5";
+    if(world.rank()==0){
+	H5Easy::File file(filename.c_str(), H5Easy::File::Overwrite);
+  	H5Easy::dump(file, "_sinsq_", _sinsq_);
+  	H5Easy::dump(file, "_sin_", _sin_);
+  	H5Easy::dump(file, "_sinsq", _sinsq);
+  	H5Easy::dump(file, "_sin", _sin);
+  	H5Easy::dump(file, "sinsqeig", sinsqeig); 
+  	H5Easy::dump(file, "sineig", sineig); 
+  	H5Easy::dump(file, "ECOVMAT", ECOVMAT); 
+  	H5Easy::dump(file, "_covmat", _covmat); 
+  	H5Easy::dump(file, "ecore", ecore); 
+  	H5Easy::dump(file, "_core", _core); 
+    }
+    if(world.rank()==0){
+	H5Easy::File file("_SINSQ_.h5", H5Easy::File::Overwrite);
+  	H5Easy::dump(file, "_SINSQ_", _sinsq_);
+  	H5Easy::dump(file, "masses", msqsplittings);
+    }
+    if(world.rank()==0){
+	H5Easy::File file("_SIN_.h5", H5Easy::File::Overwrite);
+  	H5Easy::dump(file, "_SIN_", _sin_);
+  	H5Easy::dump(file, "masses", msqsplittings);
+    }
 
     delete f_out;
-    time (&now);
-    if (world.rank()==0) fmt::print(stderr, "End at {}", std::ctime(&now));
-    double T15   = MPI_Wtime();
-    std::vector<double> ts;
-    ts.push_back(T0);
-    ts.push_back(T1);
-    ts.push_back(T2);
-    ts.push_back(T3);
-    ts.push_back(T4);
-    ts.push_back(T5);
-    ts.push_back(T6);
-    ts.push_back(T7);
-    ts.push_back(T8);
-    ts.push_back(T9);
-    ts.push_back(T10);
-    ts.push_back(T11);
-    ts.push_back(T12);
-    ts.push_back(T13);
-    ts.push_back(T14);
-    ts.push_back(T15);
-    size_t pStart = rankworkbl[0];
-    size_t uStart = rankworkbl[1];
-    size_t pLast  = rankworkbl[2];
-    size_t uLast  = rankworkbl[3];
-    size_t i_begin = pStart * nUniverses + uStart;
-    size_t i_end   = pLast  * nUniverses + uLast;
-    size_t lenDS = i_end - i_begin;
-
-    HighFive::File* f_time  = new HighFive::File(time_file,
-                        HighFive::File::ReadWrite|HighFive::File::Create|HighFive::File::Truncate,
-                        HighFive::MPIOFileDriver(MPI_COMM_WORLD,MPI_INFO_NULL));
-    f_time->createDataSet<double>("timestamps", HighFive::DataSpace( { 16,       world.size()} ));
-    f_time->createDataSet<size_t>("work", HighFive::DataSpace( { 1,       world.size()} ));
-    HighFive::DataSet d_ts = f_time->getDataSet("timestamps");
-    HighFive::DataSet d_wk = f_time->getDataSet("work");
-    d_ts.select(     {0, world.rank()}, {ts.size(), 1}).write(ts);
-    d_wk.select(     {0, world.rank()}, {1, 1}).write(lenDS);
     return 0;
 }
