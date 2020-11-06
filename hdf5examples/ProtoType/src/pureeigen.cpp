@@ -808,7 +808,7 @@ class LLR : public Problem<T> {
 		//scale to 1
 		double _p=p/data.size();
 		param(0) = _p;
-	    	param(1) = x[1];
+	    	param(1) = x[p][p];
 	    	int dom_dim = b->dom_dim;
     		int pt_dim  = b->pt_dim;
     		VectorX<real_t> out_pt(pt_dim);
@@ -828,7 +828,7 @@ class LLR : public Problem<T> {
 		//scale to 1
 		double _p=p/data.size();
 		param(0) = _p;
-		param(1) = x[1];
+		param(1) = x[p][p];
 		int dom_dim = b->dom_dim;
 		int pt_dim  = b->pt_dim;
 		// evaluate point
@@ -840,7 +840,7 @@ class LLR : public Problem<T> {
         		in_param(i) = param[i];
     		}
 		b->decode_point(cp, in_param, out_pt); 
-		b->differentiate_point(cp, x, 1, x(1), -1, out_pt_deriv);
+		b->differentiate_point(cp, x, 1, x(p,p), -1, out_pt_deriv);
 	        grad[p] = 2*out_pt_deriv(pt_dim - 1)*M*(out_pt(2));
 	}
     }
@@ -928,8 +928,8 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    cppoptlib::LbfgsSolver<llr> solver;
    //minimize the function
 
-   Eigen::VectorXd x(2); 
-   for( int p=0; p < fake_data.size(); p++) x << (0, i_grid);
+   Eigen::VectorXd x(fake_data.size(),2); 
+   for( int p=0; p < fake_data.size(); p++) x << (p, i_grid);
    solver.minimize(f,x);
   
    //store the result here
