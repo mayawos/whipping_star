@@ -168,10 +168,10 @@ struct Block : public BlockBase<T>
     void read_2d_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args,
-            Eigen::VectorXd   vals,
-            Eigen::VectorXd   masses,
+            Eigen::MatrixXd   vals,
             bool        rescale)            // rescale science values
     {
+
         DomainArgs* a = &args;
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
@@ -185,30 +185,29 @@ struct Block : public BlockBase<T>
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
-        for (int i = 0; i < this->dom_dim; i++)
-        {
+        for (int i = 0; i < this->dom_dim ; i++)
+        { 
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
+	    std::cout << "tot_ndom_pts, ndom_pts(" << i << ") = " << tot_ndom_pts << ", " << ndom_pts(i) << std::endl; 
+	    std::cout << "ndom_pts(" << i << "), a->ndom_pts[" << i << "] = " << ndom_pts(i) << ", " << a->ndom_pts[i] << std::endl; 
         }
         this->domain.resize(tot_ndom_pts, this->pt_dim);
 	
-        //check mass has the same dimension
-        assert(mass_dims[0] == ndom_pts(1));
-        //check value has the same dimension
-        assert(val_dims[0] == ndom_pts(1));
-        assert(val_dims[1] == ndom_pts(0));
-        
-        for (size_t i = 0; i < vals.size(); i++)
-          this->domain(i, 2) = vals[i];
-        
+        assert(vals(0) == ndom_pts(0));
+        assert(vals(1) == ndom_pts(1));
         // set geometry values
         int n = 0;
-        for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+        for (size_t j = 0; j < (size_t)(ndom_pts(0)); j++)
           {
-            for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+            for (size_t i = 0; i < (size_t)(ndom_pts(1)); i++)
               {
-                this->domain(n, 0) = i;
-                this->domain(n, 1) = masses[j];
+		std::cout << "this->domain(n, 0) = " << j << std::endl;
+                this->domain(n, 0) = j;
+                std::cout << "this->domain(n, 1) = " << i << std::endl;
+                this->domain(n, 1) = i;
+                std::cout << "this->domain(n, 2) = " << vals(j,i) << std::endl;
+                this->domain(n, 2) = vals(j,i);
                 n++;
               }
           }
@@ -220,11 +219,16 @@ struct Block : public BlockBase<T>
               this->bounds_mins(0) = this->domain(i, 0);
             if (i == 0 || this->domain(i, 0) > this->bounds_maxs(0))
               this->bounds_maxs(0) = this->domain(i, 0);
+            if (i == 0 || this->domain(i, 1) < this->bounds_mins(1))
+              this->bounds_mins(1) = this->domain(i, 1);
+            if (i == 0 || this->domain(i, 1) > this->bounds_maxs(1))
+              this->bounds_maxs(1) = this->domain(i, 1);
             if (i == 0 || this->domain(i, 2) < this->bounds_mins(2))
               this->bounds_mins(2) = this->domain(i, 2);
             if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
               this->bounds_maxs(2) = this->domain(i, 2);
           }
+	  std::cout << "tot_ndom_pt, this->domain(tot_ndom_pts - 1, 1), this->dom_dim = " << tot_ndom_pts << ", " << this->domain(tot_ndom_pts - 1, 1) << ", " << this->dom_dim << std::endl;
         
         // extents
         this->bounds_mins(1) = 0.0;
@@ -235,6 +239,7 @@ struct Block : public BlockBase<T>
           {
             this->core_mins(i) = this->bounds_mins(i);
             this->core_maxs(i) = this->bounds_maxs(i);
+	    std::cout << "this->core_mins(" << i << "), this->core_maxs(" << i << ") = " << this->core_mins(i) << ", " << this->core_maxs(i) << std::endl;
           }
         
         this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
@@ -420,15 +425,13 @@ private:
 
 inline void makeSignalModel(Block<real_t>* b,  diy::Master::ProxyWithLink const& cp, SignalGenerator signal, int nbins)
 {
-
     // default command line arguments
     int    pt_dim       = 3;                    // dimension of input points
     int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
     int    geom_degree  = 1;                    // degree for geometry (same for all dims)
     int    vars_degree  = 2;                    // degree for science variables (same for all dims)
-    int    ndomp        = nbins;                // input number of domain points (same for all dims)
-    int    geom_nctrl   = -1;                   // input number of control points for geometry (same for all dims)
-    int    vars_nctrl   = 11;                   // input number of control points for all science variables (same for all dims)
+    int    geom_nctrl   = geom_degree + 1;     // input number of control points for geometry (same for all dims)
+    int    vars_nctrl   = vars_degree + 1;     // input number of control points for geometry (same for all dims)
     int    weighted     = 1;                   // input number of control points for all science variables (same for all dims)
     real_t noise        = 0.0;                  // fraction of noise
     // set default args for diy foreach callback functions
@@ -437,24 +440,25 @@ inline void makeSignalModel(Block<real_t>* b,  diy::Master::ProxyWithLink const&
     d_args.n            = noise;
     d_args.multiblock   = false;
     d_args.verbose      = 1;
+ 
     for (int i = 0; i < pt_dim - dom_dim; i++)
         d_args.f[i] = 1.0;
     for (int i = 0; i < dom_dim; i++)
     {
         d_args.geom_p[i]            = geom_degree;
         d_args.vars_p[0][i]         = vars_degree;  // assuming one science variable, vars_p[0]
-        d_args.ndom_pts[i]          = ndomp;
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
-        d_args.vars_nctrl_pts[0][i] = vars_nctrl;       // assuming one science variable, vars_nctrl_pts[0]
     }
+    d_args.ndom_pts[1]          = nbins;
+    d_args.ndom_pts[0]          = signal.gridsize();
+    d_args.vars_nctrl_pts[0][1] = nbins;       // assuming one science variable, vars_nctrl_pts[0]
+    d_args.vars_nctrl_pts[0][0] = signal.gridsize();       // assuming one science variable, vars_nctrl_pts[0]
 
-   Eigen::VectorXd values(signal.gridsize(),ndomp);	
-   Eigen::VectorXd masses(signal.gridsize());	
+   Eigen::MatrixXd values(signal.gridsize(),nbins);	
    for (size_t i=0; i<signal.gridsize(); ++i) {
       values.row(i) = signal.predict(i, true);
-      masses[i] = signal.massindex(i);
    }
-   b->read_2d_data(cp,d_args,values,masses,true);
+   b->read_2d_data(cp,d_args,values,true);
    b->fixed_encode_block(cp,d_args);
 
 }
@@ -776,7 +780,7 @@ inline Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::Vecto
     auto const & out = collapseDetectors(cov, conf);
     return invertMatrixEigen3(out);
 }
-
+/*
 //need to figure out the proper way to propagate the MFA model
 namespace cppoptlib {
 template<typename T>
@@ -808,7 +812,7 @@ class LLR : public Problem<T> {
 		//scale to 1
 		double _p=p/data.size();
 		param(0) = _p;
-	    	param(1) = x[p][p];
+	    	param(1) = x[1];
 	    	int dom_dim = b->dom_dim;
     		int pt_dim  = b->pt_dim;
     		VectorX<real_t> out_pt(pt_dim);
@@ -828,7 +832,7 @@ class LLR : public Problem<T> {
 		//scale to 1
 		double _p=p/data.size();
 		param(0) = _p;
-		param(1) = x[p][p];
+		param(1) = x[1];
 		int dom_dim = b->dom_dim;
 		int pt_dim  = b->pt_dim;
 		// evaluate point
@@ -840,14 +844,14 @@ class LLR : public Problem<T> {
         		in_param(i) = param[i];
     		}
 		b->decode_point(cp, in_param, out_pt); 
-		b->differentiate_point(cp, x, 1, x(p,p), -1, out_pt_deriv);
+		b->differentiate_point(cp, x, 1, x(1), -1, out_pt_deriv);
 	        grad[p] = 2*out_pt_deriv(pt_dim - 1)*M*(out_pt(2));
 	}
     }
 
 };
 }
-
+*/
 inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
       SignalGenerator signal,
       Eigen::MatrixXd const & INVCOV,
@@ -920,17 +924,17 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    float chi_min = FLT_MAX;
    //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan previously
    //implement optimizer
-   typedef double T;
-   using typename cppoptlib::Problem<T>::TVector;
+   //typedef double T;
+   //using typename cppoptlib::Problem<T>::TVector;
    //want to pass the mfa model here which is already encode in the block
-   typedef LLR<T> llr;
-   llr f(b, cp, fake_data, INVCOV);
-   cppoptlib::LbfgsSolver<llr> solver;
+   //typedef LLR<T> llr;
+   //llr f(b, cp, fake_data, INVCOV);
+   //cppoptlib::LbfgsSolver<llr> solver;
    //minimize the function
 
    Eigen::VectorXd x(fake_data.size(),2); 
    for( int p=0; p < fake_data.size(); p++) x << (p, i_grid);
-   solver.minimize(f,x);
+   //solver.minimize(f,x);
   
    //store the result here
    //global_chi_min = f(x); //the global minimum chi2
@@ -1065,13 +1069,14 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
       HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
       double tol, size_t iter, bool debug, bool noWrite=false, int msg_every=100)
 {
-
+    std::cout << "A" << std::endl;
     double starttime, endtime;
     std::vector<FitResult> results;
     std::vector<int> v_grid, v_univ, v_iter, v_best;
     std::vector<double> v_last, v_dchi;
     std::vector<std::vector<double> > v_fakedataC, v_collspec;
-    
+   
+    std::cout << "doFC b: " << b->dom_dim << std::endl;
     if (!noWrite) {
        results.reserve(rankwork.size()*nUniverses);
        v_grid.reserve(rankwork.size()*nUniverses);
@@ -1103,9 +1108,10 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
        specfull_e_mat.row(i_grid) = Eigen::VectorXd::Map(&specfull_e[i_grid], specfull_e_mat.size());
        speccoll_mat.row(i_grid) = Eigen::VectorXd::Map(&speccoll[i_grid], speccoll.size());
 
-        //compute mfa???
-	makeSignalModel(b,cp,signal,myconf.num_bins_detector_block_compressed);
+       //compute mfa???
+       makeSignalModel(b,cp,signal,speccoll.size());
 
+       std::cout << "C" << std::endl;
        for (int uu=0; uu<nUniverses;++uu) {
           auto const & fake_data = sample(specfull_e, LMAT, rng);//
           auto const & fake_dataC = collapseVectorEigen(fake_data, myconf);
@@ -1502,17 +1508,27 @@ int main(int argc, char* argv[]) {
 
     //// Now more blocks as we have universes
     size_t blocks = world.size();//nPoints;//*nUniverses;
+    std::cout << "blocks = " << blocks << std::endl;
     if (world.rank()==0) fmt::print(stderr, "FC will be done on {} blocks, distributed over {} ranks\n", blocks, world.size());
-    Bounds<real_t> fc_domain(1);
+    Bounds<real_t> fc_domain(2);
     fc_domain.min[0] = 0;
     fc_domain.max[0] = blocks-1;
+    fc_domain.min[1] = 0;
+    fc_domain.max[1] = blocks-1;
     diy::FileStorage               storage("./DIY.XXXXXX");
     diy::RoundRobinAssigner        fc_assigner(world.size(), blocks);
-    diy::RegularDecomposer<Bounds<real_t>> fc_decomposer(1, fc_domain, blocks);
+    diy::RegularDecomposer<Bounds<real_t>> fc_decomposer(2, fc_domain, blocks);
     diy::RegularBroadcastPartners  fc_comm(    fc_decomposer, 2, true);
     diy::RegularMergePartners      fc_partners(fc_decomposer, 2, true);
     diy::Master                    fc_master(world, 1, -1, &Block<real_t>::create, &Block<real_t>::destroy, &storage, &Block<real_t>::save, &Block<real_t>::load);
-    diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
+    diy::ContiguousAssigner   assigner(world.size(), blocks);
+    fc_decomposer.decompose(world.rank(),
+                         assigner,
+                         [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
+                         { Block<real_t>::add(gid, core, bounds, domain, link, fc_master, 2, 3, 0.0); });
+
+    //diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
+    
 
     std::vector<int> work(nPoints);
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
