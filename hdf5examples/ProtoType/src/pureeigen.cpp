@@ -168,9 +168,8 @@ struct Block : public BlockBase<T>
     void read_2d_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args,
-            Eigen::MatrixXd   vals,
-            Eigen::VectorXd   masses,
-            bool        rescale)            // rescale science values
+            Eigen::MatrixXd vals,
+            bool  rescale)            // rescale science values
     {
 
         DomainArgs* a = &args;
@@ -186,39 +185,33 @@ struct Block : public BlockBase<T>
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
+	std::cout << "this->dom_dim, a->ndom_pts = " << this->dom_dim << ", " << a->ndom_pts.size() << std::endl;
         for (int i = 0; i < this->dom_dim ; i++)
-        {
-            
+        { 
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
-	    std::cout << "tot_ndom_pts, ndom_pts(i) = " << tot_ndom_pts << ", " << ndom_pts(i) << std::endl; 
-	    std::cout << "ndom_pts(i), a->ndom_pts[i] = " << ndom_pts(i) << ", " << a->ndom_pts[i] << std::endl; 
+	    std::cout << "tot_ndom_pts, ndom_pts(" << i << ") = " << tot_ndom_pts << ", " << ndom_pts(i) << std::endl; 
+	    std::cout << "ndom_pts(" << i << "), a->ndom_pts[" << i << "] = " << ndom_pts(i) << ", " << a->ndom_pts[i] << std::endl; 
         }
         this->domain.resize(tot_ndom_pts, this->pt_dim);
 	
-        //check mass has the same dimension
-        assert(masses(0) == ndom_pts(1));
-        //check value has the same dimension
-        assert(vals(0) == ndom_pts(1));
-        assert(vals(1) == ndom_pts(0));
-	std::cout << "vals rows, cols = " << vals.rows() << ", " << vals.cols() << std::endl;
-        //for (size_t i = 0; i < vals.rows(); i++)
-        //  this->domain(i, 2) = vals(i,);
-        //} 
-	std::cout << "i" << std::endl;
+        assert(vals(0) == ndom_pts(0));
+        assert(vals(1) == ndom_pts(1));
         // set geometry values
         int n = 0;
-        for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
+        double min_vals = 99999, max_vals = -999.9;
+        for (size_t j = 0; j < (size_t)(ndom_pts(0)); j++)
           {
-            for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
+            for (size_t i = 0; i < (size_t)(ndom_pts(1)); i++)
               {
-                this->domain(n, 0) = i;
-                this->domain(n, 1) = masses[j];
+                this->domain(n, 0) = j;
+                this->domain(n, 1) = i;
+                this->domain(n, 2) = vals(j,i);
+		if( vals(j,i) >= max_vals ) max_vals = vals(j,i);
+		if( vals(j,i) <= min_vals ) min_vals = vals(j,i);
                 n++;
               }
           }
-
-	    std::cout << "j" << std::endl;
         // find extent of masses and values
         for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
           {
@@ -226,17 +219,24 @@ struct Block : public BlockBase<T>
               this->bounds_mins(0) = this->domain(i, 0);
             if (i == 0 || this->domain(i, 0) > this->bounds_maxs(0))
               this->bounds_maxs(0) = this->domain(i, 0);
+            if (i == 0 || this->domain(i, 1) < this->bounds_mins(1))
+              this->bounds_mins(1) = this->domain(i, 1);
+            if (i == 0 || this->domain(i, 1) > this->bounds_maxs(1))
+              this->bounds_maxs(1) = this->domain(i, 1);
             if (i == 0 || this->domain(i, 2) < this->bounds_mins(2))
               this->bounds_mins(2) = this->domain(i, 2);
             if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
               this->bounds_maxs(2) = this->domain(i, 2);
           }
 	  std::cout << "tot_ndom_pt, this->domain(tot_ndom_pts - 1, 1), this->dom_dim = " << tot_ndom_pts << ", " << this->domain(tot_ndom_pts - 1, 1) << ", " << this->dom_dim << std::endl;
-	    std::cout << "k" << std::endl;
         
         // extents
-        this->bounds_mins(1) = 0.0;
+        this->bounds_mins(2) = min_vals;
+        this->bounds_maxs(2) = max_vals;
+        this->bounds_mins(1) = 0;
         this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
+        this->bounds_mins(0) = 0;
+        this->bounds_maxs(0) = this->domain(tot_ndom_pts - 1, 0);
         this->core_mins.resize(this->dom_dim);
         this->core_maxs.resize(this->dom_dim);
         for (int i = 0; i < this->dom_dim; i++)
@@ -246,10 +246,8 @@ struct Block : public BlockBase<T>
 	    std::cout << "this->core_mins(" << i << "), this->core_maxs(" << i << ") = " << this->core_mins(i) << ", " << this->core_maxs(i) << std::endl;
           }
         
-	    std::cout << "l" << std::endl;
         this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
-        
-	    std::cout << "m" << std::endl;
+       /* 
         // normalize the science variable to the same extent as max of geometry
         if (rescale)
           {
@@ -262,8 +260,7 @@ struct Block : public BlockBase<T>
             for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
               this->domain(i, 2) = this->domain(i, 2) / extent[2] * scale;
           }
-        
-	    std::cout << "n" << std::endl;
+        */
         // debug
         cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
     }
@@ -456,16 +453,16 @@ inline void makeSignalModel(Block<real_t>* b,  diy::Master::ProxyWithLink const&
         d_args.vars_p[0][i]         = vars_degree;  // assuming one science variable, vars_p[0]
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
     }
-    d_args.ndom_pts[0]          = nbins;
-    d_args.ndom_pts[1]          = signal.gridsize();
-    d_args.vars_nctrl_pts[0][0] = nbins;       // assuming one science variable, vars_nctrl_pts[0]
-    d_args.vars_nctrl_pts[0][1] = signal.gridsize();       // assuming one science variable, vars_nctrl_pts[0]
+    d_args.ndom_pts[1]          = nbins;
+    d_args.ndom_pts[0]          = signal.gridsize();
+    d_args.vars_nctrl_pts[0][1] = nbins;       // assuming one science variable, vars_nctrl_pts[0]
+    d_args.vars_nctrl_pts[0][0] = signal.gridsize();       // assuming one science variable, vars_nctrl_pts[0]
 
    Eigen::MatrixXd values(signal.gridsize(),nbins);	
    for (size_t i=0; i<signal.gridsize(); ++i) {
       values.row(i) = signal.predict(i, true);
    }
-   b->read_2d_data(cp,d_args,values,masses,true);
+   b->read_2d_data(cp,d_args,values,true);
    b->fixed_encode_block(cp,d_args);
 
 }
