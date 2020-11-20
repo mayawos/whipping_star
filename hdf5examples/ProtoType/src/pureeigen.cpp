@@ -185,13 +185,13 @@ struct Block : public BlockBase<T>
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
-	std::cout << "this->dom_dim, a->ndom_pts = " << this->dom_dim << ", " << a->ndom_pts.size() << std::endl;
+	//std::cout << "this->dom_dim, a->ndom_pts = " << this->dom_dim << ", " << a->ndom_pts.size() << std::endl;
         for (int i = 0; i < this->dom_dim ; i++)
         { 
             ndom_pts(i)     =  a->ndom_pts[i];
             tot_ndom_pts    *= ndom_pts(i);
-	    std::cout << "tot_ndom_pts, ndom_pts(" << i << ") = " << tot_ndom_pts << ", " << ndom_pts(i) << std::endl; 
-	    std::cout << "ndom_pts(" << i << "), a->ndom_pts[" << i << "] = " << ndom_pts(i) << ", " << a->ndom_pts[i] << std::endl; 
+	    //std::cout << "tot_ndom_pts, ndom_pts(" << i << ") = " << tot_ndom_pts << ", " << ndom_pts(i) << std::endl; 
+	    //std::cout << "ndom_pts(" << i << "), a->ndom_pts[" << i << "] = " << ndom_pts(i) << ", " << a->ndom_pts[i] << std::endl; 
         }
         this->domain.resize(tot_ndom_pts, this->pt_dim);
 	
@@ -200,15 +200,15 @@ struct Block : public BlockBase<T>
         // set geometry values
         int n = 0;
         double min_vals = 99999, max_vals = -999.9;
-        for (size_t j = 0; j < (size_t)(ndom_pts(0)); j++)
+        for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++)
           {
-            for (size_t i = 0; i < (size_t)(ndom_pts(1)); i++)
+            for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
               {
-                this->domain(n, 0) = j;
-                this->domain(n, 1) = i;
-                this->domain(n, 2) = vals(j,i);
-		if( vals(j,i) >= max_vals ) max_vals = vals(j,i);
-		if( vals(j,i) <= min_vals ) min_vals = vals(j,i);
+                this->domain(n, 0) = i;
+                this->domain(n, 1) = j;
+                this->domain(n, 2) = vals(i,j);
+		if( vals(i,j) >= max_vals ) max_vals = vals(i,j);
+		if( vals(i,j) <= min_vals ) min_vals = vals(i,j);
                 n++;
               }
           }
@@ -228,7 +228,7 @@ struct Block : public BlockBase<T>
             if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
               this->bounds_maxs(2) = this->domain(i, 2);
           }
-	  std::cout << "tot_ndom_pt, this->domain(tot_ndom_pts - 1, 1), this->dom_dim = " << tot_ndom_pts << ", " << this->domain(tot_ndom_pts - 1, 1) << ", " << this->dom_dim << std::endl;
+	  //std::cout << "tot_ndom_pt, this->domain(tot_ndom_pts - 1, 1), this->dom_dim = " << tot_ndom_pts << ", " << this->domain(tot_ndom_pts - 1, 1) << ", " << this->dom_dim << std::endl;
         
         // extents
         this->bounds_mins(2) = min_vals;
@@ -784,7 +784,7 @@ inline Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::Vecto
     auto const & out = collapseDetectors(cov, conf);
     return invertMatrixEigen3(out);
 }
-/*
+
 //need to figure out the proper way to propagate the MFA model
 namespace cppoptlib {
 template<typename T>
@@ -855,7 +855,7 @@ class LLR : public Problem<T> {
 
 };
 }
-*/
+
 inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
       SignalGenerator signal,
       Eigen::MatrixXd const & INVCOV,
@@ -928,17 +928,19 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    float chi_min = FLT_MAX;
    //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan previously
    //implement optimizer
-   //typedef double T;
-   //using typename cppoptlib::Problem<T>::TVector;
+   typedef double T;
+   using typename cppoptlib::Problem<T>::TVector;
    //want to pass the mfa model here which is already encode in the block
-   //typedef LLR<T> llr;
-   //llr f(b, cp, fake_data, INVCOV);
-   //cppoptlib::LbfgsSolver<llr> solver;
+   typedef LLR<T> llr;
+   llr f(b, cp, fake_data, INVCOV);
+   cppoptlib::LbfgsSolver<llr> solver;
    //minimize the function
-
-   Eigen::VectorXd x(fake_data.size(),2); 
-   for( int p=0; p < fake_data.size(); p++) x << (p, i_grid);
-   //solver.minimize(f,x);
+   //from encode.hpp
+   // minimize the function
+   //VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));  // size() = rows() * cols()
+   VectorX<T> x(Eigen::Map<VectorX<T>>(fake_data, fake_data.size()));
+   for( int p=0; p < fake_data.size(); p++) x << (i_grid,p);
+   solver.minimize(f,x);
   
    //store the result here
    //global_chi_min = f(x); //the global minimum chi2
