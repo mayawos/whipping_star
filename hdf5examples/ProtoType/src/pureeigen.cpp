@@ -790,68 +790,73 @@ namespace cppoptlib {
 template<typename T>
 class LLR : public Problem<T> {
     private:
-	using typename Problem<T>::TVector;
-        const Block<real_t>*     b;            //block encoded with MFA model
+        Block<real_t>&     b;            //block encoded with MFA model
         diy::Master::ProxyWithLink const& cp;
-        TVector           data;
+        VectorXd           data;
 	const MatrixX<T>   M;
-	VectorX<real_t>    param;
 
   public:
     //need mfa model, fake_data, and inverse covariance matrix
-    LLR(const Block<real_t>* b_,  
+    LLR(Block<real_t>& b_,  
 		    diy::Master::ProxyWithLink const& cp_,
-		    TVector data_, 
+		    VectorXd data_, 
 		    MatrixX<T> M_) : b(b_), 
 				     cp(cp_),	
 				     data(data_),	
 				     M(M_) 	
 	{}
     //TO DO: Figure out the correct way to pass the MFA 
+    using typename Problem<T>::TVector;
     T value(const TVector &x) {
 	//to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
     	// evaluate point
 	TVector diff(data.size());
+	VectorX<T> param(b.dom_dim);   //parameters for one point 
 	for(int p=0; p<data.size(); p++){
 		//scale to 1
-		double _p=p/data.size();
-		param(0) = _p;
-	    	param(1) = x[1];
-	    	int dom_dim = b->dom_dim;
-    		int pt_dim  = b->pt_dim;
+		double _p= (double)p/((double)data.size()+1);
+		std::cout << "param 0  " << x(0) << std::endl;
+		param(0) = x(0);
+		std::cout << "param 1 " << _p << std::endl;
+	    	param(1) = _p;
+	    	int dom_dim = b.dom_dim;
+    		int pt_dim  = b.pt_dim;
     		VectorX<real_t> out_pt(pt_dim);
    		// parameters of input point to evaluate
     		VectorX<real_t> in_param(dom_dim);
     		for (auto i = 0; i < dom_dim; i++){
         		in_param(i) = param[i];
     		}
-		b->decode_point(cp, in_param, out_pt);
-    		diff[p] = data[p]-out_pt(2);
+		b.decode_point(cp, in_param, out_pt);
+    		diff[p] = data[p]-out_pt(pt_dim-1);
+		std::cout << "p, diff, data[p], out_pt(pt_dim-1) = " << p << ", " << diff[p] << ", " << data[p] << ", " << out_pt(pt_dim-1) << std::endl;
 	}
 	return (diff.transpose())*M*(diff);
     }
-
-    void gradient(const TVector &x, TVectorD &grad) {
+/*
+    void gradient(const TVector &x, TVector &grad) {
 	for(int p=0; p<data.size(); p++){
 		//scale to 1
 		double _p=p/data.size();
 		param(0) = _p;
 		param(1) = x[1];
-		int dom_dim = b->dom_dim;
-		int pt_dim  = b->pt_dim;
+		int dom_dim = b.dom_dim;
+		int pt_dim  = b.pt_dim;
 		// evaluate point
 		VectorX<real_t> out_pt(pt_dim);
 		VectorX<real_t> out_pt_deriv(pt_dim);
 		// parameters of input point to evaluate
 		VectorX<real_t> in_param(dom_dim);
     		for (auto i = 0; i < dom_dim; i++){
-        		in_param(i) = param[i];
-    		}
-		b->decode_point(cp, in_param, out_pt); 
-		b->differentiate_point(cp, x, 1, x(1), -1, out_pt_deriv);
-	        grad[p] = 2*out_pt_deriv(pt_dim - 1)*M*(out_pt(2));
+       			in_param(i) = param[i];
+		}
+    		for (auto i = 0; i < dom_dim; i++){
+			b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
+		}
+		b.decode_point(cp, in_param, out_pt); 	
+	        grad[p] = 2*out_pt_deriv(pt_dim - 1)*M*(out_pt(pt_dim-1)-data[p]);
 	}
-    }
+    }*/
 
 };
 }
@@ -929,22 +934,19 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan previously
    //implement optimizer
    typedef double T;
-   using typename cppoptlib::Problem<T>::TVector;
+   //using typename cppoptlib::Problem<T>::TVector;
    //want to pass the mfa model here which is already encode in the block
    typedef LLR<T> llr;
-   llr f(b, cp, fake_data, INVCOV);
+   llr f(*b, cp, fake_data, INVCOV);
    cppoptlib::LbfgsSolver<llr> solver;
    //minimize the function
-   //from encode.hpp
-   // minimize the function
-   //VectorX<T> x1(Eigen::Map<VectorX<T>>(ctrlpts_tosolve.data(), ctrlpts_tosolve.size()));  // size() = rows() * cols()
-   VectorX<T> x(Eigen::Map<VectorX<T>>(fake_data, fake_data.size()));
-   for( int p=0; p < fake_data.size(); p++) x << (i_grid,p);
+   Eigen::VectorXd x(fake_data.size(),2); 
+   for( int p=0; p < fake_data.size(); p++) x << i_grid;
    solver.minimize(f,x);
   
    //store the result here
-   //global_chi_min = f(x); //the global minimum chi2
-   //best_grid_point = x; //point in grid which gives the minimum chi2
+   global_chi_min = f(x); //the global minimum chi2
+   best_grid_point = x; //point in grid which gives the minimum chi2
 
    //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
    float this_chi = calcChi(fake_data, v_coll, invcov);
