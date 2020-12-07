@@ -62,6 +62,7 @@
 #include <Eigen/Eigen>
 #include <Eigen/Dense>
 #include <Eigen/SVD>
+#include <unsupported/Eigen/CXX11/Tensor>
 #include "tools.h"
 #include "prob.h"
 #include "ngrid.h"
@@ -168,7 +169,7 @@ struct Block : public BlockBase<T>
     void read_2d_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args,
-            Eigen::MatrixXd vals,
+            Eigen::Tensor<double, 2> vals,
             bool  rescale)            // rescale science values
     {
 
@@ -207,6 +208,7 @@ struct Block : public BlockBase<T>
                 this->domain(n, 0) = i;
                 this->domain(n, 1) = j;
                 this->domain(n, 2) = vals(i,j);
+
 		if( vals(i,j) >= max_vals ) max_vals = vals(i,j);
 		if( vals(i,j) <= min_vals ) min_vals = vals(i,j);
                 n++;
@@ -274,8 +276,9 @@ class GridPoints {
 public:
   GridPoints() {}
   GridPoints(std::vector<std::vector<double>> const & m_vec_grid) {
-    for (auto gp : m_vec_grid)
-      _gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});
+    for (auto gp : m_vec_grid){
+      //std::cerr << "gp:  " << gp[0] << ", " << gp[1] << ", " << gp[2] << std::endl;
+      _gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});}
   }
   size_t NPoints()         { return _gridpoints.size(); }
   GridPoint Get(size_t index) { return _gridpoints[index]; }
@@ -330,15 +333,27 @@ public:
   }
   
   Eigen::VectorXd predict(size_t i_grid, bool compressed) {
-    auto const & gp = m_gridpoints.Get(i_grid);
+    auto const & gp = m_gridpoints.Get(i_grid); //grid point after translation: 10^gp[i]
     sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
     int m_idx = massindex(i_grid);
-    //std::cerr << "i_grid: " << i_grid << " mass index " << m_idx << " dim2: " << m_dim2 << " GP:" << gp <<  "\n";
     Oscillate(m_sinsq.row(m_idx), m_sin.row(m_idx), this_model);
     
     if (compressed) return collapseVectorEigen(m_core+retVec, m_conf);
     else return m_core+retVec;
   }
+
+  Eigen::VectorXd predict2D(size_t i_grid, bool compressed, int &gridx, int &gridy) {
+    auto const & gp = m_gridpoints.Get(i_grid); //grid point after translation: 10^gp[i]
+    sbn::NeutrinoModel this_model(gp[0]*gp[0], gp[1], gp[2], false);
+    int m_idx = massindex(i_grid);
+    gridx = gp[2];
+    gridy = gp[0];
+    //std::cerr << "i_grid: " << i_grid << " mass index " << m_idx << " dim2: " << m_dim2 << " GP:" << gp <<  "\n";
+    Oscillate(m_sinsq.row(m_idx), m_sin.row(m_idx), this_model);
+    
+    if (compressed) return collapseVectorEigen(m_core+retVec, m_conf);
+    else return m_core+retVec;
+  } 
   
   int massindex(size_t igrd) {return int(floor( (igrd) / m_dim2 ));}
   size_t gridsize() {return m_gridpoints.NPoints();}
@@ -426,8 +441,7 @@ private:
   Eigen::VectorXd m_core, retVec;
   int m_oscmode;
 };
-
-inline void makeSignalModel(Block<real_t>* b,  diy::Master::ProxyWithLink const& cp, SignalGenerator signal, int nbins)
+inline void makeSignalModel(diy::Master* master, SignalGenerator signal, int nbins)
 {
     // default command line arguments
     int    pt_dim       = 3;                    // dimension of input points
@@ -453,17 +467,34 @@ inline void makeSignalModel(Block<real_t>* b,  diy::Master::ProxyWithLink const&
         d_args.vars_p[0][i]         = vars_degree;  // assuming one science variable, vars_p[0]
         d_args.geom_nctrl_pts[i]    = geom_nctrl;
     }
-    d_args.ndom_pts[1]          = nbins;
-    d_args.ndom_pts[0]          = signal.gridsize();
-    d_args.vars_nctrl_pts[0][1] = nbins;       // assuming one science variable, vars_nctrl_pts[0]
-    d_args.vars_nctrl_pts[0][0] = signal.gridsize();       // assuming one science variable, vars_nctrl_pts[0]
+    d_args.ndom_pts[1]          = 26;
+    d_args.ndom_pts[0]          = 26;
+    d_args.vars_nctrl_pts[0][1] = 26;       // assuming one science variable, vars_nctrl_pts[0]
+    d_args.vars_nctrl_pts[0][0] = 26;       // assuming one science variable, vars_nctrl_pts[0]
 
-   Eigen::MatrixXd values(signal.gridsize(),nbins);	
+   Eigen::VectorXd vec_gridx(26);
+   Eigen::VectorXd vec_gridy(26);
+   Eigen::Tensor<double, 3> map_bin_to_grid(57,26,26);
+   Eigen::ArrayXXd values(signal.gridsize(),nbins);	
+   int gridx = -1;
+   int gridy = -1;
    for (size_t i=0; i<signal.gridsize(); ++i) {
-      values.row(i) = signal.predict(i, true);
+      values.row(i) = signal.predict2D(i, true, gridx, gridy);
+      int gridy_index = i/26;
+      int gridx_index = i%26;
+      vec_gridy(gridy_index) = gridy;
+      vec_gridx(gridx_index) = gridx;
+      for( int bin=0; bin < nbins; bin++ ) map_bin_to_grid(bin,gridx_index,gridy_index) = values(i,bin); 
    }
-   b->read_2d_data(cp,d_args,values,true);
-   b->fixed_encode_block(cp,d_args);
+
+   //separate 3d tensor to 57 blocks of 26x26 matrix 
+   std::vector<Block<real_t>*> blocks(57);
+   Eigen::array<int,3> extent = {1,26,26};       //Finish point 
+   for(int bin=0; bin<nbins; bin++){
+     Eigen::array<int,3> offset = {bin,0,0};         //Starting point
+     master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ blocks[bin]->read_2d_data(cp,d_args,map_bin_to_grid.slice(offset, extent),true); });
+     master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ blocks[bin]->fixed_encode_block(cp,d_args); });
+   }
 
 }
 
@@ -797,10 +828,10 @@ class LLR : public Problem<T> {
 
   public:
     //need mfa model, fake_data, and inverse covariance matrix
-    LLR(Block<real_t>& b_,  
+    LLR(std::vector<Block<real_t>&> blocks_,  
 		    diy::Master::ProxyWithLink const& cp_,
 		    VectorXd data_, 
-		    MatrixX<T> M_) : b(b_), 
+		    MatrixX<T> M_) : blocks(blocks_), 
 				     cp(cp_),	
 				     data(data_),	
 				     M(M_) 	
@@ -811,16 +842,19 @@ class LLR : public Problem<T> {
 	//to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
     	// evaluate point
 	TVector diff(data.size());
-	VectorX<T> param(b.dom_dim);   //parameters for one point 
 	for(int p=0; p<data.size(); p++){
 		//scale to 1
-		double _p= (double)p/((double)data.size()+1);
-		std::cout << "param 0  " << x(0) << std::endl;
-		param(0) = x(0);
-		std::cout << "param 1 " << _p << std::endl;
-	    	param(1) = _p;
-	    	int dom_dim = b.dom_dim;
-    		int pt_dim  = b.pt_dim;
+                // normalize the science variable to the same extent as max of geometry
+                double extent[3];
+                extent[0] = blocks[p]->bounds_maxs(0) - blocks[p]->bounds_mins(0);
+                extent[1] = blocks[p]->bounds_maxs(1) - blocks[p]->bounds_mins(1);
+                extent[2] = blocks[p]->bounds_maxs(2) - blocks[p]->bounds_mins(2);
+                double scale = extent[0] > extent[1] ? extent[0] : extent[1];
+                std::cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << std::endl;
+                for (size_t i = 0; i < (size_t)blocks[p]->domain.rows(); i++)
+                   blocks[p]->domain(i, 2) = blocks[p]->domain(i, 2) / extent[2] * scale;
+	    	int dom_dim = blocks[p].dom_dim;
+    		int pt_dim  = blocks[p].pt_dim;
     		VectorX<real_t> out_pt(pt_dim);
    		// parameters of input point to evaluate
     		VectorX<real_t> in_param(dom_dim);
@@ -829,7 +863,7 @@ class LLR : public Problem<T> {
     		}
 		b.decode_point(cp, in_param, out_pt);
     		diff[p] = data[p]-out_pt(pt_dim-1);
-		std::cout << "p, diff, data[p], out_pt(pt_dim-1) = " << p << ", " << diff[p] << ", " << data[p] << ", " << out_pt(pt_dim-1) << std::endl;
+		std::cerr << "p, diff, data[p], out_pt(pt_dim-1) = " << p << ", " << diff[p] << ", " << data[p] << ", " << out_pt(pt_dim-1) << std::endl;
 	}
 	return (diff.transpose())*M*(diff);
     }
@@ -837,11 +871,23 @@ class LLR : public Problem<T> {
     void gradient(const TVector &x, TVector &grad) {
 	for(int p=0; p<data.size(); p++){
 		//scale to 1
-		double _p=p/data.size();
-		param(0) = _p;
-		param(1) = x[1];
-		int dom_dim = b.dom_dim;
-		int pt_dim  = b.pt_dim;
+                // normalize the science variable to the same extent as max of geometry
+                double extent[3];
+                extent[0] = blocks[p]->bounds_maxs(0) - blocks[p]->bounds_mins(0);
+                extent[1] = blocks[p]->bounds_maxs(1) - blocks[p]->bounds_mins(1);
+                extent[2] = blocks[p]->bounds_maxs(2) - blocks[p]->bounds_mins(2);
+                double scale = extent[0] > extent[1] ? extent[0] : extent[1];
+                std::cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << std::endl;
+                for (size_t i = 0; i < (size_t)blocks[p]->domain.rows(); i++)
+                   blocks[p]->domain(i, 2) = blocks[p]->domain(i, 2) / extent[2] * scale;
+	    	int dom_dim = blocks[p].dom_dim;
+    		int pt_dim  = blocks[p].pt_dim;
+    		VectorX<real_t> out_pt(pt_dim);
+   		// parameters of input point to evaluate
+    		VectorX<real_t> in_param(dom_dim);
+    		for (auto i = 0; i < dom_dim; i++){
+        		in_param(i) = param[i];
+    		}
 		// evaluate point
 		VectorX<real_t> out_pt(pt_dim);
 		VectorX<real_t> out_pt_deriv(pt_dim);
@@ -853,8 +899,10 @@ class LLR : public Problem<T> {
     		for (auto i = 0; i < dom_dim; i++){
 			b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
 		}
-		b.decode_point(cp, in_param, out_pt); 	
-	        grad[p] = 2*out_pt_deriv(pt_dim - 1)*M*(out_pt(pt_dim-1)-data[p]);
+		b.decode_point(cp, in_param, out_pt);
+	        //grad
+		//scale the derivation u,v back to x,y
+	        grad[p] = 2*scale*out_pt_deriv(pt_dim - 1)*M*(out_pt(pt_dim-1)-data[p]);
 	}
     }*/
 
@@ -914,7 +962,7 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
 
 //new implementation using MFA 
 inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
-      Block<real_t>* b, //replace with block that has encoded MFA model
+      std::vector<Block<real_t>*> b, //replace with block that has encoded MFA model
       diy::Master::ProxyWithLink const& cp,
       int i_grid,
       Eigen::MatrixXd const & INVCOV,
@@ -940,13 +988,13 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
    llr f(*b, cp, fake_data, INVCOV);
    cppoptlib::LbfgsSolver<llr> solver;
    //minimize the function
-   Eigen::VectorXd x(fake_data.size(),2); 
+   Eigen::VectorXd x(fake_data.size()); 
    for( int p=0; p < fake_data.size(); p++) x << i_grid;
-   solver.minimize(f,x);
+   //solver.minimize(f,x);
   
    //store the result here
-   global_chi_min = f(x); //the global minimum chi2
-   best_grid_point = x; //point in grid which gives the minimum chi2
+   //global_chi_min = f(x); //the global minimum chi2
+   //best_grid_point = x; //point in grid which gives the minimum chi2
 
    //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
    float this_chi = calcChi(fake_data, v_coll, invcov);
@@ -990,6 +1038,8 @@ void doScan(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
     Eigen::MatrixXd corecoll_mat(rankwork.size(),57);
 
     system_clock::time_point t_init = system_clock::now();
+
+    //remove this loop
     for (int i_grid : rankwork) {
 
        if (debug && i_grid!=0) return;
@@ -1077,14 +1127,13 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
       HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
       double tol, size_t iter, bool debug, bool noWrite=false, int msg_every=100)
 {
-    std::cout << "A" << std::endl;
+    std::cout << "*** doFC ***" << std::endl;
     double starttime, endtime;
     std::vector<FitResult> results;
     std::vector<int> v_grid, v_univ, v_iter, v_best;
     std::vector<double> v_last, v_dchi;
     std::vector<std::vector<double> > v_fakedataC, v_collspec;
    
-    std::cout << "doFC b: " << b->dom_dim << std::endl;
     if (!noWrite) {
        results.reserve(rankwork.size()*nUniverses);
        v_grid.reserve(rankwork.size()*nUniverses);
@@ -1096,7 +1145,8 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
        v_fakedataC.reserve(rankwork.size()*nUniverses);
        v_collspec.reserve(rankwork.size()*nUniverses);
     }
-    
+     
+     
     //validation
     Eigen::MatrixXd specfull_e_mat(rankwork.size(),57); 
     Eigen::MatrixXd speccoll_mat(rankwork.size(),57); 
@@ -1116,14 +1166,12 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
        specfull_e_mat.row(i_grid) = Eigen::VectorXd::Map(&specfull_e[i_grid], specfull_e_mat.size());
        speccoll_mat.row(i_grid) = Eigen::VectorXd::Map(&speccoll[i_grid], speccoll.size());
 
-       //compute mfa???
-       makeSignalModel(b,cp,signal,speccoll.size());
-
-       std::cout << "C" << std::endl;
+       std::vector<Block<real_t>* > b;
+       //creates a linear chain of blocks like in https://github.com/diatomic/diy/blob/master/examples/simple/iexchange-particles.cpp?
        for (int uu=0; uu<nUniverses;++uu) {
           auto const & fake_data = sample(specfull_e, LMAT, rng);//
           auto const & fake_dataC = collapseVectorEigen(fake_data, myconf);
-
+          
           results.push_back(coreFC(fake_dataC, speccoll,
                    //signal, INVCOVBG, ECOV, myconf, tol, iter)); //old implementation
                    b, cp, i_grid, INVCOVBG, ECOV, myconf, tol, iter));
@@ -1453,11 +1501,25 @@ int main(int argc, char* argv[]) {
     }
 
     SignalGenerator  signal(myconf, mygrid.GetGrid(), dim2, _sinsq_, _sin_, ecore, mode);
-    
+   
+
     //write the mass index and gridpoint
     //Eigen::MatrixXd masses;
     //Eigen::MatrixXd masses;
-    //for( uint igrid = 0; igrid < nPoints; igrid++ )	 
+    /*std::vector<Eigen::MatrixXd> map_grid_speccoll;  // 3 dimensions (4x5x6)
+    Eigen::MatrixXd gridpt_spec_bin;
+    std::vector<std::vector<double> > m_vec_grid = mygrid.GetGrid();
+    for( int bin = 0; bin < speccol.size(); bin++ ) map_grid_speccoll.push_back(speccol(bin));
+    for( uint igrid = 0; igrid < nPoints; igrid++ ){
+       auto const & speccol = signal.predict(igrid, true);
+       int row = igrid/26;
+       int col = igrid%26;
+    }*/
+    /*for(int i=0; i < m_vec_grid.size(); i++){
+    for(int j=0; j < m_vec_grid[i].size(); j++){
+	    std::cout<< " m_vec_grid.size(), m_vec_grid[i].size(), m_vec_grid[i][j] = " <<  m_vec_grid.size() << ", " << m_vec_grid[i].size() << " = " << m_vec_grid[i][j] << std::endl;
+    }
+    }*/
 
     double time1 = MPI_Wtime();
     if (world.rank()==0) fmt::print(stderr, "[{}] Input preparation took {} seconds\n",world.rank(), time1 - time0);
@@ -1502,17 +1564,20 @@ int main(int argc, char* argv[]) {
       if (nowrite)  fmt::print(stderr,  "  N O   W R I T E \n"  );
       fmt::print(stderr, "***********************************\n");
     }
-    
+
     // Create hdf5 file structure here 
     HighFive::File* f_out  = new HighFive::File(out_file,
                         HighFive::File::ReadWrite|HighFive::File::Create|HighFive::File::Truncate,
                         HighFive::MPIOFileDriver(MPI_COMM_WORLD,MPI_INFO_NULL));
 
+     std::cout << "before world.size() = " << world.size() << std::endl;
     // Create datasets needed TODO nbinsC --- can we get that from somewhere?
     createDataSets(f_out, nPoints, nUniverses);
    
+     std::cout << "after world.size() = " << world.size() << std::endl;
     // First rank also writes the grid so we know what the poins actually are
     if (world.rank() == 0)  writeGrid(f_out, mygrid.GetGrid(), mode);
+
 
     //// Now more blocks as we have universes
     size_t blocks = world.size();//nPoints;//*nUniverses;
@@ -1535,8 +1600,11 @@ int main(int argc, char* argv[]) {
                          [&](int gid, const Bounds<real_t>& core, const Bounds<real_t>& bounds, const Bounds<real_t>& domain, const RCLink<real_t>& link)
                          { Block<real_t>::add(gid, core, bounds, domain, link, fc_master, 2, 3, 0.0); });
 
-    //diy::decompose(1, world.rank(), fc_domain, fc_assigner, fc_master);
-    
+     
+    //maybe set up a different MFA blocks and decomposer here?
+    //std::vector< Block<real_t>* > blks;
+    makeSignalModel(&fc_master,signal,57);
+
 
     std::vector<int> work(nPoints);
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
