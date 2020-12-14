@@ -169,7 +169,7 @@ struct Block : public BlockBase<T>
     void read_2d_data(
             const       diy::Master::ProxyWithLink& cp,
             DomainArgs& args,
-            Eigen::Tensor<double, 2> vals,
+            Eigen::Tensor<double, 3> vals,
             bool  rescale)            // rescale science values
     {
 
@@ -177,12 +177,14 @@ struct Block : public BlockBase<T>
         int tot_ndom_pts = 1;
         this->geometry.min_dim = 0;
         this->geometry.max_dim = this->dom_dim - 1;
-        int nvars = 1;
+        int nvars = 57;
         this->vars.resize(nvars);
         this->max_errs.resize(nvars);
         this->sum_sq_errs.resize(nvars);
-        this->vars[0].min_dim = this->dom_dim;
-        this->vars[0].max_dim = this->vars[0].min_dim + 1;
+	for (int i = 1; i < nvars; i++) {
+          this->vars[i].min_dim = this->vars[i-1].max_dim+1;
+          this->vars[i].max_dim = this->vars[i].min_dim;
+        }
         VectorXi ndom_pts(this->dom_dim);
         this->bounds_mins.resize(this->pt_dim);
         this->bounds_maxs.resize(this->pt_dim);
@@ -205,13 +207,15 @@ struct Block : public BlockBase<T>
           {
             for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++)
               {
-                this->domain(n, 0) = i;
-                this->domain(n, 1) = j;
-                this->domain(n, 2) = vals(i,j);
+		for (int m = 1; m < nvars; m++) {
+                	this->domain(n, 0) = i;
+                	this->domain(n, 1) = j;
+                	this->domain(n, 2) = vals(m, i,j);
 
-		if( vals(i,j) >= max_vals ) max_vals = vals(i,j);
-		if( vals(i,j) <= min_vals ) min_vals = vals(i,j);
-                n++;
+			if( vals(i,j) >= max_vals ) max_vals = vals(m, i,j);
+			if( vals(i,j) <= min_vals ) min_vals = vals(m, i,j);
+                	n++;
+		}
               }
           }
         // find extent of masses and values
@@ -230,7 +234,7 @@ struct Block : public BlockBase<T>
             if (i == 0 || this->domain(i, 2) > this->bounds_maxs(2))
               this->bounds_maxs(2) = this->domain(i, 2);
           }
-	  //std::cout << "tot_ndom_pt, this->domain(tot_ndom_pts - 1, 1), this->dom_dim = " << tot_ndom_pts << ", " << this->domain(tot_ndom_pts - 1, 1) << ", " << this->dom_dim << std::endl;
+	 // std::cout << "tot_ndom_pt, this->domain(tot_ndom_pts - 1, 1), this->dom_dim = " << tot_ndom_pts << ", " << this->domain(tot_ndom_pts - 1, 1) << ", " << this->dom_dim << std::endl;
         
         // extents
         this->bounds_mins(2) = min_vals;
@@ -249,7 +253,7 @@ struct Block : public BlockBase<T>
           }
         
         this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
-       /* 
+        
         // normalize the science variable to the same extent as max of geometry
         if (rescale)
           {
@@ -262,7 +266,7 @@ struct Block : public BlockBase<T>
             for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
               this->domain(i, 2) = this->domain(i, 2) / extent[2] * scale;
           }
-        */
+       
         // debug
         cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
     }
@@ -487,14 +491,8 @@ inline void makeSignalModel(diy::Master* master, SignalGenerator signal, int nbi
       for( int bin=0; bin < nbins; bin++ ) map_bin_to_grid(bin,gridx_index,gridy_index) = values(i,bin); 
    }
 
-   //separate 3d tensor to 57 blocks of 26x26 matrix 
-   std::vector<Block<real_t>*> blocks(57);
-   Eigen::array<int,3> extent = {1,26,26};       //Finish point 
-   for(int bin=0; bin<nbins; bin++){
-     Eigen::array<int,3> offset = {bin,0,0};         //Starting point
-     master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ blocks[bin]->read_2d_data(cp,d_args,map_bin_to_grid.slice(offset, extent),true); });
-     master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ blocks[bin]->fixed_encode_block(cp,d_args); });
-   }
+   master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ blocks[bin]->read_2d_data(cp,d_args,map_bin_to_grid,true); });
+   master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ blocks[bin]->fixed_encode_block(cp,d_args); });
 
 }
 
@@ -828,10 +826,10 @@ class LLR : public Problem<T> {
 
   public:
     //need mfa model, fake_data, and inverse covariance matrix
-    LLR(std::vector<Block<real_t>&> blocks_,  
+    LLR( Block<real_t>& b_,  
 		    diy::Master::ProxyWithLink const& cp_,
 		    VectorXd data_, 
-		    MatrixX<T> M_) : blocks(blocks_), 
+		    MatrixX<T> M_) : b(b_), 
 				     cp(cp_),	
 				     data(data_),	
 				     M(M_) 	
@@ -841,16 +839,21 @@ class LLR : public Problem<T> {
     T value(const TVector &x) {
 	//to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
     	// evaluate point
-	TVector diff(data.size());
+	TVector diff(data.size()); //data size == nvars
+	VectorX<T> param(b.dom_dim);
 	for(int p=0; p<data.size(); p++){
+ 		param(p) = x[1];
+ 	    	int dom_dim = b->dom_dim;
+     		int pt_dim  = b->pt_dim;
+		//already scaled in read_2d_data
 		//scale to 1
                 // normalize the science variable to the same extent as max of geometry
-                double extent[3];
-                extent[0] = blocks[p]->bounds_maxs(0) - blocks[p]->bounds_mins(0);
-                extent[1] = blocks[p]->bounds_maxs(1) - blocks[p]->bounds_mins(1);
-                extent[2] = blocks[p]->bounds_maxs(2) - blocks[p]->bounds_mins(2);
-                double scale = extent[0] > extent[1] ? extent[0] : extent[1];
-                std::cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << std::endl;
+                //double extent[3];
+                //extent[0] = b->bounds_maxs(0) - b->bounds_mins(0);
+                //extent[1] = b->bounds_maxs(1) - b->bounds_mins(1);
+                //extent[2] = b->bounds_maxs(2) - b->bounds_mins(2);
+                //double scale = extent[0] > extent[1] ? extent[0] : extent[1];
+                //std::cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << std::endl;
                 for (size_t i = 0; i < (size_t)blocks[p]->domain.rows(); i++)
                    blocks[p]->domain(i, 2) = blocks[p]->domain(i, 2) / extent[2] * scale;
 	    	int dom_dim = blocks[p].dom_dim;
@@ -962,7 +965,7 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
 
 //new implementation using MFA 
 inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
-      std::vector<Block<real_t>*> b, //replace with block that has encoded MFA model
+      Block<real_t>* b, //replace with block that has encoded MFA model
       diy::Master::ProxyWithLink const& cp,
       int i_grid,
       Eigen::MatrixXd const & INVCOV,
