@@ -62,6 +62,7 @@ int main(int argc, char* argv[])
     std::string fakedata_file = "EMPTY";
 
     bool bool_flat_det_sys = false;
+    bool bool_fill_det_sys = false; //PeLEE updates
     double flat_det_sys_percent = 0.0;
 
     bool zero_off_diag = false;
@@ -84,6 +85,7 @@ int main(int argc, char* argv[])
         {"tester",no_argument,0,'k'},
         {"poisson", no_argument,0,'p'},
         {"flat", required_argument,0,'f'},
+        {"filldetsys", required_argument,0,'d'},
         {"help",no_argument,0,'h'},
         {0,			no_argument, 		0,  0},
     };
@@ -116,11 +118,15 @@ int main(int argc, char* argv[])
                 background_file = optarg;
                 break;
             case 'd':
+                which_mode = 2;         //PeLEE specific hacks for fakedata
                 fakedata_file = optarg;
                 break;
             case 'f':
                 bool_flat_det_sys = true;
                 flat_det_sys_percent = (double)strtod(optarg,NULL);
+                break;
+            case 'y':
+                bool_fill_det_sys = true;
                 break;
             case 'e':
                 epsilon = (double)strtod(optarg,NULL);
@@ -200,7 +206,6 @@ int main(int argc, char* argv[])
     }
     std::cout << "found frac cov matrix: " << cov << std::endl;
 
-
     //PeLEE hacks for incorporating fake data
     TFile * fdata;
     TH1D * h_fakedata_1eNp;
@@ -214,31 +219,33 @@ int main(int argc, char* argv[])
       h_fakedata_1e0p = (TH1D*)fdata->Get("nu_uBooNE_1e0p_data");
       h_fakedata_numu = (TH1D*)fdata->Get("nu_uBooNE_numu_data");
     }
-    
+    std::cout << "create vector of fakedata" << std::endl; 
     //create vector of fakedata:
     std::vector<float> fakedata;
-    if( h_fakedata_1eNp ){ for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
-    if( h_fakedata_1e0p ){ for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
-    if( h_fakedata_numu ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
-    if( h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; }
-    if( h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; }
-    if( h_fakedata_numu ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_numu->GetBinContent k " << k << " = " <<  h_fakedata_numu->GetBinContent(k) << std::endl; }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_numu->GetBinContent k " << k << " = " <<  h_fakedata_numu->GetBinContent(k) << std::endl; }
     
     std::cout << "size of fakedata vector: " << fakedata.size() << std::endl;
     //End of PeLEE hacks for incorporating fake data
-    
-    
     
     //PELEE hack -- use the actual PELEE diagonal errors for detsys instead of flat systematics
     TMatrixD frac_flat_matrix(bkg.num_bins_total, bkg.num_bins_total);
     
     //BDT
-    std::vector<double> sig_detsys = {0.203,0.163,0.257,0.092,0.122,0.128,0.186,0.110,0.126,0.186,0.226,0.260,0.166,0.325};
+    //std::vector<double> np_detsys = {0.2007, 0.1077, 0.0922, 0.0574, 0.0663, 0.0755, 0.0721, 0.0872, 0.0975, 0.1034, 0.2551, 0.0849, 0.1428, 0.1764, 0.1806, 0.2042, 0.1841, 0.1688, 0.1811}; //old lower stats systematics
+    std::vector<double> np_detsys = {0.2454, 0.1523, 0.1546, 0.0900, 0.1500, 0.0608, 0.1530, 0.0781, 0.1114, 0.1145, 0.2005, 0.1237, 0.1871, 0.1105, 0.1349, 0.1612, 0.2478};
+    //1e0p
+    //std::vector<double> zp_detsys = {0.0985, 0.0985, 0.1015, 0.1015, 0.1929, 0.1929, 0.2326, 0.2326, 0.3289, 0.3289, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720}; //old lower stats systematics
+    std::vector<double> zp_detsys = {0.1520, 0.1520, 0.0980, 0.0980, 0.1939, 0.1939, 0.4064, 0.4064, 0.3259, 0.3259, 0.1819, 0.1819, 0.1819, 0.1819, 0.2540, 0.2540, 0.2540, 0.2540, 0.2540};
     //numu
-    std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261};
-    
-    if(bool_flat_det_sys){
-      //std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
+    //std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261}; //old lower stats systematics
+    std::vector<double> numu_detsys = {0.1655, 0.1044, 0.1233, 0.0574, 0.0500, 0.0849, 0.0686, 0.1449, 0.1158, 0.0849, 0.0980, 0.1536, 0.1556, 0.1879, 0.2987};
+
+    if(bool_fill_det_sys){
       std::cout << "RUNNING with PELEE systematics!" << std::endl;
       
       frac_flat_matrix.ResizeTo(bkg.num_bins_total,bkg.num_bins_total);
@@ -248,32 +255,35 @@ int main(int argc, char* argv[])
       for(auto& h: bkg.hist){
         std::string hname = h.GetName();
         for( int i=1; i < h.GetNbinsX()+1; i++ ){
-          if( hname.find("nue_intrinsic") != std::string::npos ){
-            //std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j;
-            frac_flat_matrix(j,j) = sig_detsys[i-1]*sig_detsys[i-1];
-            //std::cout << ", " << sig_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << frac_flat_matrix(j,j) << std::endl;
+          if( (hname.find("1eNp_intrinsic") != std::string::npos) || (hname.find("1eNp_lee") != std::string::npos) ){
+            frac_flat_matrix(j,j) = np_detsys[i-1]*np_detsys[i-1];
+          }
+          else if( (hname.find("1e0p_intrinsic") != std::string::npos) || ( hname.find("1e0p_lee") != std::string::npos ) ){
+            frac_flat_matrix(j,j) = zp_detsys[i-1]*zp_detsys[i-1];
           }
           else if( hname.find("numu_bnb") != std::string::npos ){
-            //std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
             frac_flat_matrix(j,j) = numu_detsys[i-1]*numu_detsys[i-1];
-            //std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << frac_flat_matrix(j,j) << std::endl;
           }
-	  else if( hname.find("extbnb") == std::string::npos && hname.find("lee") == std::string::npos ){
-            //std::cout << "Fill bg detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+	  else if( hname.find("ext") == std::string::npos ){
             frac_flat_matrix(j,j) = 0.2*0.2;
-            //std::cout << ", 0.2 , " << frac_flat_matrix(j,j) << std::endl;
           }
           j++; 
         }
       }
-      /*for(int i=0 ; i< bkg.num_bins_total; i++){
-	frac_flat_matrix(i,i)=flat_det_sys_percent*flat_det_sys_percent/10000.;
-	}*/
       std::cout<<"Just Before"<<std::endl;
       (*cov) = (*cov)+(frac_flat_matrix);
     }
     std::cout << "Done with systematics!" << std::endl;
     
+    if(bool_flat_det_sys){
+      std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
+      for(int i=0 ; i< bkg.num_bins_total; i++){
+	frac_flat_matrix(i,i)=flat_det_sys_percent*flat_det_sys_percent/10000.;
+      }
+      std::cout<<"Just Before"<<std::endl;
+      (*cov) = (*cov)+(frac_flat_matrix);
+    }
+
     if(remove_correlations){
       std::cout<<"WARNING! We are running in   `Remove All Off Diagional Covariances/Correlations Mode` make sure this is what you want. "<<std::endl;
       for(int i=0; i<bkg.num_bins_total;i++){ 
@@ -283,7 +293,6 @@ int main(int argc, char* argv[])
 	}
       }
     }
-    
     
     if(!stats_only){
         SBNcls cls_factory(&bkg, &sig, fakedata, *cov);
