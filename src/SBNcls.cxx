@@ -150,21 +150,21 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
         if(h0_results[3].m_values[m]>=chi_datah0[3]){
 	  data_results[3] += 1.0/(double(numMC));
         }
-        if(h0_results[4].m_values[m]>=chi_datah0[4]){
+        if(h1_results[4].m_values[m]>=chi_datah0[4]){
 	  data_results[4] += 1.0/(double(numMC));
         }
         //calculate pvalues for h0 based on data's chi2
         if(h0_results[5].m_values[m]>=chi_datah0[5]){
 	  data_results[5] += 1.0/(double(numMC));
         }
-        if(h0_results[6].m_values[m]>=chi_datah0[6]){
+        if(h1_results[6].m_values[m]>=chi_datah0[6]){
 	  data_results[6] += 1.0/(double(numMC));
         }
         //calculate pvalues for h0 based on data's chi2
         if(h0_results[7].m_values[m]>=chi_datah0[7]){
 	  data_results[7] += 1.0/(double(numMC));
         }
-        if(h0_results[8].m_values[m]>=chi_datah0[8]){
+        if(h1_results[8].m_values[m]>=chi_datah0[8]){
 	  data_results[8] += 1.0/(double(numMC));
         }
       }

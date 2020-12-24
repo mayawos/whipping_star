@@ -277,8 +277,10 @@ int main(int argc, char* argv[])
  
   //fetch the TFile for the data and MC spectrum
   TFile *f_data = new TFile(fakedata.c_str(),"read");
-  //TH1D *h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_data");
-  //TH1D *h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_data");
+  TH1D *h_nue_np_fake_data;
+  if(tag.find("fakedata") != std::string::npos ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_data");
+  TH1D *h_nue_0p_fake_data;
+  if(tag.find("fakedata") != std::string::npos ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_data");
   TH1D *h_numu_data = (TH1D*)f_data->Get("nu_uBooNE_numu_data");
   
   int numu_bins = 14;
