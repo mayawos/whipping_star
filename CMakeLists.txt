@@ -90,6 +90,5 @@ add_subdirectory(src)
 add_subdirectory(examples)
 add_subdirectory(pelee_plotter)
 add_subdirectory(bin)
-add_subdirectory(unit)
 
 
