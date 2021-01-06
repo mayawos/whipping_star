@@ -344,7 +344,6 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
 
         std::cout<<"MPrinting stuff"<<std::endl;
         TH2D * f_FC = new TH2D("f_FC","f_FC",vec_grid.size(),vec_grid.front()[0],vec_grid.back()[0],vec_grid.size(),vec_grid.front()[0],vec_grid.back()[0]);
-        double bfval_v[vec_grid.size()];
 
         double bfval_v[vec_grid.size()];
 
@@ -483,38 +482,23 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
         lcross.Draw("same");
 
 
-            TLine lv1(1.0,0.0,1.0,maxpt);
-            lv1.SetLineStyle(2);
-            lv1.SetLineWidth(1);
-            lv1.SetLineColor(kBlack);
-            //lv1.Draw("same");
+        TLine lv1(1.0,0.0,1.0,maxpt);
+        lv1.SetLineStyle(2);
+        lv1.SetLineWidth(1);
+        lv1.SetLineColor(kBlack);
+        //lv1.Draw("same");
 
-            TLine lh3(0.0,3.1, 1.0,3.1);
-            lh3.SetLineStyle(2);
-            lh3.SetLineWidth(1);
-            lh3.SetLineColor(kBlack);
-            //lh3.Draw("same");
+        TLine lh3(0.0,3.1, 1.0,3.1);
+        lh3.SetLineStyle(2);
+        lh3.SetLineWidth(1);
+        lh3.SetLineColor(kBlack);
+        //lh3.Draw("same");
 
-
-        double u_measured[vec_grid.size()];
-        double uexp = 0;
-
-        std::cout << "//////////HERE!!!!!!!! vec_grid.size() = " << vec_grid.size() << std::endl;
-        for(int k = 0; k < npoints; k++){
-            uexp = ((double) k)/scale;
-            std::cout << "//////////HERE!!!!!!!! k, uexp, median = " << k << ", " << uexp << ", " << bfval_v[k] << std::endl;
-            u_measured[k] = uexp;
-        }
-
-        TGraph *bf_vals_g = new TGraph(vec_grid.size(), bfval_v, &v_true[0]);
-        //bf_vals_g->Draw("same *");
-        
         pad->Update();
         pad->RedrawAxis();
         // TLine l;
         //  l.DrawLine(gPad->GetUxmin(), gPad->GetUymax(), gPad->GetUxmax(), gPad->GetUymax());
         //   l.DrawLine(gPad->GetUxmax(), gPad->GetUymin(), gPad->GetUxmax(), gPad->GetUymax());
-
         c3->cd();
         TPad *padl = new TPad("padl", "padl", 0.8, 0, 1, 1);
         padl->SetBottomMargin(0.2);
@@ -525,7 +509,6 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
         l_probs->SetLineColor(kWhite);
         l_probs->SetLineWidth(0);
        
-
 
         c3->SaveAs(("FC_confidence_belt_"+tag+".pdf").c_str(),"pdf");
 
