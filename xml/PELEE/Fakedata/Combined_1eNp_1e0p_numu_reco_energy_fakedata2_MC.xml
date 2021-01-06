@@ -1,0 +1,235 @@
+<?xml version="1.0" ?>
+
+<!-- For this simple example we have one mode: Neutrino mode (nu) and one detector (uBooNE) -->
+<mode name="nu" />
+<detector name="uBooNE"  />
+
+<!-- We have three channels. Each "Channel" referes to a physically observable selelection. In this case nue-like and numu-like. -->
+<channel name="1eNp" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="nu" />
+    <subchannel name="CCmuNoPi" />
+    <subchannel name="NCcPiNoPi0" />
+    <subchannel name="ccpi0" />
+    <subchannel name="ncnopi" />
+    <subchannel name="ncpi0" />
+    <subchannel name="CCmuCPiNoPi0" />
+    <subchannel name="intrinsic" />
+    <subchannel name="lee"/>
+    <subchannel name="data" />
+</channel>
+
+<channel name="1e0p" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="nu" />
+    <subchannel name="CCmuNoPi" />
+    <subchannel name="NCcPiNoPi0" />
+    <subchannel name="ncnopi" />
+    <subchannel name="ncpi0" />
+    <subchannel name="ccpi0" />
+    <subchannel name="CCmuCPiNoPi0" />
+    <subchannel name="intrinsic" />
+    <subchannel name="lee"/>
+    <subchannel name="data" />
+</channel>
+
+<channel name="numu" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="bnb" />
+    <subchannel name="data" />
+</channel>
+
+<plotpot value=7.97e20/>
+
+<!-- ############################# BUILDING A COVARIANCE MATRIX  #####################################################-->
+<!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
+
+ <!-- 1eNp -->
+<!--
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_1eNp_fakedata1.root" scale= "0.00181" pot = "5.01e20" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_intrinsic"
+         additional_weight="weightSplineTimesTune"
+      />
+ </MultisimFile>
+-->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/nue_1eNp_fakedata1.root" scale= "1.0" pot = "1.77e23" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_intrinsic"
+         additional_weight="weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/nue_1eNp_fakedata1.root" scale= "1.0" pot = "1.77e23" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_lee"
+         additional_weight="leeweight*weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/numu_1eNp_fakedata1.root" scale = "1.0" pot = "3.66e21" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_nu"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/ccnopi_1eNp_fakedata1.root" scale = "1.0" pot = "9.08e21"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_CCmuNoPi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/ccpi0_1eNp_fakedata1.root" scale = "1.0" pot = "9.95e21" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_ccpi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/nccpi_1eNp_fakedata1.root" scale = "1.0" pot = "2.28e22"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_NCcPiNoPi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/ncnopi_1eNp_fakedata1.root" scale = "1.0" pot = "1.05e22"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_ncnopi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/ncpi0_1eNp_fakedata1.root" scale = "1.0" pot = "4.96e21"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_ncpi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/cccpi_1eNp_fakedata1.root" scale = "1.0" pot = "6.72e21"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_CCmuCPiNoPi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <!-- 1e0p -->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/fakedata_1e0p_set1/nue_1e0p_fakedata1.root" scale= "1.0" pot = "1.77e23" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_intrinsic"
+         additional_weight="weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/nue_1e0p_fakedata1.root" scale= "1.0" pot = "1.77e23" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_lee"
+         additional_weight="leeweight*weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/fakedata_1e0p_set1/numu_1e0p_fakedata1.root" scale = "1.0" pot = "3.66e21" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_nu"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/fakedata_1e0p_set1/CCmuNoPi_1e0p_fakedata1.root" scale = "1.0" pot = "9.08e21"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_CCmuNoPi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/fakedata_1e0p_set1/cc_pi0_1e0p_fakedata1.root" scale = "1.0" pot = "9.95e21" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_ccpi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/fakedata_1e0p_set1/NCcPiNoPi0_1e0p_fakedata1.root" scale = "1.0" pot = "2.28e22"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_NCcPiNoPi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/fakedata_1e0p_set1/ncnopi_1e0p_fakedata1.root" scale = "1.0" pot = "1.05e22"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_ncnopi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/fakedata_1e0p_set1/nc_pi0_1e0p_fakedata1.root" scale = "1.0" pot = "4.96e21"> 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_ncpi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+<!-- NuMu selection -->
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/numu_numu_fakedataset1.root" scale = "0.491" pot = "1.34e21" > 
+     <branch
+         name="neutrinoenergy"
+         type="double"
+         associated_subchannel="nu_uBooNE_numu_bnb"
+         additional_weight="weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+<WeightMaps>
+   <variation pattern="_AllGenie" weight_formula="1.0/weightTune"/>
+</WeightMaps>
+
+<variation_list>
+   <blacklist>XSecShape_CCMEC_Genie</blacklist>
+</variation_list>
