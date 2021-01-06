@@ -76,6 +76,7 @@ namespace sbn{
 			std::vector<double > collapsed_vector;
 			std::vector<float > f_collapsed_vector;
 
+			std::vector<double > full_error;
 
 
 			//need to store a history of the scales for oscillation purposes.  FIX THIS
@@ -122,6 +123,7 @@ namespace sbn{
 			double GetTotalEvents();
 
 			int GetGlobalBinNumber(double invar, int which_hist);
+			int GetGlobalBinNumber(int local_bin, std::string histname);
 			int GetLocalBinNumber(double invar, int which_hist);
 
 			int GetHistNumber(int f);

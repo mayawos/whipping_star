@@ -70,6 +70,9 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string in
         m.ResizeTo(used_bins.size(),matrix_systematicsin.GetNcols());
     }
 
+    m_cmin = -999;
+    m_cmax = -999;
+
     matrix_fractional_covariance = m;
     matrix_systematics.Zero();
     max_sample_chi_val =150.0;
@@ -97,6 +100,9 @@ SBNchi::SBNchi(SBNspec in, std::string newxmlname) : SBNconfig(newxmlname), core
             }
         }
     }
+m_cmin = -999;
+    m_cmax = -999;
+
 
     m_tolerance = 1e-8;
     pseudo_from_collapsed = false;
@@ -122,6 +128,9 @@ SBNchi::SBNchi(SBNspec in, bool is_is_stat_only): SBNconfig(in.xmlname), core_sp
     matrix_collapsed.ResizeTo(num_bins_total_compressed, num_bins_total_compressed);
     matrix_systematics.ResizeTo(num_bins_total, num_bins_total);
     matrix_fractional_covariance.ResizeTo(num_bins_total, num_bins_total);
+m_cmin = -999;
+    m_cmax = -999;
+
 
     m_tolerance = 1e-8;
     max_sample_chi_val =150.0;
@@ -208,6 +217,7 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
                     matrix_systematics(i,j) = 0;
                 else
                     matrix_systematics(i,j) = matrix_systematics(i,j)*core_spectrum.full_vector.at(i)*core_spectrum.full_vector.at(j);
+                if(i==j) matrix_systematics(i,j) += pow(core_spectrum.full_error[i],2);
             }
         }
     }
@@ -724,6 +734,26 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
     }
     return Mout;
 }
+
+TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr){
+
+    TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
+
+    for(int i =0; i<M->GetNcols(); i++)
+    {
+        for(int j =0; j<M->GetNrows(); j++)
+        {
+            if(  std::isnan( (*M)(i,j) )){
+                Mout(i,j) = 0.0;
+            }else{
+
+                Mout(i,j) = (*M)(i,j)*spec[i]*spec[j];
+            }
+            if(i==j) Mout(i,i) += spec[i] + mcerr[i]*mcerr[i];   //stats part
+        }
+    }
+    return Mout;
+}
 TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec){
 
     TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
@@ -743,8 +773,6 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
     }
     return Mout;
 }
-
-
 //here spec is full vector of MC, spec_collapse is collapsed vector of MC, datavec is collapsed vector of data
 TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<double>& datavec ){
 
@@ -767,6 +795,43 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector
             }else{
 
                 M_temp(i,j) = M(i,j)*spec[i]*spec[j];
+            }
+        }
+    }
+
+    CollapseModes(M_temp, Mout);
+    //add stats part	
+    for(int i=0; i< spec_collapse.size(); i++){
+        Mout(i,i) +=   ( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
+        //Mout(i,i) +=   spec_collapse[i];//( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
+    }
+    return Mout;
+}
+
+
+//here spec is full vector of MC, spec_collapse is collapsed vector of MC, datavec is collapsed vector of data
+TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> *M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec ){
+
+    if(M->GetNcols() != spec.size()){
+        std::cout << "ERROR: your input vector does not have the right dimenstion  " << std::endl; 
+        std::cout << "Fractional Matrix size :"<< M->GetNcols() << " || Input Full Vector size "<< spec.size() << std::endl;  
+        exit(EXIT_FAILURE);
+    }
+
+    TMatrixT<double> M_temp(M->GetNcols(), M->GetNcols() );
+    TMatrixT<double> Mout(spec_collapse.size(), spec_collapse.size()); //collapsed covariance matrix
+
+    //systematic apart 
+    for(int i =0; i<M->GetNcols(); i++)
+    {
+        for(int j =0; j<M->GetNrows(); j++)
+        {
+            if(  std::isnan( (*M)(i,j) )){
+                M_temp(i,j) = 0.0;
+            }else{
+
+                M_temp(i,j) = (*M)(i,j)*spec[i]*spec[j];
+                if(i==j) M_temp(i,j) += spec_mcerr[i]*spec_mcerr[i];
             }
         }
     }
@@ -821,6 +886,27 @@ float SBNchi::CalcChi_CNP(float * pred, float* data){
 
     return tchi;
 }
+
+TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, TVectorT<double> &err){
+
+    TMatrixT<double> Mout( M->GetNcols(), M->GetNcols() );
+    // systematics per scaled event
+    for(int i =0; i<M->GetNcols(); i++)
+    {
+        //std::cout<<"KRAK: "<<core_spectrum.full_vector.at(i)<<std::endl;
+        for(int j =0; j<M->GetNrows(); j++)
+        {
+            if(  std::isnan( (*M)(i,j))){
+                Mout(i,j) = 0.0;
+            }else{
+                Mout(i,j) = (*M)(i,j)*spec(i)*spec(j);
+            }
+        }
+    }
+    return Mout;
+}
+
+
 
 
 TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec){
@@ -1128,9 +1214,11 @@ int SBNchi::PrintMatricies(std::string tag){
     this->FillCollapsedFractionalMatrix(&frac);
     this->FillCollapsedCorrelationMatrix(&corr);
 
-    corr.Write();
+    corr.Write("collapsed_correlation");
 
-    frac.Write();
+    gStyle->SetPalette(kLightTemperature);
+
+    frac.Write("collapsed_fractional_covariance");
     TH2D h2_frac(frac);
     //h2_frac.Write();
     h2_frac.SetName("frac");
@@ -1142,7 +1230,7 @@ int SBNchi::PrintMatricies(std::string tag){
     h2_frac.SetTitle("Collapsed fractional covariance matrix");
     h2_frac.GetXaxis()->SetTitle("Reco Bin i");
     h2_frac.GetYaxis()->SetTitle("Reco Bin j");
-    //    h2_frac.GetZaxis()->SetRangeUser(-0.25,0.25);
+    if(m_cmin !=-999 || m_cmax !=-999)   h2_frac.GetZaxis()->SetRangeUser(m_cmin,m_cmax);
 
     c_frac->SetRightMargin(0.150);
 
@@ -1173,7 +1261,9 @@ int SBNchi::PrintMatricies(std::string tag){
     }std::cout<<std::endl;
 
 
-    full.Write();
+    gStyle->SetPalette(kLightTemperature);
+
+    full.Write("collapsed_covariance");
     TH2D h2_full(full);
     h2_full.SetName("full");
     TCanvas *c_full = new TCanvas("collapsed covariance matrix");
@@ -1214,7 +1304,7 @@ int SBNchi::PrintMatricies(std::string tag){
     h2_corr.SetTitle("Collapsed correlation matrix");
     h2_corr.GetXaxis()->SetTitle("Reco Bin i");
     h2_corr.GetYaxis()->SetTitle("Reco Bin j");
-    h2_corr.GetZaxis()->SetRangeUser(-1,1);
+    h2_corr.GetZaxis()->SetRangeUser(0.0,1);
     c_corr->SetRightMargin(0.150);
 
     int use_corr =0;
@@ -1314,7 +1404,7 @@ int SBNchi::plot_one(TMatrixD matrix, std::string tag, TFile *fin, bool plot_pdf
     h2_full.GetYaxis()->SetLabelSize(0);
     //p_full->SetLogz();
     if(is_corr){
-        h2_full.GetZaxis()->SetRangeUser(-1,1);
+        h2_full.GetZaxis()->SetRangeUser(0.4,1);
     }
     else{
         h2_full.GetZaxis()->SetRangeUser(-0.25,0.25);

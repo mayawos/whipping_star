@@ -797,6 +797,54 @@ int SBNcovariance::FillHistograms(int file, int uni, double wei){
 
 int SBNcovariance::FormCovarianceMatrix(std::string tag){
 
+	//std::map<bool, std::string> map_shape_only{{true, "NCDeltaRadOverlaySM"}};
+	std::map<bool, std::string> map_shape_only{{false, "NCDeltaRadOverlayLEE"}};
+	//std::map<bool, std::string> map_shape_only{{false, "NCPi0NotCoh"}};
+	//std::map<bool, std::string> map_shape_only{{true, "NCPi0NotCoh"}};
+
+	for(auto const& imap : map_shape_only){
+		bool lshape_only = imap.first;
+		if(lshape_only == false) continue;
+		std::string lname_subchannel = imap.second;
+		if(is_verbose) std::cout << "SBNcovariance::FormCovariancematrix\t||\tSubchannel " << lname_subchannel << " will be constructed as shape-only matrix ? " << lshape_only << std::endl;	
+
+
+
+		//save the toal number of events of CV for specific subchannels, and their global bin indices.
+	        spec_central_value.CalcFullVector();
+		std::vector<double> CV_tot_count;
+		std::map<int, std::vector<double>> map_index_global_bin;
+		for(auto const& lh:spec_central_value.hist){
+			std::string lname = lh.GetName();
+			if(lname.find(lname_subchannel) != std::string::npos){
+				//store the max/min global bin index for histogram
+				std::vector<double> lglobal_bin{spec_central_value.GetGlobalBinNumber(1, lname), spec_central_value.GetGlobalBinNumber(lh.GetNbinsX(), lname)};
+				map_index_global_bin.insert( std::pair<int, std::vector<double>>( (int)CV_tot_count.size(), lglobal_bin)  );
+
+				CV_tot_count.push_back(lh.Integral());
+				
+			}
+		}
+			
+		//start modify 'multi_vecspec'
+		for(int l=0; l< universes_used; l++){
+		    //now, multi_vecspec[l] is a spectra vector of 1 universe
+			std::string var_l = map_universe_to_var.at(l);
+			if(var_l.find("UBGenie") == std::string::npos) continue;
+
+			// loop over each histogram that has certain names		    
+			for(auto const& lmap:map_index_global_bin){
+				std::vector<double> lglobal_bin = lmap.second;
+
+				// total # of events of a subchannel of this universe
+				double uni_temp_count = std::accumulate(multi_vecspec[l].begin()+ lglobal_bin[0], multi_vecspec[l].begin()+lglobal_bin[1]+1, 0.0);
+				for(int k=lglobal_bin[0]; k <= lglobal_bin[1]; k++)
+					multi_vecspec[l][k] *= CV_tot_count[lmap.first]/uni_temp_count;
+			}
+
+		}
+	}
+
     std::cout<<"SBNcovariance::FormCovariancematrix\t||\tStart" << std::endl;
     full_covariance.ResizeTo(num_bins_total, num_bins_total);
     frac_covariance.ResizeTo(num_bins_total, num_bins_total);
@@ -864,6 +912,7 @@ int SBNcovariance::FormCovarianceMatrix(std::string tag){
         double vec_bot = ((double)a_num_universes_per_variation[k]);
         //next bit probably breaks the acc
         int varmode = m_variation_modes[varid];
+        std::cout << "SBNcovariance::FormCovariancematrix\t||\tvarmode (" <<varmode<<" ) vecuni2var ("<<varid<<" )"<< std::endl;
 
         if(varmode==0){ //run as normal. 
 #pragma acc loop seq
@@ -878,11 +927,13 @@ int SBNcovariance::FormCovarianceMatrix(std::string tag){
         }else if(varmode==1){
             //Instead, assign the covariance to be identicall the difference between this and the next universe (they come in 2's)
             for(int i=0; i<num_bins_total; i++) {
-                a_vec_full_covariance[varid][i*num_bins_total+i] = fabs(a_multi_vecspec[k][i]-a_multi_vecspec[k+1][i]);
+                for(int j=0; j<num_bins_total; j++) {
+                    a_vec_full_covariance[varid][i*num_bins_total+j] = (a_multi_vecspec[k][i]-a_multi_vecspec[k+1][i])* (a_multi_vecspec[k][j]-a_multi_vecspec[k+1][j]);
+                }
+                //a_vec_full_covariance[varid][i*num_bins_total+i] = fabs(a_multi_vecspec[k][i]-a_multi_vecspec[k+1][i]);
             }
             //we will also need to jump th universe count ahead by 1, just to skip the variation on the other side too.
             k++;
-
         }
     }
     watch.Stop();
@@ -1498,6 +1549,7 @@ int SBNcovariance::PrintMatricies(std::string tag, bool print_indiv) {
     h2_coll_corr.SetTitle("Collapsed Correlation matrix");
     h2_coll_corr.GetXaxis()->SetTitle("Reco Bin i");
     h2_coll_corr.GetYaxis()->SetTitle("Reco Bin j");
+    h2_coll_corr.GetZaxis()->SetRangeUser(0.0,1);
     c_coll_corr->SetRightMargin(0.150);
 
     int use_coll_corr =0;

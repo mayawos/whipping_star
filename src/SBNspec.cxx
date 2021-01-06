@@ -54,10 +54,7 @@ SBNspec::SBNspec(std::string rootfile, std::string whichxml, bool isverbose) : S
 
 	has_been_scaled=false;
 
-
 	f->Close();
-
-
 }
 
 SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml) : SBNspec(input_full_vec, whichxml, false){ };
@@ -73,15 +70,11 @@ SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml, int u
 			exact_bin -= hist.at(b).GetNbinsX();
 		}
 		hist.at(which_hist).SetBinContent(exact_bin+1, input_full_vec.at(i));
-
-	}
-
+	
+    }
 
 	this->CalcFullVector();
 }
-
-
-
 
 
 
@@ -113,9 +106,6 @@ int SBNspec::Add(std::string which_hist, TH1 * histin){
 	this->CollapseVector();
 	return 0;
 }
-
-
-
 
 
 
@@ -265,14 +255,17 @@ int SBNspec::Norm(std::string name, double val){
 
 int SBNspec::CalcFullVector(){
   full_vector.clear();
+  full_error.clear();
   
   full_vector.resize(num_bins_total);
+  full_error.resize(num_bins_total);
 
   int hoffset = 0;
   for(size_t hid=0; hid<hist.size(); ++hid) {
     const auto& h =  hist[hid];
     for(int i = 1; i < (h.GetSize()-1); ++i){
       full_vector[hoffset + i - 1] = h.GetBinContent(i);
+      full_error[hoffset + i - 1] = h.GetBinError(i);
     }
     hoffset += (h.GetSize()-2);
   }
@@ -498,7 +491,7 @@ int SBNspec::CompareSBNspecs(TMatrixT<double> collapse_covar, SBNspec * compsec,
     }
 
 
-    bool gLEE_plot = false;  //control the style of the stacked histograms
+    bool gLEE_plot = true;  //control the style of the stacked histograms
     if(gLEE_plot){
         mycol.clear();
 
@@ -1152,5 +1145,16 @@ int SBNspec::GetGlobalBinNumber(double invar, int which_hist)
 	}
 
 	if(localbin==0 || localbin > hist.at(which_hist).GetNbinsX() ){bin = -99;}
+	return bin;
+}
+int SBNspec::GetGlobalBinNumber(int local_bin, std::string histname){
+	
+	int which_hist = map_hist[histname];
+	int bin = local_bin -1;
+
+	for(int i=0; i<which_hist; i++){
+                bin += hist.at(i).GetNbinsX();
+        }
+
 	return bin;
 }

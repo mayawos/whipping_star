@@ -113,6 +113,8 @@ namespace sbn{
 
             /*********************************** Member Functions ********************************/	
 
+            double m_cmin;
+            double m_cmax;
             int plot_one(TMatrixD matrix, std::string tag, TFile *fin,bool,bool,bool);
 
 
@@ -137,11 +139,14 @@ namespace sbn{
 
             TMatrixT<double> InvertMatrix(TMatrixT<double> &M);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec);
+            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, TVectorT<double> &err);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, bool);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec);
+            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec,bool);
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<double>& datavec );
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, const std::vector<float>& datavec );
+            TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec );
 
 
 
@@ -202,7 +207,11 @@ namespace sbn{
             TH1D SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, std::vector<double> *chival,int which_sample);
             TH1D SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, double,int which_sample);
 
-
+            int SetFracPlotBounds(double cmin,double cmax){
+                     m_cmin=cmin;
+                     m_cmax=cmax;
+                     return 0;
+            }
 
             double max_sample_chi_val;
 
