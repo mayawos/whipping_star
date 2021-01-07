@@ -48,7 +48,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_intrinsic"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
       />
  </MultisimFile>
 
@@ -57,7 +57,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_sig_lee"
-         additional_weight="leeweight*weightSplineTimesTuneTimesPi0"
+         additional_weight="leeweight*weightSplineTimesTune"
       />
  </MultisimFile>
 
@@ -66,7 +66,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_nu"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -75,7 +75,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_ccnopi"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -84,7 +84,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_ccpi0"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -93,7 +93,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_nccpi"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -102,7 +102,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_ncnopi"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -111,7 +111,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_ncpi0"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -120,7 +120,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_cccpi"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -129,7 +129,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_dirt"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile-->
 
@@ -138,7 +138,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_1eNp_bg_ext"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -149,7 +149,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_numu_bnb"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 
@@ -158,7 +158,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_numu_dirt"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 <!--
@@ -167,7 +167,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_numu_nu"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 -->
@@ -176,7 +176,7 @@
          name="reco_e"
          type="double"
          associated_subchannel="nu_uBooNE_numu_ext"
-         additional_weight="weightSplineTimesTuneTimesPi0"
+         additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
 

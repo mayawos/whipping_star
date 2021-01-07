@@ -160,7 +160,10 @@ int main(int argc, char* argv[])
     chi_h0.FillDetSysMatrix(Mdetsys0,bkg_spectra);
   }
  
+  std::vector<double> sig_fullvec, bkg_fullvec, sig_collvec, bkg_collvec, sig_errfullvec, bkg_errfullvec, sig_errcollvec, bkg_errcollvec, sig_exterrfullvec, bkg_exterrfullvec, numu_data_vec, numu_vec, delta_numu; 
   sig_spectra.CalcFullVector();
+  sig_fullvec = sig_spectra.full_vector;
+  bkg_fullvec = bkg_spectra.full_vector;
   //frac detsys
   for(int i=0; i < Mdetsys.GetNrows(); i++){
   for(int j=0; j < Mdetsys.GetNcols(); j++){
@@ -171,12 +174,20 @@ int main(int argc, char* argv[])
   }
   }
  
-  std::vector<double> sig_collvec, bkg_collvec, numu_data_vec, numu_vec, delta_numu; 
   //collapse vector
   sig_spectra.CollapseVector();
   bkg_spectra.CollapseVector();
   sig_collvec = sig_spectra.collapsed_vector;
   bkg_collvec = bkg_spectra.collapsed_vector;
+
+  //mc intrinsic
+  sig_spectra.CalcErrorVector();
+  sig_errfullvec = sig_spectra.full_err_vector;
+  sig_exterrfullvec = sig_spectra.full_ext_err_vector;
+  bkg_errfullvec = bkg_spectra.full_err_vector;
+  bkg_exterrfullvec = bkg_spectra.full_ext_err_vector;
+  sig_errcollvec = sig_spectra.collapsed_err_vector;
+  bkg_errcollvec = bkg_spectra.collapsed_err_vector;
 
   //collapse matrix detsys
   TMatrixD detsyscoll;
@@ -292,9 +303,28 @@ int main(int argc, char* argv[])
   
   //Load up our covariance matricies we calculated in example1 (we could also load up single variation ones)
   TFile * fsys = new TFile(Form("../bin/%s.SBNcovar.root",tag.c_str()),"read");
-  TMatrixD * cov = (TMatrixD*)fsys->Get("collapsed_covariance");
+  TMatrixD *cov = (TMatrixD*)fsys->Get("collapsed_covariance");
+  TMatrixD *fullcov = (TMatrixD*)fsys->Get("full_covariance");
   TMatrixD *cov0 = (TMatrixD*)cov->Clone("coll_covar");
-  *cov = *cov + detsyscoll;
+  //Recalculate cov matrix by adding mc intrinsic error
+  TMatrixD collapsed;
+  collapsed.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
+  TMatrixT<double> fullsig = chi_h1.CalcCovarianceMatrix(fullcov, sig_fullvec, sig_errfullvec, false);  
+  //*cov = *cov + detsyscoll;
+  chi_h1.CollapseModes(fullsig, collapsed);
+  *cov = collapsed + detsyscoll;
+
+  //create the zero bin ext bnb err matrix
+  TMatrixD fullext;
+  fullext.ResizeTo(sig_spectra.num_bins_total, sig_spectra.num_bins_total);
+  for(int i=0; i < sig_spectra.num_bins_total; i++ ) fullext(i,i) += sig_exterrfullvec[i]*sig_exterrfullvec[i];
+
+  TMatrixD collext;
+  collext.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
+  //collapse...
+  chi_h1.CollapseModes(fullext, collext);
+  //for(int i=0; i < sig_spectra.num_bins_total_compressed; i++ ) std::cout << "coll ext err: " << collext(i,i) << std::endl;
+
 
   //calculate cov matrix before constraint
   //frac cov
@@ -617,6 +647,11 @@ int main(int argc, char* argv[])
   (TMatrixD*)corrnuematrix.Write("full_correlation");
   fcovar->Close();
   
+  TFile * fcollext = new TFile(Form("collapsed_zero_ext_bin_%s.SBNcovar.root",tag.c_str()),"recreate");
+  fcollext->cd();
+  (TMatrixD*)collext.Write("full_covariance");
+  fcollext->Close();
+
   return 0;
   
 }

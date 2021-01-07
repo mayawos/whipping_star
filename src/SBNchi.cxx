@@ -735,7 +735,7 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
     return Mout;
 }
 
-TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr){
+TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr, bool add_stats){
 
     TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
 
@@ -748,8 +748,11 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
             }else{
 
                 Mout(i,j) = (*M)(i,j)*spec[i]*spec[j];
+                if(i==j) Mout(i,j) += mcerr[i]*mcerr[i]; 
             }
-            if(i==j) Mout(i,i) += spec[i] + mcerr[i]*mcerr[i];   //stats part
+	    if(add_stats) {
+            if(i==j) Mout(i,i) += spec[i];   //stats part
+            }
         }
     }
     return Mout;
@@ -810,8 +813,9 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector
 
 
 //here spec is full vector of MC, spec_collapse is collapsed vector of MC, datavec is collapsed vector of data
-TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> *M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec ){
+TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> *M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec, bool add_stats ){
 
+    std::cout << "am using covariance matrix with mc err" << std::endl;
     if(M->GetNcols() != spec.size()){
         std::cout << "ERROR: your input vector does not have the right dimenstion  " << std::endl; 
         std::cout << "Fractional Matrix size :"<< M->GetNcols() << " || Input Full Vector size "<< spec.size() << std::endl;  
@@ -837,10 +841,12 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> *M, std::vecto
     }
 
     CollapseModes(M_temp, Mout);
-    //add stats part	
+    //add stats part
+    if(add_stats){	
     for(int i=0; i< spec_collapse.size(); i++){
         Mout(i,i) +=   ( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
         //Mout(i,i) +=   spec_collapse[i];//( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
+    }
     }
     return Mout;
 }

@@ -308,6 +308,56 @@ int SBNspec::CollapseVector(){
 	return 0;
 }
 
+int SBNspec::CalcErrorVector(){
+
+	full_err_vector.clear();
+	collapsed_err_vector.clear();
+	full_ext_err_vector.clear();
+
+	int index=0;
+	for(int im=0; im < num_modes ; im++){
+	    for(int id = 0; id< num_detectors; id++){
+		for(int ic= 0; ic< num_channels; ic++){
+		    TH1D* hsum= nullptr;   //holds the summed histogram for one CHANNEL
+
+		    for(int is=0; is< num_subchannels[ic]; is++){
+			TH1D& h = hist[index];
+                        std::string name = h.GetName();
+                        if(name.find("ext") != std::string::npos){ 
+				std::cout << "found ext histogram!" << std::endl;
+				for(int ibin=0; ibin < h.GetNbinsX(); ibin++){
+					double ext_err = 0.0;
+					if( h.GetBinError(ibin+1) == 0.0 ) ext_err = 1.4*0.371;
+					full_err_vector.push_back(0.0);
+					full_ext_err_vector.push_back(ext_err);
+				}
+			}
+			else{
+				std::cout << "found other histograms, filling as normal!" << std::endl;
+				for(int ibin=0; ibin < h.GetNbinsX(); ibin++){ 
+					full_err_vector.push_back(h.GetBinError(ibin+1));
+					full_ext_err_vector.push_back(0.0);
+				}
+			}
+			if(hsum == nullptr){
+				hsum = (TH1D*)h.Clone();
+				hsum->Reset();
+			}	
+			hsum->Add(&h);
+			index++;
+		    }
+
+		   for(int ibin=0; ibin < hsum->GetNbinsX(); ibin++)
+			collapsed_err_vector.push_back(hsum->GetBinError(ibin+1));
+
+		}
+	    }
+	}	
+
+	return 0;
+}
+
+
 double SBNspec::GetTotalEvents(){
 	double ans =0;
 	this->CalcFullVector();

@@ -1,6 +1,6 @@
 for t in np_numu_reco_e zp_numu_reco_e np_zp_numu_reco_e
 do
-    for s in mc_collabOctFullMC
+    for s in mc_collabOctFullMCunisim
     do
 	make
 	./sbnfit_make_covariance -x ${t}_H1_${s}.xml -t ${t}_H1_${s} #-p
@@ -21,6 +21,7 @@ do
 	fi
 	
 	cd ../bin
+	cp ../examples/collapsed_zero_ext_bin_${t}_H1_mc_${s}.SBNcovar.root .
 	cp ../examples/unconstrained_${t}_H1_${s}.SBNspec.root unconstrained_${t}_H1_${s}_CV.SBNspec.root
 	cp ../examples/constrained_${t}_H1_${s}.SBNspec.root constrained_${t}_H1_${s}_CV.SBNspec.root
 	cp ../examples/constrained_${t}_H1_${s}.SBNcovar.root .
