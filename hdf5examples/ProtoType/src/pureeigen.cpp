@@ -31,10 +31,12 @@
 #include <diy/reduce-operations.hpp>
 #include <diy/io/block.hpp>
 
+//#ifdef H5_USE_EIGEN
 #include <highfive/H5File.hpp>
 #include <highfive/H5DataSet.hpp>
 #include <highfive/H5DataSpace.hpp>
 #include <highfive/H5Easy.hpp>
+//#endif
 
 #include <cppoptlib/meta.h>
 #include <cppoptlib/problem.h>
@@ -172,7 +174,6 @@ struct Block : public BlockBase<T>
 		    Eigen::Tensor<double, 3> vals,
 		    bool  rescale)            // rescale science values
   {
-    
     DomainArgs* a = &args;
     int tot_ndom_pts = 1;
     this->geometry.min_dim = 0;
@@ -181,6 +182,8 @@ struct Block : public BlockBase<T>
     this->vars.resize(nvars);
     this->max_errs.resize(nvars);
     this->sum_sq_errs.resize(nvars);
+    this->vars[0].min_dim = this->dom_dim;
+    this->vars[0].max_dim = this->vars[0].min_dim + 1;
     for (int i = 1; i < nvars; i++) {
       this->vars[i].min_dim = this->vars[i-1].max_dim+1;
       this->vars[i].max_dim = this->vars[i].min_dim;
@@ -188,13 +191,12 @@ struct Block : public BlockBase<T>
     VectorXi ndom_pts(this->dom_dim);
     this->bounds_mins.resize(this->pt_dim);
     this->bounds_maxs.resize(this->pt_dim);
-    std::cout << "this->dom_dim, a->ndom_pts = " << this->dom_dim << ", " << a->ndom_pts.size() << std::endl;
-    for (int i = 0; i < this->dom_dim ; i++)
-      { 
+    for (int i = 0; i < this->dom_dim; i++)
+      {
 	ndom_pts(i)     =  a->ndom_pts[i];
 	tot_ndom_pts    *= ndom_pts(i);
-	std::cout << "tot_ndom_pts, ndom_pts(" << i << ") = " << tot_ndom_pts << ", " << ndom_pts(i) << std::endl; 
-	std::cout << "ndom_pts(" << i << "), a->ndom_pts[" << i << "] = " << ndom_pts(i) << ", " << a->ndom_pts[i] << std::endl; 
+	//std::cout << "tot_ndom_pts, ndom_pts(" << i << ") = " << tot_ndom_pts << ", " << ndom_pts(i) << std::endl; 
+	//std::cout << "ndom_pts(" << i << "), a->ndom_pts[" << i << "] = " << ndom_pts(i) << ", " << a->ndom_pts[i] << std::endl; 
       }
     this->domain.resize(tot_ndom_pts, this->pt_dim);
     
@@ -205,16 +207,15 @@ struct Block : public BlockBase<T>
     std::vector<double> min_vals;
     std::vector<double> max_vals;
     for (int m = 0; m < nvars; m++) {
-	min_vals.push_back(9e9);
-	max_vals.push_back(-9999);
+      min_vals.push_back(9e9);
+      max_vals.push_back(-9999);
     }
-
     for (size_t j = 0; j < (size_t)(ndom_pts(1)); j++) {
       for (size_t i = 0; i < (size_t)(ndom_pts(0)); i++) {
 	this->domain(n, 0) = i;
 	this->domain(n, 1) = j;
 	for (int m = 0; m < nvars; m++) {
-	  //std::cout << "set value for 59 variables, m, i, j, n: " << m << ", " << i << ", " << j << ", " << n << " = " << vals(m, i,j) << std::endl;
+	  //if( m<2 )std::cout << "set value for 59 variables, m, i, j, n: " << m << ", " << i << ", " << j << ", " << n << " = " << vals(m, i,j) << std::endl;
 	  this->domain(n, 2+m) = vals(m, i,j);
           if(vals(m, i,j) < min_vals[m] ) min_vals[m] = vals(m, i,j);
           if(vals(m, i,j) > max_vals[m] ) max_vals[m] = vals(m, i,j);
@@ -222,7 +223,7 @@ struct Block : public BlockBase<T>
 	n++;
       }
     }
-   
+    
     // find extent of masses and values
     for (size_t i = 0; i < (size_t)this->domain.rows(); i++)
       {
@@ -234,12 +235,12 @@ struct Block : public BlockBase<T>
 	  this->bounds_mins(1) = this->domain(i, 1);
 	if (i == 0 || this->domain(i, 1) > this->bounds_maxs(1))
 	  this->bounds_maxs(1) = this->domain(i, 1);
-
+	
 	for (int m = 0; m < nvars; m++) {
-	if (i == 0 || this->domain(i, 2+m) < this->bounds_mins(2+m))
-	  this->bounds_mins(2+m) = this->domain(i, 2+m);
-	if (i == 0 || this->domain(i, 2+m) > this->bounds_maxs(2+m))
-	  this->bounds_maxs(2+m) = this->domain(i, 2+m);
+	  if (i == 0 || this->domain(i, 2+m) < this->bounds_mins(2+m))
+	    this->bounds_mins(2+m) = this->domain(i, 2+m);
+	  if (i == 0 || this->domain(i, 2+m) > this->bounds_maxs(2+m))
+	    this->bounds_maxs(2+m) = this->domain(i, 2+m);
 	}
       }
     
@@ -247,8 +248,9 @@ struct Block : public BlockBase<T>
     
     // extents
     for (int m = 0; m < nvars; m++) {
-    this->bounds_mins(m+2) = min_vals[m];
-    this->bounds_maxs(m+2) = max_vals[m];
+      this->bounds_mins(m+2) = min_vals[m];
+      this->bounds_maxs(m+2) = max_vals[m];
+      this->bounds_maxs(m+2) = this->domain(tot_ndom_pts - 1, m+2);
     }
     this->bounds_mins(1) = 0;
     this->bounds_maxs(1) = this->domain(tot_ndom_pts - 1, 1);
@@ -264,49 +266,41 @@ struct Block : public BlockBase<T>
       }
     
     this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
-    //VectorX<real_t> out_pt(this->pt_dim);
-    //VectorX<real_t> param(this->dom_dim);
-    //param.setZero();
-    //std::cout << "decode point 1, dom_dim, pt_dim: " << this->dom_dim << ", " << this->pt_dim << std::endl;
-    //this->decode_point(cp, param, out_pt);
-    //std::cout << "decode point 2" << std::endl;
-  
-    //for (int m = 0; m < nvars; m++) std::cout << "out_pt " << m << " = " << out_pt(m) << std::endl;
-
+    
     // normalize the science variable to the same extent as max of geometry
     if (rescale)
       {
-	double extent[59];
-	extent[0] = this->bounds_maxs(0) - this->bounds_mins(0);
-	extent[1] = this->bounds_maxs(1) - this->bounds_mins(1);
-	for (int m = 0; m < nvars; m++) {
-	  extent[2+m] = this->bounds_maxs(2+m) - this->bounds_mins(2+m);
-	}
-	double scale = extent[0] > extent[1] ? extent[0] : extent[1];
-	cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << endl;
-	for (size_t i = 0; i < (size_t)this->domain.rows(); i++){
-	for (int m = 0; m < nvars; m++) {
-	  this->domain(i, 2+m) = this->domain(i, 2+m) / extent[2+m] * scale;
-	  std::cout << "this->domain(i, "<<2+m<<" ) = " << this->domain(i, 2+m) << std::endl;
-	}
-	}
+        double extent[59];
+        extent[0] = this->bounds_maxs(0) - this->bounds_mins(0);
+        extent[1] = this->bounds_maxs(1) - this->bounds_mins(1);
+        for (int m = 0; m < nvars; m++) {
+          extent[2+m] = this->bounds_maxs(2+m) - this->bounds_mins(2+m);
+        }
+        std::cout << "extent[0], extent[1] = " << extent[0] << ", " << extent[1] << std::endl;
+        double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
+        for (size_t i = 0; i < (size_t)this->domain.rows(); i++){
+          for (int m = 0; m < nvars; m++) {
+            cerr << "\n * rescaling values dividing by " << extent[2+m] *scale << " *\n" << endl;
+            this->domain(i, 2+m) = this->domain(i, 2+m) / extent[2+m] * scale;
+            //std::cout << "this->domain("<<i<<", "<<2+m<<" ) = " << this->domain(i, 2+m) << std::endl;
+          }
+        }
       }
-	
-	// debug
-	cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
+    
+    // debug
+    cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
   }
-    
-    
-};
   
-  typedef std::array<double, 3> GridPoint;
+};
+
+typedef std::array<double, 3> GridPoint;
 
 class GridPoints {
 public:
   GridPoints() {}
   GridPoints(std::vector<std::vector<double>> const & m_vec_grid) {
     for (auto gp : m_vec_grid){
-      std::cerr << "gp:  " << gp[0] << ", " << gp[1] << ", " << gp[2] << std::endl;
+      //std::cerr << "gp:  " << gp[0] << ", " << gp[1] << ", " << gp[2] << std::endl;
       _gridpoints.push_back({pow(10, gp[0]), pow(10, gp[1]), pow(10, gp[2])});}
   }
   size_t NPoints()         { return _gridpoints.size(); }
@@ -472,63 +466,64 @@ private:
 };
 inline void makeSignalModel(diy::Master* master, SignalGenerator signal, int nbins)
 {
-    // default command line arguments
-    int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
-    int    pt_dim       = nbins+dom_dim;                    // dimension of input points
-    int    geom_degree  = 1;                    // degree for geometry (same for all dims)
-    int    vars_degree  = 2;                    // degree for science variables (same for all dims)
-    int    geom_nctrl   = geom_degree + 1;     // input number of control points for geometry (same for all dims)
-    int    vars_nctrl   = vars_degree + 1;     // input number of control points for geometry (same for all dims)
-    int    weighted     = 1;                   // input number of control points for all science variables (same for all dims)
-    real_t noise        = 0.0;                  // fraction of noise
-    // set default args for diy foreach callback functions
-    DomainArgs d_args(dom_dim, pt_dim);
-    d_args.weighted     = weighted;
-    d_args.n            = noise;
-    d_args.multiblock   = false;
-    d_args.verbose      = 1;
- 
-    for (int i = 0; i < pt_dim - dom_dim; i++)
-        d_args.f[i] = 1.0;
-    for (int i = 0; i < dom_dim; i++)
+  // default command line arguments
+  int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
+  int    pt_dim       = nbins+dom_dim;        // dimension of input points
+  int    geom_degree  = 1;                    // degree for geometry (same for all dims)
+  int    vars_degree  = 10;                    // degree for science variables (same for all dims)
+  int    geom_nctrl   = geom_degree + 1;      // input number of control points for geometry (same for all dims)
+  int    vars_nctrl   = vars_degree + 1;       	            // input number of control points for geometry (same for all dims)
+  int    weighted     = 1;                    // input number of control points for all science variables (same for all dims)
+  real_t noise        = 0.0;                  // fraction of noise
+  // set default args for diy foreach callback functions
+  DomainArgs d_args(dom_dim, pt_dim);
+  d_args.weighted     = weighted;
+  d_args.n            = noise;
+  d_args.multiblock   = false;
+  d_args.verbose      = 1;
+  
+  for (int i = 0; i < pt_dim - dom_dim; i++)
+    d_args.f[i] = 1.0;
+  for (int i = 0; i < dom_dim; i++)
     {
-        d_args.geom_p[i]            = geom_degree;
-
-	for( int m = 0; m < pt_dim - dom_dim; m++)
-           d_args.vars_p[m][i]         = vars_degree;  // assuming one science variable, vars_p[m]
-
-        d_args.geom_nctrl_pts[i]    = geom_nctrl;
+      d_args.min[i]               = 0.0;
+      d_args.max[i]               = 25.0;
+      d_args.geom_p[i]            = geom_degree;
+      
+      for( int m = 0; m < pt_dim - dom_dim; m++)
+	d_args.vars_p[m][i]         = vars_degree;  // assuming one science variable, vars_p[m]
+      
+      d_args.geom_nctrl_pts[i]    = geom_nctrl;
+      for( int m = 0; m < pt_dim - dom_dim; m++)
+	d_args.vars_nctrl_pts[m][i] = vars_nctrl;  // assuming one science variable, vars_p[m]
     }
-
-    d_args.ndom_pts[1]          = 26;
-    d_args.ndom_pts[0]          = 26;
-    
-   for( int m = 0; m < pt_dim - dom_dim; m++){ //loop over all science variables
-     d_args.vars_nctrl_pts[m][1] = 26;       // assuming (pt_dim-dom_dim) science variable, vars_nctrl_pts[m]
-     d_args.vars_nctrl_pts[m][0] = 26;       // assuming (pt_dim-dom_dim) science variable, vars_nctrl_pts[m]
-   }
-
-   Eigen::VectorXd vec_gridx(26);
-   Eigen::VectorXd vec_gridy(26);
-
-   Eigen::Tensor<double, 3> map_bin_to_grid(57,26,26);
-   Eigen::ArrayXXd values(signal.gridsize(),nbins);	
-
-   int gridx = -1;
-   int gridy = -1;
-
-   for (size_t i=0; i<signal.gridsize(); ++i) {
-      values.row(i) = signal.predict2D(i, true, gridx, gridy);
-      int gridy_index = i/26;
-      int gridx_index = i%26;
-      vec_gridy(gridy_index) = gridy;
-      vec_gridx(gridx_index) = gridx;
-      for( int bin=0; bin < nbins; bin++ ) map_bin_to_grid(bin,gridx_index,gridy_index) = values(i,bin); 
-   }
-
-   master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ b->read_2d_data(cp,d_args,map_bin_to_grid,false); });
-   master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ b->fixed_encode_block(cp,d_args); });
-
+  
+  d_args.ndom_pts[1]          = 26;
+  d_args.ndom_pts[0]          = 26;
+  
+  Eigen::VectorXd vec_gridx(26);
+  Eigen::VectorXd vec_gridy(26);
+  
+  Eigen::Tensor<double, 3> map_bin_to_grid(57,26,26);
+  Eigen::ArrayXXd values(signal.gridsize(),nbins);	
+  
+  int gridx = -1;
+  int gridy = -1;
+  
+  for (size_t i=0; i<signal.gridsize(); ++i) {
+    values.row(i) = signal.predict2D(i, true, gridx, gridy);
+    int gridy_index = i/26;
+    int gridx_index = i%26;
+    vec_gridy(gridy_index) = gridy;
+    vec_gridx(gridx_index) = gridx;
+    for( int bin=0; bin < nbins; bin++ ) map_bin_to_grid(bin,gridx_index,gridy_index) = values(i,bin); 
+  }
+  
+  master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ b->read_2d_data(cp,d_args,map_bin_to_grid,false); });
+  master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ b->fixed_encode_block(cp,d_args); });
+  master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ b->range_error(cp, 1, true, true); });
+  master->foreach([&](Block<real_t>* b, const diy::Master::ProxyWithLink& cp){ b->print_block(cp, 1); });
+  
 }
 
 void loadData(const char* fname, std::string what, std::vector<double> & v_buffer, int & n_rows, int & n_cols) {
@@ -849,7 +844,7 @@ inline Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::Vecto
     return invertMatrixEigen3(out);
 }
 
-//need to figure out the proper way to propagate the MFA model
+//follow-up: add boundary condition to keep the point inside the box
 namespace cppoptlib {
   template<typename T>
   class LLR : public Problem<T> {
@@ -873,11 +868,11 @@ namespace cppoptlib {
     using typename Problem<T>::TVector;
     T value(const TVector &x) {
       //to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
-
       // evaluate point
       TVector diff(data.size()); //data size == nvars
       VectorX<T> param(b.dom_dim);
-      for(int i=0; i<2; i++){ std::cout << "i, x = " << i << ", " << x(i) << std::endl; param(i) = x(i);}
+      for(int i=0; i<2; i++) 
+           param(i) = x[i]/25.;
       //parameters of values
       VectorX<real_t> out_pt(b.pt_dim);
       // parameters of input point to evaluate
@@ -888,68 +883,66 @@ namespace cppoptlib {
       double extent[b.pt_dim];
       extent[0] = b.bounds_maxs(0) - b.bounds_mins(0);
       extent[1] = b.bounds_maxs(1) - b.bounds_mins(1);
-      double scale = extent[0] > extent[1] ? extent[0] : extent[1];
-      for(int p=0; p<data.size(); p++){
-        extent[2+p] = b.bounds_maxs(2+p) - b.bounds_mins(2+p);
-	int dom_dim = b.dom_dim;
-	int pt_dim  = b.pt_dim;
-	for (size_t i = 0; i < (size_t)b.dom_dim; i++){
-          std::cout << "before i, param(i) = " << i << ", " << param(i) << std::endl;
-	  param(i) = param(i)/extent[i] * scale;
-          std::cout << "after i, param(i) = " << i << ", " << param(i) << std::endl;
-	  //b.domain(i, 2+p) = b.domain(i, 2+p) / extent[i] * scale;
-	}
-	for (auto i = 0; i < b.dom_dim; i++){
-	  in_param(i) = param[i];
-	  //std::cout << "i, param[i],  in_param(i) = " << i << ", " << param[i] << ", " << in_param(i) << std::endl;
-	}
-	///std::cout << "...decode point per block..." << p+2 << std::endl;
-	b.decode_point(cp, in_param, out_pt);
-	diff[p] = data[p]-out_pt(pt_dim-1);
-	std::cerr << "p, diff, data[p] = " << p << ", " << diff[p] << ", " << data[p] << ", " << std::endl;
+      double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
+      int dom_dim = b.dom_dim;
+      int pt_dim  = b.pt_dim;
+      for (size_t i = 0; i < (size_t)b.dom_dim; i++){
+	in_param(i) = param(i)/scale;
       }
-      std::cout << "out_pt: " << out_pt << std::endl;
+      b.decode_point(cp, in_param, out_pt);
+      for(int p=0; p<data.size(); p++){
+	diff[p] = data[p] - out_pt(p+2);
+      }
+      std::cout << out_pt.transpose() << std::endl;
       return (diff.transpose())*M*(diff);
     }
-    /*
-      void gradient(const TVector &x, TVector &grad) {
-      for(int p=0; p<data.size(); p++){
+    
+    //stopped early due to returning point outside the box
+    //will come back to this once we solved the issue with the finite-difference gradient
+
+    /*void gradient(const TVector &x, TVector &grad) {
+     
+      TVector left(data.size()); //data size == nvars
+      TVector right(data.size()); //data size == nvars
+      VectorX<T> param(b.dom_dim);
+      for(int i=0; i<2; i++){ param[i] = x(i); }
+
       //scale to 1
       // normalize the science variable to the same extent as max of geometry
       double extent[3];
-      extent[0] = blocks[p]->bounds_maxs(0) - blocks[p]->bounds_mins(0);
-      extent[1] = blocks[p]->bounds_maxs(1) - blocks[p]->bounds_mins(1);
-      extent[2] = blocks[p]->bounds_maxs(2) - blocks[p]->bounds_mins(2);
-      double scale = extent[0] > extent[1] ? extent[0] : extent[1];
-      std::cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << std::endl;
-      for (size_t i = 0; i < (size_t)blocks[p]->domain.rows(); i++)
-      blocks[p]->domain(i, 2) = blocks[p]->domain(i, 2) / extent[2] * scale;
-      int dom_dim = blocks[p].dom_dim;
-      int pt_dim  = blocks[p].pt_dim;
-      VectorX<real_t> out_pt(pt_dim);
-      // parameters of input point to evaluate
-      VectorX<real_t> in_param(dom_dim);
-      for (auto i = 0; i < dom_dim; i++){
-      in_param(i) = param[i];
-      }
-      // evaluate point
+      extent[0] = b.bounds_maxs(0) - b.bounds_mins(0);
+      extent[1] = b.bounds_maxs(1) - b.bounds_mins(1);
+      extent[2] = b.bounds_maxs(2) - b.bounds_mins(2);
+      double scale = extent[0] >i= extent[1] ? extent[0] : extent[1];
+      //std::cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << std::endl;
+      for (size_t i = 0; i < (size_t)b.domain.rows(); i++)
+	b.domain(i, 2) = b.domain(i, 2) / extent[2] * scale;
+      int dom_dim = b.dom_dim;
+      int pt_dim  = b.pt_dim;
       VectorX<real_t> out_pt(pt_dim);
       VectorX<real_t> out_pt_deriv(pt_dim);
       // parameters of input point to evaluate
       VectorX<real_t> in_param(dom_dim);
       for (auto i = 0; i < dom_dim; i++){
-      in_param(i) = param[i];
+	in_param(i) = param[i];
       }
       for (auto i = 0; i < dom_dim; i++){
-      b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
+	in_param(i) = param[i];
+      }
+      for (auto i = 0; i < dom_dim; i++){
+	b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
       }
       b.decode_point(cp, in_param, out_pt);
       //grad
       //scale the derivation u,v back to x,y
-      grad[p] = 2*scale*out_pt_deriv(pt_dim - 1)*M*(out_pt(pt_dim-1)-data[p]);
+      for(int p=0; p<data.size(); p++){
+	left[p] = 2.0*out_pt_deriv(p+2);
+	right[p] = (out_pt(p+2)-data[p]);
       }
-      }*/
-    
+
+      grad = (left.transpose())*M*(right);
+
+    }*/
   };
 }
 
@@ -1008,6 +1001,7 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
 inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
 			Block<real_t>* b, //replace with block that has encoded MFA model
 			diy::Master::ProxyWithLink const& cp,
+			SignalGenerator signal,//root input
 			int i_grid,
 			Eigen::MatrixXd const & INVCOV,
 			Eigen::MatrixXd const & covmat,
@@ -1018,6 +1012,7 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
 {
   float global_chi_min = FLT_MAX;
   int best_grid_point = -99;
+  //int best_grid_point_y = -99;
   size_t n_iter = 0;
   
   Eigen::MatrixXd invcov = INVCOV;//std::vector<double> temp;
@@ -1031,20 +1026,46 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
   typedef LLR<T> llr;
   llr f(*b, cp, fake_data, INVCOV);
   cppoptlib::LbfgsSolver<llr> solver;
+  //maybe add boundary here?
   //minimize the function
   Eigen::VectorXd x(2);
   //decode the grid point in 2d
   int gridx_index = i_grid%26; 
   int gridy_index = i_grid/26;
-  std::cout << "x, y = " << gridx_index << ", " << gridy_index << std::endl;
   x(0) = gridx_index;
   x(1) = gridy_index;
+ 
+  //validate the input before passing to minimizer
+  VectorX<T> param(b->dom_dim);
+  //parameters of values
+  VectorX<real_t> out_pt(b->pt_dim);
+  // parameters of input point to evaluate
+  VectorX<real_t> in_param(b->dom_dim);
+
+  //scale to 1
+  // normalize the science variable to the same extent as max of geometry
+  double extent[b->pt_dim];
+  extent[0] = b->bounds_maxs(0) - b->bounds_mins(0);
+  extent[1] = b->bounds_maxs(1) - b->bounds_mins(1);
+  double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
+  int dom_dim = b->dom_dim;
+  int pt_dim  = b->pt_dim;
+  for (size_t i = 0; i < (size_t)b->dom_dim; i++){
+    in_param(i) = x(i)/scale;
+  }
+  b->decode_point(cp, in_param, out_pt);
+  for( int i=0; i < out_pt.size(); i++ ) std::cout << "variation " << i << " = " << 1.0 - (signal.predict2D(i_grid, true, gridx_index, gridy_index)[i]/out_pt(i+2)) << std::endl; 
+
+  //minimize!
   solver.minimize(f,x);
-  
+
   //store the result here
-  //global_chi_min = f(x); //the global minimum chi2
-  //best_grid_point = x; //point in grid which gives the minimum chi2
-  
+  global_chi_min = f(x); //the global minimum chi2
+  best_grid_point = x(0)*x(1); //point in grid which gives the minimum chi2 -- going back into flat vector to save the values to hdf5
+  std::cout << "=======================" << std::endl;
+  std::cout << "  best grid point = " << best_grid_point << std::endl;
+  std::cout << "  global_chi_min  = " << global_chi_min  << std::endl;
+  std::cout << "=======================" << std::endl;
   //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
   float this_chi = calcChi(fake_data, v_coll, invcov);
   //assert that fakedataC should have the same dimension as collspec
@@ -1222,7 +1243,7 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
           
           results.push_back(coreFC(fake_dataC, speccoll,
                    //signal, INVCOVBG, ECOV, myconf, tol, iter)); //old implementation
-                   b, cp, i_grid, INVCOVBG, ECOV, myconf, tol, iter));
+                   b, cp, signal, i_grid, INVCOVBG, ECOV, myconf, tol, iter));
 
           v_univ.push_back(uu);
           v_grid.push_back(i_grid);
@@ -1613,9 +1634,9 @@ int main(int argc, char* argv[]) {
     std::cout << "blocks = " << blocks << std::endl;
     if (world.rank()==0) fmt::print(stderr, "FC will be done on {} blocks, distributed over {} ranks\n", blocks, world.size());
     Bounds<real_t> fc_domain(2);
-    fc_domain.min[0] = 0;
+    fc_domain.min[0] = 0.;
     fc_domain.max[0] = blocks-1;
-    fc_domain.min[1] = 0;
+    fc_domain.min[1] = 0.;
     fc_domain.max[1] = blocks-1;
     diy::FileStorage               storage("./DIY.XXXXXX");
     diy::RoundRobinAssigner        fc_assigner(world.size(), blocks);
@@ -1631,15 +1652,23 @@ int main(int argc, char* argv[]) {
 
      
     //maybe set up a different MFA blocks and decomposer here?
-    if ( world.rank() == 0 ) makeSignalModel(&fc_master,signal,57); //hardcoded for now depending on channels and detectors
-
-
+    if ( world.rank() == 0 ){ 
+	    std::cout << "set up signal model" << std::endl;
+	    std::cout << "fc master = " << &fc_master << std::endl;
+   	    makeSignalModel(&fc_master,signal,57); //hardcoded for now depending on channels and detectors
+	    //std::cout << "code, finish setup signal model" << code << std::endl;
+    }
+    std::cout << "fail here 1" << std::endl;
     std::vector<int> work(nPoints);
+    std::cout << "fail here 2" << std::endl;
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
+    std::cout << "fail here 3" << std::endl;
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
+    std::cout << "fail here 4" << std::endl;
     work.clear();
+    std::cout << "fail here 5" << std::endl;
     work.shrink_to_fit();
-
+    std::cout << "fail here" << std::endl;
     double starttime = MPI_Wtime();
     if (simplescan) {
        if (world.rank()==0) fmt::print(stderr, "Start simple scan\n");

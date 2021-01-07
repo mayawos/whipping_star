@@ -7,7 +7,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_FLAGS "-march=${ARCH} -mtune=${ARCH} -Wall -O2 -DNDEBUG")# -fPermissive")
+set(CMAKE_CXX_FLAGS "-march=native -Wall -O2 -DNDEBUG")# -fPermissive")
 #set (CMAKE_CXX_FLAGS_DEBUG " -fno-omit-frame-pointer -fsanitize=address ${CMAKE_CXX_FLAGS_DEBUG}")
 #set (CMAKE_LINKER_FLAGS_DEBUG "-fno-omit-frame-pointer -fsanitize=address ${CMAKE_LINKER_FLAGS_DEBUG})")
 #set(CMAKE_CXX_FLAGS_RELEASE "-O3")
@@ -103,15 +103,30 @@ set (MY_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/opts.h
     )
 
+# HighFive
+if                          (HighFive_INCLUDE_DIR)
+    include_directories     (SYSTEM ${HighFive_INCLUDE_DIR})
+    message                 ("HighFive_INCLUDE_DIR = " ${HighFive_INCLUDE_DIR})
+endif                   ()
+
+# MFA
+if                          (MFA_INCLUDE_DIR)
+    include_directories     (SYSTEM ${MFA_INCLUDE_DIR})
+    message                 ("MFA_INCLUDE_DIR = " ${MFA_INCLUDE_DIR})
+    add_definitions         (-DMFA_NO_WEIGHTS)
+    add_definitions         (-DMFA_SERIAL)
+    message                 ("Weights are disabled for MFA")
+endif  ()
+
 # Include dirs
 set                         (CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem")
 include_directories         (${CMAKE_CURRENT_SOURCE_DIR}/include
                             ${DIY_INCLUDE_DIRS}
                             ${GSL_INCLUDE_DIRS}
                             ${HDF5_INCLUDE_DIRS}
-                            ${EIGEN3_INCLUDE_DIR}
-                            ${HIGHFIVE_DIR}/include 
-                            SYSTEM ${MPI_INCLUDE_PATH}
+			    ${EIGEN3_INCLUDE_DIRS}
+                            SYSTEM 
+			    ${MPI_INCLUDE_PATH}
                             )
                             #${SGTE_INCLUDE_DIRS}
                             #${NOMAD_INCLUDE_DIRS}
@@ -131,31 +146,20 @@ else                        ()
   message                   ("Shared library suffix set to so")
 endif                       ()
 
-
-# Test if user has supplied -DHIGHFIVE_DIR                        
-if (NOT HIGHFIVE_DIR)
-    message                 (FATAL_ERROR " Need HighFive in order to build program --- check -DHIGHFIVE_DIR")
-endif                       ()
-
-if (NOT ROOTSYS)
-    message                 (FATAL_ERROR " Unfortunately need ROOT in order to build program --- check -DROOTSYS")
-endif                       ()
-
-
 find_file(HAVE_H5_H
     NAMES H5File.hpp
-    HINTS "${HIGHFIVE_DIR}/include/highfive" 
+    HINTS "${HighFive_INCLUDE_DIR}/highfive" 
     )
 if(NOT HAVE_H5_H)
-    message(FATAL_ERROR "Specified HighFive dir not found --- check -DHIGHFIVE_DIR")
+    message(FATAL_ERROR "Specified HighFive dir not found --- check -DHighFive_INCLUDE_DIR")
 endif()
 
 # If all found, add build target
 add_subdirectory        (src)
 
 set(CPACK_PACKAGE_VERSION_MAJOR "0")
-set(CPACK_PACKAGE_VERSION_MINOR "6")
-set(CPACK_PACKAGE_VERSION_PATCH "6")
+set(CPACK_PACKAGE_VERSION_MINOR "0")
+set(CPACK_PACKAGE_VERSION_PATCH "1")
 set(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_SOURCE_PACKAGE_FILE_NAME
   "${CMAKE_PROJECT_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
