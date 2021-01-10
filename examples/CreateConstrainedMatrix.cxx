@@ -68,24 +68,28 @@ int main(int argc, char* argv[])
   bool combined = false;
   bool np = false;
   bool zp = false;
+  bool mcerr = false;
+  bool addext = false;
   
   const struct option longopts[] =
     {
       {"xml", 		required_argument, 	0, 'x'},
       {"tag", 		required_argument, 	0, 't'},
-      {"fakedata", 		required_argument, 	0, 'f'},
+      {"fakedata", 	required_argument, 	0, 'f'},
       {"var", 		required_argument, 	0, 'v'},
-      {"sys",	no_argument, 0, 's'},
-      {"detsys",	no_argument, 0, 'd'},
-      {"combined",	no_argument, 0, 'c'},
-      {"np",	no_argument, 0, 'n'},
-      {"zp",	no_argument, 0, 'z'},
-      {0,			no_argument, 		0,  0},
+      {"sys",	        no_argument, 		0, 's'},
+      {"detsys",	no_argument, 		0, 'd'},
+      {"combined",	no_argument, 		0, 'c'},
+      {"np",	        no_argument, 		0, 'n'},
+      {"zp",	        no_argument, 		0, 'z'},
+      {"mcerr",	        no_argument, 		0, 'm'},
+      {"addext",	no_argument, 		0, 'a'},
+      {0,		no_argument, 		0,  0},
     };
   
   while(iarg != -1)
     {
-      iarg = getopt_long(argc,argv, "x:t:f:v:sdcnz", longopts, &index);
+      iarg = getopt_long(argc,argv, "x:t:f:v:sdcnzma", longopts, &index);
       
       switch(iarg)
 	{
@@ -115,6 +119,12 @@ int main(int argc, char* argv[])
 	  break;
 	case 'z':
 	  zp = true;
+	  break;
+	case 'm':
+	  mcerr = true;
+	  break;
+	case 'a':
+	  addext = true;
 	  break;
 	case '?':
 	case 'h':
@@ -160,7 +170,7 @@ int main(int argc, char* argv[])
     chi_h0.FillDetSysMatrix(Mdetsys0,bkg_spectra);
   }
  
-  std::vector<double> sig_fullvec, bkg_fullvec, sig_collvec, bkg_collvec, sig_errfullvec, bkg_errfullvec, sig_errcollvec, bkg_errcollvec, sig_exterrfullvec, bkg_exterrfullvec, numu_data_vec, numu_vec, delta_numu; 
+  std::vector<double> sig_fullvec, bkg_fullvec, sig_collvec, bkg_collvec, sig_errfullvec, bkg_errfullvec, sig_exterrfullvec, bkg_exterrfullvec, numu_data_vec, numu_vec, delta_numu; 
   sig_spectra.CalcFullVector();
   sig_fullvec = sig_spectra.full_vector;
   bkg_fullvec = bkg_spectra.full_vector;
@@ -182,12 +192,10 @@ int main(int argc, char* argv[])
 
   //mc intrinsic
   sig_spectra.CalcErrorVector();
-  sig_errfullvec = sig_spectra.full_err_vector;
+  sig_errfullvec = sig_spectra.full_error;
   sig_exterrfullvec = sig_spectra.full_ext_err_vector;
-  bkg_errfullvec = bkg_spectra.full_err_vector;
+  bkg_errfullvec = bkg_spectra.full_error;
   bkg_exterrfullvec = bkg_spectra.full_ext_err_vector;
-  sig_errcollvec = sig_spectra.collapsed_err_vector;
-  bkg_errcollvec = bkg_spectra.collapsed_err_vector;
 
   //collapse matrix detsys
   TMatrixD detsyscoll;
@@ -197,6 +205,8 @@ int main(int argc, char* argv[])
   TMatrixD fraccoll_noext;
   TMatrixD corrcoll;
   TMatrixD detsyscoll0;
+  TMatrixD fraccov;
+  TMatrixD corr;
   detsyscoll.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
   fracdetsyscoll.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
   corrdetsyscoll.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
@@ -204,6 +214,8 @@ int main(int argc, char* argv[])
   fraccoll_noext.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
   corrcoll.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
   detsyscoll0.ResizeTo(bkg_spectra.num_bins_total_compressed, bkg_spectra.num_bins_total_compressed);
+  fraccov.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
+  corr.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
   chi_h1.CollapseModes(Mdetsys, detsyscoll);
   chi_h0.CollapseModes(Mdetsys0, detsyscoll0);
 
@@ -309,10 +321,27 @@ int main(int argc, char* argv[])
   //Recalculate cov matrix by adding mc intrinsic error
   TMatrixD collapsed;
   collapsed.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
+   fullcov->Zero();
   TMatrixT<double> fullsig = chi_h1.CalcCovarianceMatrix(fullcov, sig_fullvec, sig_errfullvec, false);  
   //*cov = *cov + detsyscoll;
   chi_h1.CollapseModes(fullsig, collapsed);
-  *cov = collapsed + detsyscoll;
+  if(mcerr){ 
+	std::cout << "ADD MC ERR" << std::endl;
+	tag=tag+"_with_mc_err";
+        for(int i=0; i < detsyscoll.GetNrows(); i++) std::cout << tag << "  Matrix diag mc err, sample: " << sqrt((*cov)(i,i)) << ", " << sqrt(collapsed(i,i)) << ", " << sig_collvec[i] << std::endl; 
+  	*cov = collapsed + detsyscoll;
+  }
+  else *cov = *cov + detsyscoll;
+  //frac cov
+  for(int i=0; i < detsyscoll.GetNrows(); i++){
+  for(int j=0; j < detsyscoll.GetNcols(); j++){
+    fraccov(i,j) = 0.0;
+    if(sig_collvec[i] !=0 && sig_collvec[j] !=0 ) fraccov(i,j) = (*cov)(i,j)/(sig_collvec[i]*sig_collvec[j]);
+    corr(i,j) = 0.0;
+    if((*cov)(i,j) != 0 ) corr(i,j) = (*cov)(i,j)/sqrt((*cov)(i,i)*(*cov)(j,j));
+    if(i==j) std::cout << tag << "  Matrix diag: " << sqrt((*cov)(i,i)) << ", " << sqrt(fraccov(i,j)) << std::endl; 
+  }
+  }
 
   //create the zero bin ext bnb err matrix
   TMatrixD fullext;
@@ -323,6 +352,11 @@ int main(int argc, char* argv[])
   collext.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
   //collapse...
   chi_h1.CollapseModes(fullext, collext);
+  if(addext){
+	std::cout << "ADD ZERO BIN ERROR" << std::endl; 
+	tag=tag+"_with_zerobin_err";
+  }
+  else collext.Zero();
   //for(int i=0; i < sig_spectra.num_bins_total_compressed; i++ ) std::cout << "coll ext err: " << collext(i,i) << std::endl;
 
 
@@ -376,33 +410,33 @@ int main(int argc, char* argv[])
     for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+42]);
     for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+56]);
     //set bin error
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt((*cov)[bin][bin]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+14][bin+14]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt((*cov)[bin+28][bin+28]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+42][bin+42]));
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt((*cov)[bin+56][bin+56]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+14]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin+28]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+42]));
+    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(sig_collvec[bin+56]));
   }else if(np){
     //set bin content
     for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
     for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
     for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
     //set bin error
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt((*cov)[bin][bin]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+14][bin+14]));
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt((*cov)[bin+28][bin+28]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+14]));
+    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(sig_collvec[bin+28]));
   }else if(zp){
     //set bin content
     for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
     for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
     for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
     //set bin error
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt((*cov)[bin][bin]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+14][bin+14]));
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt((*cov)[bin+28][bin+28]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+14]));
+    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(sig_collvec[bin+28]));
   }
 
   if(detsys) tag += "_detsys";
-  cname = tag + "before_constraint_numu";
+  cname = tag + "_before_constraint_numu";
   DrawDataMCAndSyst(cname, h_numu_before, h_numu_before, h_numu_data, "Reconstructed Visible Energy [GeV]", "#nu_{#mu} Selection");
 	
   if(combined){
@@ -525,25 +559,25 @@ int main(int argc, char* argv[])
     for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+3*numu_bins]);
     for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinContent(bin+1,0);
     //set bin content error
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(constnuematrix[bin+0*numu_bins][bin+0*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+1*numu_bins][bin+1*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+0*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+1*numu_bins]));
     for(int bin=0; bin < 14; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(constnuematrix[bin+2*numu_bins][bin+2*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+3*numu_bins][bin+3*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+2*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+3*numu_bins]));
     for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }else if(np){
     for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin+0*numu_bins]);
     for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinContent(bin+1,input_nue_constrained[bin+1*numu_bins]);
     for(int bin=0; bin < 14; bin++ ) h_1eNp_data->SetBinContent(bin+1,0.);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(constnuematrix[bin+0*numu_bins][bin+0*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+1*numu_bins][bin+1*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+0*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+1*numu_bins]));
     for(int bin=0; bin < 14; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
   }else if(zp){
     for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinContent(bin+1,input_nue_constrained[bin+0*numu_bins]);
     for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+1*numu_bins]);
     for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinContent(bin+1,0.);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(constnuematrix[bin+0*numu_bins][bin+0*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+1*numu_bins][bin+1*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+0*numu_bins]));
+    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+1*numu_bins]));
     for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }
  
@@ -647,6 +681,13 @@ int main(int argc, char* argv[])
   (TMatrixD*)corrnuematrix.Write("full_correlation");
   fcovar->Close();
   
+  TFile * fcovar2 = new TFile(Form("unconstrained_%s.SBNcovar.root",tag.c_str()),"recreate");
+  fcovar2->cd();
+  cov->Write("full_covariance");
+  (TMatrixD*)fraccov.Write("frac_covariance");
+  (TMatrixD*)corr.Write("full_correlation");
+  fcovar2->Close();
+
   TFile * fcollext = new TFile(Form("collapsed_zero_ext_bin_%s.SBNcovar.root",tag.c_str()),"recreate");
   fcollext->cd();
   (TMatrixD*)collext.Write("full_covariance");

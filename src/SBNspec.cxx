@@ -266,6 +266,7 @@ int SBNspec::CalcFullVector(){
     for(int i = 1; i < (h.GetSize()-1); ++i){
       full_vector[hoffset + i - 1] = h.GetBinContent(i);
       full_error[hoffset + i - 1] = h.GetBinError(i);
+      std::cout << h.GetName() << "  full vector, full error: " << full_vector[hoffset + i - 1] << ", " << full_error[hoffset + i - 1] << std::endl;
     }
     hoffset += (h.GetSize()-2);
   }
@@ -310,8 +311,6 @@ int SBNspec::CollapseVector(){
 
 int SBNspec::CalcErrorVector(){
 
-	full_err_vector.clear();
-	collapsed_err_vector.clear();
 	full_ext_err_vector.clear();
 
 	int index=0;

@@ -33,6 +33,10 @@ int SBNcls::setMode(int input_mode){
 
 int SBNcls::CalcCLS(int numMC, std::string tag){
 
+
+    chi_h0.ReloadCoreSpectrum(h0,&ext_err_vec);
+    chi_h1.ReloadCoreSpectrum(h1,&ext_err_vec);
+
     if(draw_pseudo_from_collapsed){
         chi_h0.pseudo_from_collapsed = true;
         chi_h1.pseudo_from_collapsed = true;
@@ -57,6 +61,7 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
     chi_h0.InitRandomNumberSeeds(10);
     chi_h1.InitRandomNumberSeeds(10);
 
+
     double central_value_chi = chi_h0.CalcChi(h1);
     double central_value_chi_h1 = chi_h1.CalcChi(h1);
 
@@ -72,7 +77,7 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
         //if(which_sample == 0) h1_results = chi_h0.SamplePoissonVaryInput(h1, numMC, central_value_chi*50);
         //else if(which_sample==1) h1_results = chi_h0.SampleCovarianceVaryInput(h1, numMC, central_value_chi*50);
     }else if (which_mode == 1){
-        h1_results =  chi_h1.Mike_NP(h1, chi_h0, chi_h1, numMC, which_sample,1);
+        h1_results =  chi_h1.Mike_NP(h1, chi_h0, chi_h1, numMC, which_sample,1,ext_err_vec_collapsed);
     }else if (which_mode == 2){
         h1_results =  chi_h1.Mike_NP_fakedata(h1, fakedata, chi_datah1, chi_h0, chi_h1, numMC, which_sample,1);
     }
@@ -91,6 +96,10 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
         }
     }
 
+    double central_value_chi0 = chi_h0.CalcChi(h0);
+    double central_value_chi_h0 = chi_h1.CalcChi(h0);
+
+    std::cout<<"SBNcls::CalcCLS\t|| Central Value Chi is : "<<central_value_chi0<<" and "<<central_value_chi_h0<<" should be 0"<<std::endl;
 
     //Now calculate the pvalues associated with those h1 variations. 
 
@@ -100,7 +109,7 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
         //if(which_sample == 0)     h0_results = chi_h0.SamplePoissonVaryInput(h0, numMC, &pval);
         //else if(which_sample ==1) h0_results = chi_h0.SampleCovarianceVaryInput(h0, numMC, &pval);
     }else if (which_mode==1){
-        h0_results = chi_h0.Mike_NP(h0, chi_h0, chi_h1, numMC,which_sample,0);
+        h0_results = chi_h0.Mike_NP(h0, chi_h0, chi_h1, numMC,which_sample,0,ext_err_vec_collapsed);
     }else if (which_mode==2){
         h0_results = chi_h0.Mike_NP_fakedata(h0, fakedata, chi_datah0, chi_h0, chi_h1, numMC,which_sample,0);
     }

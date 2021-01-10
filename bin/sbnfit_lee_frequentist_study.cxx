@@ -60,9 +60,11 @@ int main(int argc, char* argv[])
     std::string background_file = "EMPTY";
     std::string covariance_file = "EMPTY";
     std::string fakedata_file = "EMPTY";
+    std::string ext_err_file = "EMPTY";
 
     bool bool_flat_det_sys = false;
     bool bool_fill_det_sys = false; //PeLEE updates
+    bool bool_ext_err = false; //PeLEE updates
     double flat_det_sys_percent = 0.0;
 
     bool zero_off_diag = false;
@@ -78,6 +80,7 @@ int main(int argc, char* argv[])
         {"mode", 	    	required_argument,	0,'m'},
         {"background", 	required_argument,	0,'b'},
         {"fakedata", 	required_argument,	0,'d'},
+        {"exterr", 	required_argument,	0,'r'},
         {"tag", 	    required_argument,	0,'t'},
         {"epsilon", required_argument,0,'e'},
         {"cnp",no_argument,0,'a'},
@@ -92,7 +95,7 @@ int main(int argc, char* argv[])
 
     while(iarg != -1)
     {
-        iarg = getopt_long(argc,argv, "m:a:x:n:s:e:b:d:c:f:t:pjkzh", longopts, &index);
+        iarg = getopt_long(argc,argv, "m:a:x:n:s:e:b:d:c:f:r:t:pjkzh", longopts, &index);
 
         switch(iarg)
         {
@@ -120,6 +123,9 @@ int main(int argc, char* argv[])
             case 'd':
                 which_mode = 2;         //PeLEE specific hacks for fakedata
                 fakedata_file = optarg;
+                break;
+            case 'r':
+                ext_err_file = optarg;
                 break;
             case 'f':
                 bool_flat_det_sys = true;
@@ -161,6 +167,7 @@ int main(int argc, char* argv[])
                 std::cout<<"--- Optional arguments: ---"<<std::endl;
                 std::cout<<"\t-j\t--collapse\t\tSample from collapsed rather than full covariance matrix (default false, experimental!)"<<std::endl;
                 std::cout<<"\t-f\t--flat\t\tAdd a flat percent systematic to fractional covariance matrix (all channels) (default false, pass in percent, i.e 5.0 for 5\% experimental)"<<std::endl;
+                std::cout<<"\t-r\t--exterr\t\tAdd zero ext bin error to the stat errors (all channels) (default no additional errors)"<<std::endl;
                 std::cout<<"\t-z\t--zero\t\tZero out all off diagonal elements of the systematics covariance matrix (default false, experimental!)"<<std::endl;
                 std::cout<<"\t-e\t--epsilon\t\tEpsilon tolerance by which to add back to diagonal of covariance matrix if determinant is 0 (default 1e-12)"<<std::endl;
                 std::cout<<"\t-n\t--number\t\tNumber of MC events for frequentist studies (default 100k)"<<std::endl;
@@ -186,7 +193,11 @@ int main(int argc, char* argv[])
         stats_only = true;
         sample_from_covariance = false;
     }
-
+    if(ext_err_file =="EMPTY"){
+        std::cout<<"Note! No ext bnb error covariance matrix root file with the  `--exterr  XX.SBNcovar.root` or `-r XX.SBNcovar.root`. was passed, running without stats error. "<<std::endl;
+        bool_ext_err = false;
+    }
+    else bool_ext_err = true;
 
     std::cout<<"Loading signal file : "<<signal_file<<" with xml "<<xml<<std::endl;
     SBNspec sig(signal_file,xml);
@@ -198,13 +209,40 @@ int main(int argc, char* argv[])
     std::cout << "loading frac cov matrix" << std::endl;
     TFile * fsys;
     TMatrixD * cov;
-
+    TFile * fexterr;
+    TMatrixD * exterr;
     
     if(!stats_only){
         fsys = new TFile(covariance_file.c_str(),"read");
         cov = (TMatrixD*)fsys->Get("frac_covariance");
     }
     std::cout << "found frac cov matrix: " << cov << std::endl;
+
+    //ext error
+    std::vector<double> coll_ext_err_vec, frac_coll_ext_err_vec;
+    std::vector<double> ext_err_vec, frac_ext_err_vec;
+    coll_ext_err_vec.resize(bkg.num_bins_total_compressed);
+    frac_coll_ext_err_vec.resize(bkg.num_bins_total_compressed);
+    ext_err_vec.resize(bkg.num_bins_total);
+    frac_ext_err_vec.resize(bkg.num_bins_total);
+    std::fill(ext_err_vec.begin(), ext_err_vec.end(), 0.0);
+
+    bkg.CalcFullVector();
+    if(bool_ext_err){
+       fexterr = new TFile(ext_err_file.c_str(),"read");
+       exterr = (TMatrixD*)fexterr->Get("full_covariance");
+       //create SBNchi object for the ext error so that it will be consistent when collapsed
+       TMatrixD collext;
+       collext.ResizeTo(bkg.num_bins_total_compressed, bkg.num_bins_total_compressed);
+       SBNchi chiext(bkg,exterr);
+       chiext.CollapseModes(*exterr, collext);
+       for( int i=0; i < bkg.num_bins_total; i++ ){ ext_err_vec[i] = sqrt((*exterr)(i,i)); frac_ext_err_vec[i] = sqrt((*exterr)(i,i))/bkg.full_vector[i]; std::cout << "err: " << ext_err_vec[i] << std::endl; }
+       //if(!stats_only){for( int i=0; i < bkg.num_bins_total; i++ ){ (*cov)(i,i) += frac_ext_err_vec[i]; }}
+       bkg.CollapseVector();
+       for( int i=0; i< collext.GetNcols(); i++ ){ coll_ext_err_vec[i] = sqrt(collext(i,i)); frac_coll_ext_err_vec[i] = sqrt(collext(i,i)/bkg.collapsed_vector[i]); std::cout << "err coll: " << coll_ext_err_vec[i] << std::endl; }
+    }
+    std::cout << "found ext error matrix: " << exterr << std::endl;
+
 
     //PeLEE hacks for incorporating fake data
     TFile * fdata;
@@ -295,16 +333,19 @@ int main(int argc, char* argv[])
     }
     
     if(!stats_only){
-        SBNcls cls_factory(&bkg, &sig, fakedata, *cov);
+        SBNcls cls_factory(&bkg, &sig, fakedata, *cov, ext_err_vec, coll_ext_err_vec);
         cls_factory.SetTolerance(epsilon);
+        //cls_factory.SetAdditionalErrors(ext_err_vec);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
         if(sample_from_covariance) cls_factory.SetSampleCovariance();
         cls_factory.setMode(which_mode);
         if(tester){cls_factory.runConstraintTest();return 0;}
         cls_factory.CalcCLS(num_MC_events, tag);
     }else{
-        SBNcls cls_factory(&bkg, &sig, fakedata);
+        SBNcls cls_factory(&bkg, &sig, fakedata, ext_err_vec, coll_ext_err_vec);
         cls_factory.SetTolerance(epsilon);
+        //std::cout << "SET ADDITIONAL ERRORS" << std::endl;
+        //cls_factory.SetAdditionalErrors(ext_err_vec);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
         cls_factory.setMode(which_mode);
         if(tester){cls_factory.runConstraintTest();return 0;}
