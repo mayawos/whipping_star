@@ -265,34 +265,38 @@ struct Block : public BlockBase<T>
 	std::cout << "this->core_mins(" << i << "), this->core_maxs(" << i << ") = " << this->core_mins(i) << ", " << this->core_maxs(i) << std::endl;
       }
     
+    std::cout << "core_mins pureeigen: " << this->core_mins << std::endl;
+    std::cout << "core_maxs pureeigen: " << this->core_maxs << std::endl;
     this->mfa = new mfa::MFA<T>(this->dom_dim, ndom_pts, this->domain);
     
+    //for (int m = 0; m < nvars; m++) std::cout << "out_pt " << m << " = " << out_pt(m) << std::endl;
+    
     // normalize the science variable to the same extent as max of geometry
-    if (rescale)
+    /*if (rescale)
       {
-        double extent[59];
-        extent[0] = this->bounds_maxs(0) - this->bounds_mins(0);
-        extent[1] = this->bounds_maxs(1) - this->bounds_mins(1);
-        for (int m = 0; m < nvars; m++) {
-          extent[2+m] = this->bounds_maxs(2+m) - this->bounds_mins(2+m);
-        }
-        std::cout << "extent[0], extent[1] = " << extent[0] << ", " << extent[1] << std::endl;
-        double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
-        for (size_t i = 0; i < (size_t)this->domain.rows(); i++){
-          for (int m = 0; m < nvars; m++) {
-            cerr << "\n * rescaling values dividing by " << extent[2+m] *scale << " *\n" << endl;
-            this->domain(i, 2+m) = this->domain(i, 2+m) / extent[2+m] * scale;
-            //std::cout << "this->domain("<<i<<", "<<2+m<<" ) = " << this->domain(i, 2+m) << std::endl;
-          }
-        }
+      double extent[59];
+      extent[0] = this->bounds_maxs(0) - this->bounds_mins(0);
+      extent[1] = this->bounds_maxs(1) - this->bounds_mins(1);
+      for (int m = 0; m < nvars; m++) {
+      extent[2+m] = this->bounds_maxs(2+m) - this->bounds_mins(2+m);
       }
+      std::cout << "extent[0], extent[1] = " << extent[0] << ", " << extent[1] << std::endl;
+      double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
+      for (size_t i = 0; i < (size_t)this->domain.rows(); i++){
+      for (int m = 0; m < nvars; m++) {
+      cerr << "\n * rescaling values dividing by " << extent[2+m] *scale << " *\n" << endl;
+      this->domain(i, 2+m) = this->domain(i, 2+m) / extent[2+m] * scale;
+      //std::cout << "this->domain("<<i<<", "<<2+m<<" ) = " << this->domain(i, 2+m) << std::endl;
+      }
+      }
+      }*/
     
     // debug
     cerr << "domain extent:\n min\n" << this->bounds_mins << "\nmax\n" << this->bounds_maxs << endl;
   }
   
 };
-
+  
 typedef std::array<double, 3> GridPoint;
 
 class GridPoints {
@@ -470,7 +474,7 @@ inline void makeSignalModel(diy::Master* master, SignalGenerator signal, int nbi
   int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
   int    pt_dim       = nbins+dom_dim;        // dimension of input points
   int    geom_degree  = 1;                    // degree for geometry (same for all dims)
-  int    vars_degree  = 10;                    // degree for science variables (same for all dims)
+  int    vars_degree  = 40;                    // degree for science variables (same for all dims)
   int    geom_nctrl   = geom_degree + 1;      // input number of control points for geometry (same for all dims)
   int    vars_nctrl   = vars_degree + 1;       	            // input number of control points for geometry (same for all dims)
   int    weighted     = 1;                    // input number of control points for all science variables (same for all dims)
@@ -844,10 +848,10 @@ inline Eigen::MatrixXd updateInvCov(Eigen::MatrixXd const & covmat, Eigen::Vecto
     return invertMatrixEigen3(out);
 }
 
-//follow-up: add boundary condition to keep the point inside the box
+//need to figure out the proper way to propagate the MFA model
 namespace cppoptlib {
   template<typename T>
-  class LLR : public Problem<T> {
+  class LLR : public BoundedProblem<T> {
   private:
     Block<real_t>&     b;            //block encoded with MFA model
     diy::Master::ProxyWithLink const& cp;
@@ -865,14 +869,15 @@ namespace cppoptlib {
 			  M(M_) 	
     {}
     //TO DO: Figure out the correct way to pass the MFA 
-    using typename Problem<T>::TVector;
+    using typename BoundedProblem<T>::TVector;
     T value(const TVector &x) {
       //to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
+
       // evaluate point
       TVector diff(data.size()); //data size == nvars
       VectorX<T> param(b.dom_dim);
-      for(int i=0; i<2; i++) 
-           param(i) = x[i]/25.;
+      for(int i=0; i<2; i++) param(i) = x[i]/25.;
+      //param.setZero();
       //parameters of values
       VectorX<real_t> out_pt(b.pt_dim);
       // parameters of input point to evaluate
@@ -888,35 +893,33 @@ namespace cppoptlib {
       int pt_dim  = b.pt_dim;
       for (size_t i = 0; i < (size_t)b.dom_dim; i++){
 	in_param(i) = param(i)/scale;
+        std::cout << in_param(i) << std::endl;
       }
+      ///std::cout << "...decode point per block..." << p+2 << std::endl;
       b.decode_point(cp, in_param, out_pt);
       for(int p=0; p<data.size(); p++){
 	diff[p] = data[p] - out_pt(p+2);
+	//std::cerr << "p, diff, data[p], out_pt(p+2) = " << p << ", " << diff[p] << ", " << data[p] << ", " << out_pt(p+2) << std::endl;
       }
       std::cout << out_pt.transpose() << std::endl;
       return (diff.transpose())*M*(diff);
     }
     
-    //stopped early due to returning point outside the box
-    //will come back to this once we solved the issue with the finite-difference gradient
-
     /*void gradient(const TVector &x, TVector &grad) {
      
       TVector left(data.size()); //data size == nvars
       TVector right(data.size()); //data size == nvars
-      VectorX<T> param(b.dom_dim);
-      for(int i=0; i<2; i++){ param[i] = x(i); }
 
-      //scale to 1
+      VectorX<T> param(b.dom_dim);
+      for(int i=0; i<2; i++) param[i] = x(i);
+
+      //scale to 0.-1.
       // normalize the science variable to the same extent as max of geometry
       double extent[3];
       extent[0] = b.bounds_maxs(0) - b.bounds_mins(0);
       extent[1] = b.bounds_maxs(1) - b.bounds_mins(1);
       extent[2] = b.bounds_maxs(2) - b.bounds_mins(2);
-      double scale = extent[0] >i= extent[1] ? extent[0] : extent[1];
-      //std::cerr << "\n * rescaling values dividing by " << extent[2] * scale << " *\n" << std::endl;
-      for (size_t i = 0; i < (size_t)b.domain.rows(); i++)
-	b.domain(i, 2) = b.domain(i, 2) / extent[2] * scale;
+      double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
       int dom_dim = b.dom_dim;
       int pt_dim  = b.pt_dim;
       VectorX<real_t> out_pt(pt_dim);
@@ -924,10 +927,7 @@ namespace cppoptlib {
       // parameters of input point to evaluate
       VectorX<real_t> in_param(dom_dim);
       for (auto i = 0; i < dom_dim; i++){
-	in_param(i) = param[i];
-      }
-      for (auto i = 0; i < dom_dim; i++){
-	in_param(i) = param[i];
+	in_param(i) = param[i]/scale;
       }
       for (auto i = 0; i < dom_dim; i++){
 	b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
@@ -936,7 +936,7 @@ namespace cppoptlib {
       //grad
       //scale the derivation u,v back to x,y
       for(int p=0; p<data.size(); p++){
-	left[p] = 2.0*out_pt_deriv(p+2);
+	left[p] = 2.0*scale*out_pt_deriv(p+2);
 	right[p] = (out_pt(p+2)-data[p]);
       }
 
@@ -1001,7 +1001,7 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
 inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const & v_coll,
 			Block<real_t>* b, //replace with block that has encoded MFA model
 			diy::Master::ProxyWithLink const& cp,
-			SignalGenerator signal,//root input
+			SignalGenerator signal,
 			int i_grid,
 			Eigen::MatrixXd const & INVCOV,
 			Eigen::MatrixXd const & covmat,
@@ -1020,22 +1020,26 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
   float chi_min = FLT_MAX;
   //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan previously
   //implement optimizer
+  const size_t DIM = 2;
   typedef double T;
   //using typename cppoptlib::Problem<T>::TVector;
-  //want to pass the mfa model here which is already encode in the block
+  //pass the mfa model here which is already encode in the block
   typedef LLR<T> llr;
+  typedef typename llr::TVector TVector;
   llr f(*b, cp, fake_data, INVCOV);
-  cppoptlib::LbfgsSolver<llr> solver;
-  //maybe add boundary here?
+  f.setLowerBound(Vector<double>::Zero(DIM));
+  f.setUpperBound(TVector::Ones(DIM) * 25);
+  cppoptlib::LbfgsbSolver<llr> solver;
   //minimize the function
   Eigen::VectorXd x(2);
   //decode the grid point in 2d
   int gridx_index = i_grid%26; 
   int gridy_index = i_grid/26;
+  std::cout << "x, y = " << gridx_index << ", " << gridy_index << std::endl;
   x(0) = gridx_index;
   x(1) = gridy_index;
- 
-  //validate the input before passing to minimizer
+  solver.minimize(f,x);
+  
   VectorX<T> param(b->dom_dim);
   //parameters of values
   VectorX<real_t> out_pt(b->pt_dim);
@@ -1053,19 +1057,14 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
   for (size_t i = 0; i < (size_t)b->dom_dim; i++){
     in_param(i) = x(i)/scale;
   }
+  ///std::cout << "...decode point per block..." << p+2 << std::endl;
   b->decode_point(cp, in_param, out_pt);
-  for( int i=0; i < out_pt.size(); i++ ) std::cout << "variation " << i << " = " << 1.0 - (signal.predict2D(i_grid, true, gridx_index, gridy_index)[i]/out_pt(i+2)) << std::endl; 
-
-  //minimize!
-  solver.minimize(f,x);
-
+  for( int i=0; i < out_pt.size()-2; i++ ) std::cout << "diff " << i << " = " << signal.predict2D(i_grid, true, gridx_index, gridy_index)[i]/out_pt(i+2) << std::endl; 
   //store the result here
   global_chi_min = f(x); //the global minimum chi2
-  best_grid_point = x(0)*x(1); //point in grid which gives the minimum chi2 -- going back into flat vector to save the values to hdf5
-  std::cout << "=======================" << std::endl;
-  std::cout << "  best grid point = " << best_grid_point << std::endl;
-  std::cout << "  global_chi_min  = " << global_chi_min  << std::endl;
-  std::cout << "=======================" << std::endl;
+  best_grid_point = x(0)+x(1); //point in grid which gives the minimum chi2
+  std::cout << "best grid point = " << x(0) << ", " << x(1) << std::endl;
+  std::cout << "global_chi_min = " << global_chi_min  << std::endl;
   //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
   float this_chi = calcChi(fake_data, v_coll, invcov);
   //assert that fakedataC should have the same dimension as collspec
