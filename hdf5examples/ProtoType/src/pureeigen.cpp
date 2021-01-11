@@ -1027,7 +1027,7 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
   typedef LLR<T> llr;
   typedef typename llr::TVector TVector;
   llr f(*b, cp, fake_data, INVCOV);
-  f.setLowerBound(Vector<double>::Zero(DIM));
+  f.setLowerBound(TVector::Ones(DIM) * 0);
   f.setUpperBound(TVector::Ones(DIM) * 25);
   cppoptlib::LbfgsbSolver<llr> solver;
   //minimize the function
