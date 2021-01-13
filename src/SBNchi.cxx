@@ -58,32 +58,24 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string in
 
 
     pseudo_from_collapsed = false;
-    std::cout << "--------" << std::endl;
     matrix_collapsed.ResizeTo(num_bins_total_compressed, num_bins_total_compressed);
     matrix_systematics.ResizeTo(num_bins_total, num_bins_total);
     matrix_fractional_covariance.ResizeTo(num_bins_total, num_bins_total);
 
     TMatrixD m = matrix_systematicsin;
-    std::cout << "matrix m = " << m.GetNcols() << ", " << m.GetNrows() << std::endl;
-    std::cout << "used_bins = " << used_bins.size() << std::endl;
     for (int i = 0; i < used_bins.size(); i++){
-        std::cout << "..1.." << std::endl;
         TMatrixDColumn(m,i) = TMatrixDColumn(m,used_bins.at(i));
-        std::cout << "..2.." << std::endl;
         m.ResizeTo(used_bins.size(),used_bins.size());
-        std::cout << "..3.." << std::endl;
     }
 
     m_cmin = -999;
     m_cmax = -999;
 
-    std::cout << "matrix_fractional_covariance, m = " << matrix_fractional_covariance.GetNcols() << ", " << m.GetNcols() << std::endl;
     matrix_fractional_covariance = m;
     matrix_systematics.Zero();
     max_sample_chi_val =150.0;
     m_tolerance = 1e-8;
 
-    std::cout << "--------" << std::endl;
     this->InitRandomNumberSeeds(random_seed);
     this->ReloadCoreSpectrum(&core_spectrum);
 }

@@ -321,26 +321,33 @@ int main(int argc, char* argv[])
   for(int bin=0; bin < numu_bins; bin++) numu_data_vec.push_back(h_numu_data->GetBinContent(bin+1)); 
   for(int bin=0; bin < numu_bins; bin++ ) numu_vec.push_back(sig_collvec[nue_bins+bin]);
   for(int bin=0; bin < numu_bins; bin++ ) delta_numu.push_back(numu_data_vec[bin]-numu_vec[bin]);
-  for(int bin=0; bin < numu_bins; bin++ ) std::cout << "numu data, numu mc, delta_numu = " << numu_data_vec[bin] << ", " << numu_vec[bin] << ", " << delta_numu[bin] << std::endl; 
+  //for(int bin=0; bin < numu_bins; bin++ ) std::cout << "numu data, numu mc, delta_numu = " << numu_data_vec[bin] << ", " << numu_vec[bin] << ", " << delta_numu[bin] << std::endl; 
   
   //Load up our covariance matricies we calculated in example1 (we could also load up single variation ones)
   TFile * fsys = new TFile(Form("../bin/%s.SBNcovar.root",tag.c_str()),"read");
   TMatrixD *cov = (TMatrixD*)fsys->Get("collapsed_covariance");
-  TMatrixD *fullcov = (TMatrixD*)fsys->Get("full_covariance");
+  TMatrixD *fullfrac = (TMatrixD*)fsys->Get("frac_covariance");
   TMatrixD *cov0 = (TMatrixD*)cov->Clone("coll_covar");
+
   //Recalculate cov matrix by adding mc intrinsic error
   TMatrixD collapsed;
+  //TMatrixD (*cov);
   collapsed.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
-  fullcov->Zero();
-  TMatrixT<double> fullsig = chi_h1.CalcCovarianceMatrix(fullcov, sig_fullvec, sig_errfullvec, false);  
+  //(*cov).ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
+  TMatrixT<double> fullsig = chi_h1.CalcCovarianceMatrix(fullfrac, sig_fullvec, sig_errfullvec, false);  
   chi_h1.CollapseModes(fullsig, collapsed);
   collapsed.Print();
   if(mcerr){ 
 	std::cout << "ADD MC ERR" << std::endl;
 	tag=tag+"_with_mc_err";
-        for(int i=0; i < detsyscoll.GetNrows(); i++) std::cout << tag << "  Matrix diag mc err, sample: " << sqrt((*cov)(i,i)) << ", " << collapsed(i,i) << ", " << sig_collvec[i] << std::endl; 
-  	*cov += collapsed;
+        for(int i=0; i < detsyscoll.GetNrows(); i++){ 
+	//std::cout << tag << "  Matrix diag mc err: " << sqrt((*cov)(i,i)) << " ==> " << sqrt(collapsed(i,i)) << std::endl; 
+        (*cov)(i,i) = collapsed(i,i);
+        //std::cout << " Matrix diag = " << sqrt((*cov)(i,i)) << std::endl;
+	}
+        
   }
+
   //create the zero bin ext bnb err matrix
   TMatrixD fullext;
   fullext.ResizeTo(sig_spectra.num_bins_total, sig_spectra.num_bins_total);
@@ -354,9 +361,21 @@ int main(int argc, char* argv[])
 	std::cout << "ADD ZERO BIN ERROR" << std::endl; 
 	tag=tag+"_with_zerobin_err";
         //add to full covariance matrix (collapsed)
-        *cov += collext;
+        for(int i=0; i < detsyscoll.GetNrows(); i++){
+        //std::cout << tag << " adding zero bin error Matrix diag: " << sqrt(((*cov))(i,i)) << " + " << sqrt(collext(i,i)) << " = "; 
+        (*cov)(i,i) += collext(i,i);
+        //std::cout << sqrt((*cov)(i,i)) << std::endl;
+        }
   }
-  if(detsys)  *cov += detsyscoll;
+
+  if(detsys){
+    for(int i=0; i < detsyscoll.GetNrows(); i++){
+    //std::cout << tag << " adding detsys Matrix diag: " << sqrt(((*cov))(i,i)) << " + " << sqrt(detsyscoll(i,i)) << " = ";   
+    (*cov)(i,i) += detsyscoll(i,i);
+    //std::cout << sqrt((*cov)(i,i)) << std::endl;
+    }
+  }
+
   //frac cov
   for(int i=0; i < detsyscoll.GetNrows(); i++){
   for(int j=0; j < detsyscoll.GetNcols(); j++){
@@ -364,14 +383,12 @@ int main(int argc, char* argv[])
     if(sig_collvec[i] !=0 && sig_collvec[j] !=0 ) fraccov(i,j) = (*cov)(i,j)/(sig_collvec[i]*sig_collvec[j]);
     corr(i,j) = 0.0;
     if((*cov)(i,j) != 0 ) corr(i,j) = (*cov)(i,j)/sqrt((*cov)(i,i)*(*cov)(j,j));
-    if(i==j) std::cout << tag << "  Matrix diag: " << sqrt((*cov)(i,i)) << ", " << sqrt(fraccov(i,j)) << std::endl; 
   }
   }
 
-  if(!addext) collext.Zero();
-  if(!mcerr) collapsed.Zero();
+  //if(!addext) collext.Zero();
+  //if(!mcerr) collapsed.Zero();
 
-  for(int i=0; i < sig_spectra.num_bins_total_compressed; i++ ){ collapsed(i,i) += collext(i,i); std::cout << "coll ext err: " << collext(i,i) << std::endl; }
 
   //calculate cov matrix before constraint
   //frac cov
@@ -576,7 +593,6 @@ int main(int argc, char* argv[])
   h_1e0p_bg->Reset();
   h_1e0p_data->Reset();
  
-  for(int b=0; b < collapsed.GetNcols(); b++ ) std::cout << "collapsed, sqrt = " << collapsed[b][b] << ", " << sqrt(collapsed[b][b]) << std::endl; 
   if(combined){
     //set bin content
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin]);
@@ -590,7 +606,7 @@ int main(int argc, char* argv[])
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+np_bins][bin+np_bins]));
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(constnuematrix[bin+2*np_bins][bin+2*np_bins]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+2*np_bins+zp_bins][2*np_bins+zp_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+2*np_bins+zp_bins][bin+2*np_bins+zp_bins]));
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }else if(np){
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin]);
@@ -608,19 +624,6 @@ int main(int argc, char* argv[])
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }
  
-  /*if(combined){ 
-    for(int bin=0; bin < 14; bin++ ){ 
-      std::cout << "@@ before constraint " << tag << std::endl;
-      std::cout << "@@ 1eNp lee, nue, ratio: " <<  h_1eNp_lee_before->GetBinContent(bin+1) << ", " << h_1eNp_bg_before->GetBinContent(bin+1) << ", " << -h_1eNp_lee_before->GetBinContent(bin+1)+h_1eNp_bg_before->GetBinContent(bin+1) << std::endl;     
-      std::cout << "@@ 1e0p lee, nue, ratio: " <<  h_1e0p_lee_before->GetBinContent(bin+1) << ", " << h_1e0p_bg_before->GetBinContent(bin+1) << ", " << h_1e0p_lee_before->GetBinContent(bin+1)/h_1e0p_bg_before->GetBinContent(bin+1) << std::endl; 
-    }
-    for(int bin=0; bin < 14; bin++ ){ 
-      std::cout << "@@ after constraint " << tag << std::endl;
-      std::cout << "@@ 1eNp lee, nue, ratio: " <<  h_1eNp_lee->GetBinContent(bin+1) << ", " << h_1eNp_bg->GetBinContent(bin+1) << ", " << -h_1eNp_lee->GetBinContent(bin+1)+h_1eNp_bg->GetBinContent(bin+1) << std::endl; 
-      std::cout << "@@ 1e0p lee, nue, ratio: " <<  h_1e0p_lee->GetBinContent(bin+1) << ", " << h_1e0p_bg->GetBinContent(bin+1) << ", " << h_1e0p_lee->GetBinContent(bin+1)/h_1e0p_bg->GetBinContent(bin+1) << std::endl;
-    }
-  }*/
-
   //set bin content error
   if(combined){
     //nue before constraint
@@ -753,6 +756,7 @@ void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::str
 
   for( int bin = 1; bin < tmpsys->GetNbinsX()+1; bin++){
     tmpsys->SetBinContent(bin,1.0);
+    std::cout << "tmpMC2->GetBinError(bin), tmpMC2->GetBinContent(bin) = " << tmpMC2->GetBinError(bin) << ", " << tmpMC2->GetBinContent(bin) << std::endl;
     tmpsys->SetBinError(bin,tmpMC2->GetBinError(bin)/tmpMC2->GetBinContent(bin));
     if(verbose) std::cout << "tempSys MC2 " << tmpsys->GetBinError(bin) << std::endl;
     tmpsys2->SetBinContent(bin,1.0);
@@ -972,6 +976,8 @@ void plot_one(TMatrixD matrix, std::vector<double> spectrum, std::vector<std::st
     h2_full.GetXaxis()->SetTitle("Global Bin Number");
     h2_full.GetYaxis()->SetTitle(" ");
     h2_full.GetYaxis()->SetLabelSize(0);
+    if( tag.find("frac") != std::string::npos ) h2_full.SetMaximum(1.0);
+    if( tag.find("frac") != std::string::npos ) h2_full.SetMinimum(0.0);
 
     c_full->SetFrameFillColor(kWhite);
     c_full->SetFillColor(kWhite);
