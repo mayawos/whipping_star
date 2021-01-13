@@ -41,7 +41,7 @@ class SBNcls{
 
 	public:
 
-	SBNcls(SBNspec *inh0, SBNspec * inh1, std::vector<float> infakedata, TMatrixD matin, std::vector<double> _ext_err_vec, std::vector<double> _ext_err_vec_collapsed) : h0(inh0), h1(inh1), fakedata(infakedata), covariance_matrix(matin), ext_err_vec(_ext_err_vec), ext_err_vec_collapsed(_ext_err_vec_collapsed), chi_h0(*inh0, matin),chi_h1(*inh1,matin){
+	SBNcls(SBNspec *inh0, SBNspec * inh1, std::vector<float> infakedata, TMatrixD matin) : h0(inh0), h1(inh1), fakedata(infakedata), covariance_matrix(matin), chi_h0(*inh0, matin),chi_h1(*inh1,matin){
 	which_sample = 0; //default Poisson
         which_mode = 1; //default delta chi
         use_CNP=false;
@@ -50,7 +50,7 @@ class SBNcls{
         draw_pseudo_from_collapsed = false;
         m_tolerance = 1e-12;
 	}
-	SBNcls(SBNspec *inh0, SBNspec * inh1, std::vector<float> infakedata, std::vector<double> _ext_err_vec, std::vector<double> _ext_err_vec_collapsed) : h0(inh0), h1(inh1), fakedata(infakedata),  ext_err_vec(_ext_err_vec), ext_err_vec_collapsed(_ext_err_vec_collapsed), chi_h0(*inh0),chi_h1(*inh1){
+	SBNcls(SBNspec *inh0, SBNspec * inh1, std::vector<float> infakedata) : h0(inh0), h1(inh1), fakedata(infakedata), chi_h0(*inh0),chi_h1(*inh1){
         which_sample = 0; //default Poisson
         which_mode = 1; //default delta chi
         use_CNP = false;
@@ -80,8 +80,6 @@ class SBNcls{
 	bool draw_pseudo_from_collapsed;
 
         std::vector<float> fakedata;
-        std::vector<double> ext_err_vec;
-        std::vector<double> ext_err_vec_collapsed;
         /****************** Member Functions *************/
     int SetTolerance(double epsilon){
         m_tolerance = epsilon;

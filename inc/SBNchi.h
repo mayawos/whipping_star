@@ -120,9 +120,8 @@ namespace sbn{
             int plot_one(TMatrixD matrix, std::string tag, TFile *fin,bool,bool,bool);
 
 
-            //int ReloadCoreSpectrum(SBNspec *bkgin);
-            int ReloadCoreSpectrum(SBNspec *bkgin, std::vector<double>* ext_err_vector = NULL);
-            std::vector<double> m_ext_err_vec;
+            int ReloadCoreSpectrum(SBNspec *bkgin);
+
             //load up systematic covariabnce matrix from a rootfile, location in xml
             //These are pretty obsolete.
             TMatrixT<double> FillSystematicsFromXML(std::string, std::string);
@@ -130,7 +129,7 @@ namespace sbn{
 
             void FakeFillMatrix(TMatrixT <double>&  M);
             //void FillStatsMatrix(TMatrixT <double>&  M, std::vector<double> diag, std::vector<double> add_stats_err);
-            void FillStatsMatrix(TMatrixT <double>&  M, std::vector<double> diag, std::vector<double> ext_err_vec);
+            void FillStatsMatrix(TMatrixT <double>&  M, std::vector<double> diag);
 
             // These are the powerhouse of of the SBNchi, the ability to collapse any number of modes,detectors,channels and subchannels down to a physically observable subSet
             // layer 1 is the cheif bit, taking each detector and collapsing the subchannels
@@ -184,13 +183,11 @@ namespace sbn{
 
             float PoissonLogLiklihood(float * h0_corein, float *collapsed);
             float CalcChi_CNP(float * pred, float* data);
-            float CalcChi_CNP(float * pred, float* data, std::vector<double> ext_err_vec);
             double CalcChi(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& data);
 
             std::vector<std::vector<double >> TMatrixDToVector(TMatrixT <double> McI);
 
             double setTolerance(double ep){m_tolerance = ep;};
-            std::vector<double> setAdditionalErrors(std::vector<double> ext_err_vec){ std::cout << "SBNchi.h -- ext_err_vec size = " << ext_err_vec.size() << std::endl; m_add_stats_err = ext_err_vec; };
 
             //Cholosky related
             int PerformCholoskyDecomposition(SBNspec *specin);
@@ -208,7 +205,7 @@ namespace sbn{
 
 
 
-            std::vector<CLSresult> Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample,int id, std::vector<double> ext_err_vec);
+            std::vector<CLSresult> Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample,int id);
             TH1D SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, std::vector<double> *chival,int which_sample);
             TH1D SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, double,int which_sample);
 

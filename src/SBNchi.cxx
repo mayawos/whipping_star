@@ -48,7 +48,7 @@ std::vector<TMatrixT<double>> splitNormShape(TMatrixT<double> & Min,std::vector<
  * ********************************************/
 
 SBNchi::SBNchi(std::string xml) : SBNconfig(xml,false){};
-SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNchi(in,matrix_systematicsin,false){}
+SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNchi(in,matrix_systematicsin,true){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, bool is_verbose) : SBNchi(in,matrix_systematicsin,in.xmlname, is_verbose){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose) : SBNchi(in, matrix_systematicsin, inxml,  is_verbose,-1){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed) : SBNconfig(inxml, is_verbose), core_spectrum(in){
@@ -58,24 +58,32 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string in
 
 
     pseudo_from_collapsed = false;
+    std::cout << "--------" << std::endl;
     matrix_collapsed.ResizeTo(num_bins_total_compressed, num_bins_total_compressed);
     matrix_systematics.ResizeTo(num_bins_total, num_bins_total);
     matrix_fractional_covariance.ResizeTo(num_bins_total, num_bins_total);
 
     TMatrixD m = matrix_systematicsin;
+    std::cout << "matrix m = " << m.GetNcols() << ", " << m.GetNrows() << std::endl;
+    std::cout << "used_bins = " << used_bins.size() << std::endl;
     for (int i = 0; i < used_bins.size(); i++){
+        std::cout << "..1.." << std::endl;
         TMatrixDColumn(m,i) = TMatrixDColumn(m,used_bins.at(i));
-        m.ResizeTo(used_bins.size(),matrix_systematicsin.GetNcols());
+        std::cout << "..2.." << std::endl;
+        m.ResizeTo(used_bins.size(),used_bins.size());
+        std::cout << "..3.." << std::endl;
     }
 
     m_cmin = -999;
     m_cmax = -999;
 
+    std::cout << "matrix_fractional_covariance, m = " << matrix_fractional_covariance.GetNcols() << ", " << m.GetNcols() << std::endl;
     matrix_fractional_covariance = m;
     matrix_systematics.Zero();
     max_sample_chi_val =150.0;
-    m_tolerance = 1e-7;
+    m_tolerance = 1e-8;
 
+    std::cout << "--------" << std::endl;
     this->InitRandomNumberSeeds(random_seed);
     this->ReloadCoreSpectrum(&core_spectrum);
 }
@@ -179,29 +187,8 @@ void SBNchi::InitRandomNumberSeeds(double seed){
 
 }
 
-int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin, std::vector<double>* ext_err_vector){
+int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
     otag = "SBNchi::ReloadCoreSpectrum\t|| ";
-    std::cout << "ReloadCore" << std::endl;
-    std::vector<double> ext_err_vec;
-    ext_err_vec.resize(bkgin->num_bins_total);
-    if(!ext_err_vector){
-      std::cout << "emptying err ext" << std::endl;
-      std::fill(ext_err_vec.begin(), ext_err_vec.end(), 0.0);
-      std::cout << "emptying err ext" << std::endl;
-    }
-    else{ 
-      for(int i=0; i < ext_err_vector->size(); i++ ){ 
-	ext_err_vec.at(i) = ext_err_vector->at(i);
-	m_ext_err_vec.push_back(ext_err_vector->at(i));
-        std::cout << "ext_err_vec.at(i) = " << ext_err_vec.at(i) << std::endl;
-      }
-    }
-
-    if(m_ext_err_vec.size() != 0 ){
-      for(int i=0; i < m_ext_err_vec.size(); i++ ){ 
-         ext_err_vec.at(i) = m_ext_err_vec.at(i);
-      }
-    }
 
     bool is_fractional = true;
     cholosky_performed = false;
@@ -236,7 +223,9 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin, std::vector<double>* ext_err_vect
                     matrix_systematics(i,j) = 0;
                 else
                     matrix_systematics(i,j) = matrix_systematics(i,j)*core_spectrum.full_vector.at(i)*core_spectrum.full_vector.at(j);
-                //if(i==j) matrix_systematics(i,j) += pow(core_spectrum.full_error[i],2);
+                    //if(i==j) std::cout << "1 mc err, mc stats err  =  " << matrix_systematics(i,j) << ", " << pow(core_spectrum.full_error[i],2) << std::endl;
+                    //if(i==j) matrix_systematics(i,j) += pow(core_spectrum.full_error[i],2); //we are including the MC intrinsic error in the constraint so commenting this out for now
+                    //if(i==j) std::cout << "2 mc err, mc stats err  =  " << matrix_systematics(i,j) << ", " << pow(core_spectrum.full_error[i],2) << std::endl;
             }
         }
     }
@@ -244,9 +233,8 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin, std::vector<double>* ext_err_vect
     if(is_verbose)std::cout<<otag<<"Filling stats into cov matrix"<<std::endl;
     // Fill stats from the back ground vector
     TMatrixT <double> Mstat(num_bins_total, num_bins_total);
-    //Mstat.Zero();
-    //if(add_stats_err)FillStatsMatrix(Mstat, core_spectrum.full_vector, core_spectrum.full_error);
-    FillStatsMatrix(Mstat, core_spectrum.full_vector, ext_err_vec);
+    Mstat.Zero();
+    FillStatsMatrix(Mstat, core_spectrum.full_vector);
 
     if(Mstat.IsSymmetric()){
         if(is_verbose)std::cout<<otag<<"Stat matrix is symmetric (it is just diagonal core)"<<std::endl;
@@ -916,32 +904,6 @@ float SBNchi::CalcChi_CNP(float * pred, float* data){
     return tchi;
 }
 
-float SBNchi::CalcChi_CNP(float * pred, float* data, std::vector<double> ext_err_vec){
-
-    is_verbose = false;
-    TMatrixT<double> inverse_collapsed = m_matrix_systematics_collapsed;
-    //Add on CNP terms proportional to data
-    for(int j =0; j<num_bins_total_compressed; j++)
-    {
-        inverse_collapsed(j,j) +=  ( data[j] >0.001 ? 3.0/(1.0/data[j] +  2.0/pred[j])  : pred[j]/2.0 );
-        //std::cout << "inverse_collapsed before = " << inverse_collapsed(j,j);
-        inverse_collapsed(j,j) +=  ext_err_vec[j]*ext_err_vec[j]; 
-        //std::cout << "    after = " << inverse_collapsed(j,j) << std::endl;
-        //inverse_collapsed(j,j) +=  ( data[j] >0.001 ? 3.0/(1.0/data[j] +  2.0/(pred[j]+(ext_err_vec[j]*ext_err_vec[j])))  : (pred[j]+(ext_err_vec[j]*ext_err_vec[j]))/2.0 );
-    }
-
-    inverse_collapsed = this->InvertMatrix(inverse_collapsed);   
-
-    float tchi = 0.0;
-    for(int i =0; i<num_bins_total_compressed; i++){
-        for(int j =0; j<num_bins_total_compressed; j++){
-            tchi += (pred[i]-data[i])*inverse_collapsed(i,j)*(pred[j]-data[j]);
-        }
-    }
-
-    return tchi;
-}
-
 TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, TVectorT<double> &err){
 
     TMatrixT<double> Mout( M->GetNcols(), M->GetNcols() );
@@ -1190,7 +1152,7 @@ std::vector<std::vector<double >> SBNchi::TMatrixDToVector(TMatrixT <double > Mi
     return ;
 }*/
 
-void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag, std::vector<double> ext_err_vec ){
+void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag ){
     int matrix_size = M.GetNrows();
 
     std::cout << "matrix size, diag size = " << matrix_size << ", " << diag.size() << std::endl;
@@ -1201,9 +1163,8 @@ void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag, std
 
     for(int i=0; i<matrix_size; i++)
     {
-        std::cout << "add stats err: " << diag.at(i) << " + " << pow(ext_err_vec.at(i),2);
-        M(i,i) = diag.at(i)+pow(ext_err_vec.at(i),2);
-        std::cout << " = " <<  M(i,i) << std::endl;
+        M(i,i) = diag.at(i);
+        std::cout << "stats error = " <<  M(i,i) << std::endl;
     }
 
     return ;
@@ -2354,11 +2315,11 @@ TH1D SBNchi::SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, 
 }
 
 
-std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id, std::vector<double> ext_err_vec){
+std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id){
+
     std::cout << "SBNchi::Mike_NP" << std::endl;
     std::vector<CLSresult> v_results(5);
 
-    //chi_h1.FillStatsMatrix(Mstat,newstats);
     float** h0_vec_matrix_inverted = new float*[num_bins_total_compressed];
     float** h1_vec_matrix_inverted = new float*[num_bins_total_compressed];
 
@@ -2436,8 +2397,8 @@ std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi &
         float val_pois_h1  = chi_h1.PoissonLogLiklihood(h1_corein, collapsed);
 
         //CNP, going to need to recalculate and reinvert.
-        float val_cnp_h0  = chi_h0.CalcChi_CNP(h0_corein, collapsed, ext_err_vec);
-        float val_cnp_h1  = chi_h1.CalcChi_CNP(h1_corein, collapsed, ext_err_vec);
+        float val_cnp_h0  = chi_h0.CalcChi_CNP(h0_corein, collapsed);
+        float val_cnp_h1  = chi_h1.CalcChi_CNP(h1_corein, collapsed);
 
         a_vec_chis[i] = val_chi_h0 - val_chi_h1;
         a_vec_pois[i] = val_pois_h0 - val_pois_h1;
@@ -2880,14 +2841,14 @@ void SBNchi::FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool 
     int j=0;
 
     //BDT
-    //std::vector<double> np_detsys = {0.2007, 0.1077, 0.0922, 0.0574, 0.0663, 0.0755, 0.0721, 0.0872, 0.0975, 0.1034, 0.2551, 0.0849, 0.1428, 0.1764, 0.1806, 0.2042, 0.1841, 0.1688, 0.1811};
-    std::vector<double> np_detsys = {0.2454, 0.1523, 0.1546, 0.0900, 0.1500, 0.0608, 0.1530, 0.0781, 0.1114, 0.1145, 0.2005, 0.1237, 0.1871, 0.1105, 0.1349, 0.1612, 0.2478};
+    std::vector<double> np_detsys = {0.2007, 0.1077, 0.0922, 0.0574, 0.0663, 0.0755, 0.0721, 0.0872, 0.0975, 0.1034, 0.2551, 0.0849, 0.1428, 0.1764, 0.1806, 0.2042, 0.1841, 0.1688, 0.1811}; //RealAnalysis
+    //std::vector<double> np_detsys = {0.2454, 0.1523, 0.1546, 0.0900, 0.1500, 0.0608, 0.1530, 0.0781, 0.1114, 0.1145, 0.2005, 0.1237, 0.1871, 0.1105, 0.1349, 0.1612, 0.2478}; //FD
     //1e0p
-    //std::vector<double> zp_detsys = {0.0985, 0.0985, 0.1015, 0.1015, 0.1929, 0.1929, 0.2326, 0.2326, 0.3289, 0.3289, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720};
-    std::vector<double> zp_detsys = {0.1520, 0.1520, 0.0980, 0.0980, 0.1939, 0.1939, 0.4064, 0.4064, 0.3259, 0.3259, 0.1819, 0.1819, 0.1819, 0.1819, 0.2540, 0.2540, 0.2540, 0.2540, 0.2540};
+    std::vector<double> zp_detsys = {0.0985, 0.0985, 0.1015, 0.1015, 0.1929, 0.1929, 0.2326, 0.2326, 0.3289, 0.3289, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720}; //RealAnalysis
+    //std::vector<double> zp_detsys = {0.1520, 0.1520, 0.0980, 0.0980, 0.1939, 0.1939, 0.4064, 0.4064, 0.3259, 0.3259, 0.1819, 0.1819, 0.1819, 0.1819, 0.2540, 0.2540, 0.2540, 0.2540, 0.2540}; //FD
     //numu
-    //std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261};
-    std::vector<double> numu_detsys = {0.1655, 0.1044, 0.1233, 0.0574, 0.0500, 0.0849, 0.0686, 0.1449, 0.1158, 0.0849, 0.0980, 0.1536, 0.1556, 0.1879, 0.2987};
+    std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261};//RealAnalysis
+    //std::vector<double> numu_detsys = {0.1655, 0.1044, 0.1233, 0.0574, 0.0500, 0.0849, 0.0686, 0.1449, 0.1158, 0.0849, 0.0980, 0.1536, 0.1556, 0.1879, 0.2987}; //FD
 
     //initialize vectors to store index of lee and intrinsic to make the correlation
     std::vector<int> col_intrinsic_np, col_lee_np, col_intrinsic_zp, col_lee_zp;

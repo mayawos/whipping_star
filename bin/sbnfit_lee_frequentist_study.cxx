@@ -237,11 +237,10 @@ int main(int argc, char* argv[])
        SBNchi chiext(bkg,exterr);
        chiext.CollapseModes(*exterr, collext);
        for( int i=0; i < bkg.num_bins_total; i++ ){ ext_err_vec[i] = sqrt((*exterr)(i,i)); frac_ext_err_vec[i] = sqrt((*exterr)(i,i))/bkg.full_vector[i]; std::cout << "err: " << ext_err_vec[i] << std::endl; }
-       //if(!stats_only){for( int i=0; i < bkg.num_bins_total; i++ ){ (*cov)(i,i) += frac_ext_err_vec[i]; }}
        bkg.CollapseVector();
        for( int i=0; i< collext.GetNcols(); i++ ){ coll_ext_err_vec[i] = sqrt(collext(i,i)); frac_coll_ext_err_vec[i] = sqrt(collext(i,i)/bkg.collapsed_vector[i]); std::cout << "err coll: " << coll_ext_err_vec[i] << std::endl; }
+       std::cout << "found ext error matrix: " << exterr << std::endl;
     }
-    std::cout << "found ext error matrix: " << exterr << std::endl;
 
 
     //PeLEE hacks for incorporating fake data
@@ -272,47 +271,7 @@ int main(int argc, char* argv[])
     
     //PELEE hack -- use the actual PELEE diagonal errors for detsys instead of flat systematics
     TMatrixD frac_flat_matrix(bkg.num_bins_total, bkg.num_bins_total);
-    
-    //BDT
-    //std::vector<double> np_detsys = {0.2007, 0.1077, 0.0922, 0.0574, 0.0663, 0.0755, 0.0721, 0.0872, 0.0975, 0.1034, 0.2551, 0.0849, 0.1428, 0.1764, 0.1806, 0.2042, 0.1841, 0.1688, 0.1811}; //old lower stats systematics
-    std::vector<double> np_detsys = {0.2454, 0.1523, 0.1546, 0.0900, 0.1500, 0.0608, 0.1530, 0.0781, 0.1114, 0.1145, 0.2005, 0.1237, 0.1871, 0.1105, 0.1349, 0.1612, 0.2478};
-    //1e0p
-    //std::vector<double> zp_detsys = {0.0985, 0.0985, 0.1015, 0.1015, 0.1929, 0.1929, 0.2326, 0.2326, 0.3289, 0.3289, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720}; //old lower stats systematics
-    std::vector<double> zp_detsys = {0.1520, 0.1520, 0.0980, 0.0980, 0.1939, 0.1939, 0.4064, 0.4064, 0.3259, 0.3259, 0.1819, 0.1819, 0.1819, 0.1819, 0.2540, 0.2540, 0.2540, 0.2540, 0.2540};
-    //numu
-    //std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261}; //old lower stats systematics
-    std::vector<double> numu_detsys = {0.1655, 0.1044, 0.1233, 0.0574, 0.0500, 0.0849, 0.0686, 0.1449, 0.1158, 0.0849, 0.0980, 0.1536, 0.1556, 0.1879, 0.2987};
-
-    if(bool_fill_det_sys){
-      std::cout << "RUNNING with PELEE systematics!" << std::endl;
-      
-      frac_flat_matrix.ResizeTo(bkg.num_bins_total,bkg.num_bins_total);
-      frac_flat_matrix.Zero();//(bkg.num_bins_total,bkg.num_bins_total);
-      int j=0;     
-      
-      for(auto& h: bkg.hist){
-        std::string hname = h.GetName();
-        for( int i=1; i < h.GetNbinsX()+1; i++ ){
-          if( (hname.find("1eNp_intrinsic") != std::string::npos) || (hname.find("1eNp_lee") != std::string::npos) ){
-            frac_flat_matrix(j,j) = np_detsys[i-1]*np_detsys[i-1];
-          }
-          else if( (hname.find("1e0p_intrinsic") != std::string::npos) || ( hname.find("1e0p_lee") != std::string::npos ) ){
-            frac_flat_matrix(j,j) = zp_detsys[i-1]*zp_detsys[i-1];
-          }
-          else if( hname.find("numu_bnb") != std::string::npos ){
-            frac_flat_matrix(j,j) = numu_detsys[i-1]*numu_detsys[i-1];
-          }
-	  else if( hname.find("ext") == std::string::npos ){
-            frac_flat_matrix(j,j) = 0.2*0.2;
-          }
-          j++; 
-        }
-      }
-      std::cout<<"Just Before"<<std::endl;
-      (*cov) = (*cov)+(frac_flat_matrix);
-    }
-    std::cout << "Done with systematics!" << std::endl;
-    
+     
     if(bool_flat_det_sys){
       std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
       for(int i=0 ; i< bkg.num_bins_total; i++){
@@ -321,6 +280,8 @@ int main(int argc, char* argv[])
       std::cout<<"Just Before"<<std::endl;
       (*cov) = (*cov)+(frac_flat_matrix);
     }
+
+    std::cout << "Done with systematics!" << std::endl;
 
     if(remove_correlations){
       std::cout<<"WARNING! We are running in   `Remove All Off Diagional Covariances/Correlations Mode` make sure this is what you want. "<<std::endl;
@@ -333,19 +294,16 @@ int main(int argc, char* argv[])
     }
     
     if(!stats_only){
-        SBNcls cls_factory(&bkg, &sig, fakedata, *cov, ext_err_vec, coll_ext_err_vec);
+        SBNcls cls_factory(&bkg, &sig, fakedata, *cov);
         cls_factory.SetTolerance(epsilon);
-        //cls_factory.SetAdditionalErrors(ext_err_vec);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
         if(sample_from_covariance) cls_factory.SetSampleCovariance();
         cls_factory.setMode(which_mode);
         if(tester){cls_factory.runConstraintTest();return 0;}
         cls_factory.CalcCLS(num_MC_events, tag);
     }else{
-        SBNcls cls_factory(&bkg, &sig, fakedata, ext_err_vec, coll_ext_err_vec);
+        SBNcls cls_factory(&bkg, &sig, fakedata);
         cls_factory.SetTolerance(epsilon);
-        //std::cout << "SET ADDITIONAL ERRORS" << std::endl;
-        //cls_factory.SetAdditionalErrors(ext_err_vec);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
         cls_factory.setMode(which_mode);
         if(tester){cls_factory.runConstraintTest();return 0;}

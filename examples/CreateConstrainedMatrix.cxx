@@ -242,8 +242,16 @@ int main(int argc, char* argv[])
   if(np || combined ){ for(int bin=1; bin < h_1eNp_bg_ext->GetNbinsX()+1; bin++) collapsed_ext.push_back(h_1eNp_bg_ext->GetBinContent(bin));}
   if(zp || combined ){ for(int bin=1; bin < h_1e0p_bg_ext->GetNbinsX()+1; bin++) collapsed_ext.push_back(0.0);}
   if(zp || combined ){ for(int bin=1; bin < h_1e0p_bg_ext->GetNbinsX()+1; bin++) collapsed_ext.push_back(h_1e0p_bg_ext->GetBinContent(bin));}
+
   for(int bin=1; bin < h_numu_ext->GetNbinsX()+1; bin++) collapsed_ext.push_back(h_numu_ext->GetBinContent(bin));
 
+  //define bins number 
+  int numu_bins = h_numu_ext->GetNbinsX();
+  int nue_bins = sig_spectra.num_bins_total_compressed-numu_bins;
+  int np_bins = 0, zp_bins = 0;
+  if(np || combined ) np_bins = h_1eNp_bg_ext->GetNbinsX();
+  if(zp || combined ) zp_bins = h_1eNp_bg_ext->GetNbinsX();
+  
   for(int i=0; i < detsyscoll.GetNrows(); i++){
      sig_collvec_noext.push_back( sig_collvec[i] - collapsed_ext[i] );
   }
@@ -279,7 +287,11 @@ int main(int argc, char* argv[])
     channel_names_coll.push_back("1e0p nue + bkg");
     channel_names_coll.push_back("numu");
   }
-  for(int c=0; c < channel_names_coll.size(); c++) num_bins_coll.push_back(14);
+  for(int c=0; c < channel_names_coll.size(); c++){ 
+    if( channel_names_coll[c].find("1eNp") != std::string::npos ) num_bins_coll.push_back(np_bins);
+    if( channel_names_coll[c].find("1e0p") != std::string::npos ) num_bins_coll.push_back(zp_bins);
+    if( channel_names_coll[c].find("numu") != std::string::npos ) num_bins_coll.push_back(numu_bins);
+  }
 
   plot_one(Mcorrdetsys, sig_spectra.full_vector, channel_names, num_bins, tag+"_correlation_matrix", false);
   plot_one(Mfracdetsys, sig_spectra.full_vector, channel_names, num_bins, tag+"_fractional_covariance_matrix", false);
@@ -306,12 +318,10 @@ int main(int argc, char* argv[])
   if(tag.find("fakedata") != std::string::npos ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_data");
   TH1D *h_numu_data = (TH1D*)f_data->Get("nu_uBooNE_numu_data");
   
-  int numu_bins = 14;
-  int nue_bins = sig_spectra.num_bins_total_compressed-14;
-  for(int bin=0; bin < h_numu_data->GetNbinsX() ; bin++) numu_data_vec.push_back(h_numu_data->GetBinContent(bin+1)); 
-  for(int bin=0; bin < 14; bin++ ) numu_vec.push_back(sig_collvec[nue_bins+bin]);
-  for(int bin=0; bin < 14; bin++ ) delta_numu.push_back(numu_data_vec[bin]-numu_vec[bin]);
-  for(int bin=0; bin < 14; bin++ ) std::cout << "numu data, numu mc, delta_numu = " << numu_data_vec[bin] << ", " << numu_vec[bin] << ", " << delta_numu[bin] << std::endl; 
+  for(int bin=0; bin < numu_bins; bin++) numu_data_vec.push_back(h_numu_data->GetBinContent(bin+1)); 
+  for(int bin=0; bin < numu_bins; bin++ ) numu_vec.push_back(sig_collvec[nue_bins+bin]);
+  for(int bin=0; bin < numu_bins; bin++ ) delta_numu.push_back(numu_data_vec[bin]-numu_vec[bin]);
+  for(int bin=0; bin < numu_bins; bin++ ) std::cout << "numu data, numu mc, delta_numu = " << numu_data_vec[bin] << ", " << numu_vec[bin] << ", " << delta_numu[bin] << std::endl; 
   
   //Load up our covariance matricies we calculated in example1 (we could also load up single variation ones)
   TFile * fsys = new TFile(Form("../bin/%s.SBNcovar.root",tag.c_str()),"read");
@@ -328,21 +338,10 @@ int main(int argc, char* argv[])
   if(mcerr){ 
 	std::cout << "ADD MC ERR" << std::endl;
 	tag=tag+"_with_mc_err";
-        for(int i=0; i < detsyscoll.GetNrows(); i++) std::cout << tag << "  Matrix diag mc err, sample: " << sqrt((*cov)(i,i)) << ", " << sqrt(collapsed(i,i)) << ", " << sig_collvec[i] << std::endl; 
+        for(int i=0; i < detsyscoll.GetNrows(); i++) std::cout << tag << "  Matrix diag mc err, sample: " << sqrt((*cov)(i,i)) << ", " << collapsed(i,i) << ", " << sig_collvec[i] << std::endl; 
   	*cov = collapsed + detsyscoll;
   }
   else *cov = *cov + detsyscoll;
-  //frac cov
-  for(int i=0; i < detsyscoll.GetNrows(); i++){
-  for(int j=0; j < detsyscoll.GetNcols(); j++){
-    fraccov(i,j) = 0.0;
-    if(sig_collvec[i] !=0 && sig_collvec[j] !=0 ) fraccov(i,j) = (*cov)(i,j)/(sig_collvec[i]*sig_collvec[j]);
-    corr(i,j) = 0.0;
-    if((*cov)(i,j) != 0 ) corr(i,j) = (*cov)(i,j)/sqrt((*cov)(i,i)*(*cov)(j,j));
-    if(i==j) std::cout << tag << "  Matrix diag: " << sqrt((*cov)(i,i)) << ", " << sqrt(fraccov(i,j)) << std::endl; 
-  }
-  }
-
   //create the zero bin ext bnb err matrix
   TMatrixD fullext;
   fullext.ResizeTo(sig_spectra.num_bins_total, sig_spectra.num_bins_total);
@@ -355,10 +354,23 @@ int main(int argc, char* argv[])
   if(addext){
 	std::cout << "ADD ZERO BIN ERROR" << std::endl; 
 	tag=tag+"_with_zerobin_err";
+        //add to full covariance matrix (collapsed)
+        *cov += collext;
   }
-  else collext.Zero();
-  //for(int i=0; i < sig_spectra.num_bins_total_compressed; i++ ) std::cout << "coll ext err: " << collext(i,i) << std::endl;
+  //frac cov
+  for(int i=0; i < detsyscoll.GetNrows(); i++){
+  for(int j=0; j < detsyscoll.GetNcols(); j++){
+    fraccov(i,j) = 0.0;
+    if(sig_collvec[i] !=0 && sig_collvec[j] !=0 ) fraccov(i,j) = (*cov)(i,j)/(sig_collvec[i]*sig_collvec[j]);
+    corr(i,j) = 0.0;
+    if((*cov)(i,j) != 0 ) corr(i,j) = (*cov)(i,j)/sqrt((*cov)(i,i)*(*cov)(j,j));
+    if(i==j) std::cout << tag << "  Matrix diag: " << sqrt((*cov)(i,i)) << ", " << sqrt(fraccov(i,j)) << std::endl; 
+  }
+  }
 
+  if(!addext) collext.Zero();
+  if(!mcerr) collapsed.Zero();
+  for(int i=0; i < sig_spectra.num_bins_total_compressed; i++ ){ collapsed(i,i) += collext(i,i); std::cout << "coll ext err: " << collext(i,i) << std::endl; }
 
   //calculate cov matrix before constraint
   //frac cov
@@ -367,15 +379,23 @@ int main(int argc, char* argv[])
     fraccoll(i,j) = 0.0;
     if(sig_collvec[i] != 0.0 && sig_collvec[j] != 0.0) fraccoll(i,j) = (*cov)(i,j)/(sig_collvec[i]*sig_collvec[j]);
     fraccoll_noext(i,j) = 0.0;
-    if(sig_collvec_noext[i] != 0.0 && sig_collvec_noext[j] != 0.0) fraccoll_noext(i,j) = (*cov)(i,j)/(sig_collvec[i]*sig_collvec[j]);
-    if( i==j && i < 14 ) outfile1  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
-    else if( i==j && i >= 14 && i < 28 ) outfile3  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
-    else if( i==j && i >= 28 && i < 42 ) outfile5  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
-    else if( i==j && i >= 42 && i < 56 ) outfile7  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
-    else if( i==j && i >= 56 && i < 70 ) outfile9  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
+    if(sig_collvec_noext[i] != 0.0 && sig_collvec_noext[j] != 0.0) fraccoll_noext(i,j) = (*cov)(i,j)/(sig_collvec_noext[i]*sig_collvec_noext[j]);
     corrcoll(i,j) = 0.0;
     if((*cov)(i,j) != 0 ) corrcoll(i,j) = (*cov)(i,j)/sqrt((*cov)(i,i)*(*cov)(j,j));
   }
+  }
+
+  //write out the cov matrix before constraint only do this for the combined channels
+  if(combined){
+    for(int i=0; i < (*cov).GetNrows(); i++){
+      for(int j=0; j < (*cov).GetNcols(); j++){
+        if( i==j && i < np_bins ) outfile1  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
+        else if( i==j && i >= np_bins && i < np_bins+np_bins ) outfile3  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
+        else if( i==j && i >= np_bins+np_bins && i < np_bins+np_bins+zp_bins ) outfile5  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
+        else if( i==j && i >= np_bins+np_bins+zp_bins && i < np_bins+np_bins+zp_bins+zp_bins ) outfile7  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
+        else if( i==j && i >= np_bins+np_bins+zp_bins+zp_bins && i < np_bins+np_bins+zp_bins+zp_bins+numu_bins ) outfile9  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << std::endl;
+      }
+    }
   }
 
   plot_one(corrcoll, sig_collvec, channel_names_coll, num_bins_coll, tag+"_correlation_matrix_xsecfluxdetsys", true);
@@ -404,35 +424,35 @@ int main(int argc, char* argv[])
   if(combined){     
     std::cout << "sig_collvec size = " << sig_collvec.size() << std::endl;
     //set bin content
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin+28]);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+42]);
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+56]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin+28]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+42]);
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+56]);
     //set bin error
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+14]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin+28]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+42]));
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(sig_collvec[bin+56]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+14][bin+14]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(collapsed[bin+28][bin+28]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+42][bin+42]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+56][bin+56]));
   }else if(np){
     //set bin content
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
     //set bin error
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+14]));
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(sig_collvec[bin+28]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+14][bin+14]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+28][bin+28]));
   }else if(zp){
     //set bin content
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
     //set bin error
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(sig_collvec[bin]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(sig_collvec[bin+14]));
-    for(int bin=0; bin < 14; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(sig_collvec[bin+28]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+14][bin+14]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+28][bin+28]));
   }
 
   if(detsys) tag += "_detsys";
@@ -470,8 +490,12 @@ int main(int argc, char* argv[])
   }
   
   //add the stats error to the cov matrix
-  for( int i = 0; i < numumatrix.GetNcols(); i++ ) numumatrix(i,i) += numu_vec[i]; 
-  
+  //we are adding the mc stats error which include the mc stats error for the MC numu
+  //only adding this for the option where we do not add the mc stats error
+  for( int i = 0; i < numumatrix.GetNcols(); i++ ){ 
+       numumatrix(i,i) += numu_vec[i];
+  }
+
   //constrained procedure
   InvertNumu = numumatrix;
   InvertNumu.Zero();
@@ -518,10 +542,10 @@ int main(int argc, char* argv[])
       else fracnuematrix(i,j) = 0.0;
       if( input_nue_constrained_noext[i] != 0 && input_nue_constrained_noext[j] != 0 ) fracnuematrix_noext(i,j) = constnuematrix(i,j)/(input_nue_constrained_noext[i]*input_nue_constrained_noext[j]);
       else fracnuematrix_noext(i,j) = 0.0;
-      if( combined && i==j && i < 14 ) outfile2  << sqrt(fracnuematrix(i,j)) << ", " << fracnuematrix_noext(i,j) << std::endl;
-      else if( combined && i==j && i >= 14 && i < 28 ) outfile4  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << std::endl;
-      else if( combined && i==j && i >= 28 && i < 42 ) outfile6  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << std::endl;
-      else if( combined && i==j && i >= 42 && i < 56 ) outfile8  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << std::endl;
+      if( combined && i==j && i < np_bins ) outfile2  << sqrt(fracnuematrix(i,j)) << ", " << fracnuematrix_noext(i,j) << std::endl;
+      else if( combined && i==j && i >= np_bins && i < 2*np_bins ) outfile4  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << std::endl;
+      else if( combined && i==j && i >= 2*np_bins && i < 2*np_bins+zp_bins ) outfile6  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << std::endl;
+      else if( combined && i==j && i >= 2*np_bins+zp_bins && i < 2*np_bins+2*zp_bins ) outfile8  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << std::endl;
       corrnuematrix(i,j) = constnuematrix(i,j)/sqrt(constnuematrix(i,i)*constnuematrix(j,j));
       if(i==j) std::cout << i << " fracnuematrix = " << fracnuematrix(i,j) << std::endl;
     }
@@ -549,36 +573,37 @@ int main(int argc, char* argv[])
   h_1e0p_lee->Reset();
   h_1e0p_bg->Reset();
   h_1e0p_data->Reset();
-  
+ 
+  for(int b=0; b < collapsed.GetNcols(); b++ ) std::cout << "collapsed, sqrt = " << collapsed[b][b] << ", " << sqrt(collapsed[b][b]) << std::endl; 
   if(combined){
     //set bin content
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin+0*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinContent(bin+1,input_nue_constrained[bin+1*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_data->SetBinContent(bin+1,0.);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinContent(bin+1,input_nue_constrained[bin+2*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+3*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinContent(bin+1,0);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinContent(bin+1,input_nue_constrained[bin+np_bins]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinContent(bin+1,0.);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinContent(bin+1,input_nue_constrained[bin+2*np_bins]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+2*np_bins+zp_bins]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinContent(bin+1,0);
     //set bin content error
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+0*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+1*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+2*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+3*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+np_bins]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins][bin+2*np_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins+zp_bins][2*np_bins+zp_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }else if(np){
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin+0*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinContent(bin+1,input_nue_constrained[bin+1*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_data->SetBinContent(bin+1,0.);
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+0*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+1*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinContent(bin+1,input_nue_constrained[bin+np_bins]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinContent(bin+1,0.);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+1*np_bins]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
   }else if(zp){
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinContent(bin+1,input_nue_constrained[bin+0*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+1*numu_bins]);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinContent(bin+1,0.);
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(input_nue_constrained[bin+0*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(input_nue_constrained[bin+1*numu_bins]));
-    for(int bin=0; bin < 14; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinContent(bin+1,input_nue_constrained[bin]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+zp_bins]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinContent(bin+1,0.);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(collapsed[bin+zp_bins][bin+zp_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }
  
   /*if(combined){ 

@@ -34,8 +34,8 @@ int SBNcls::setMode(int input_mode){
 int SBNcls::CalcCLS(int numMC, std::string tag){
 
 
-    chi_h0.ReloadCoreSpectrum(h0,&ext_err_vec);
-    chi_h1.ReloadCoreSpectrum(h1,&ext_err_vec);
+    chi_h0.ReloadCoreSpectrum(h0);
+    chi_h1.ReloadCoreSpectrum(h1);
 
     if(draw_pseudo_from_collapsed){
         chi_h0.pseudo_from_collapsed = true;
@@ -77,7 +77,7 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
         //if(which_sample == 0) h1_results = chi_h0.SamplePoissonVaryInput(h1, numMC, central_value_chi*50);
         //else if(which_sample==1) h1_results = chi_h0.SampleCovarianceVaryInput(h1, numMC, central_value_chi*50);
     }else if (which_mode == 1){
-        h1_results =  chi_h1.Mike_NP(h1, chi_h0, chi_h1, numMC, which_sample,1,ext_err_vec_collapsed);
+        h1_results =  chi_h1.Mike_NP(h1, chi_h0, chi_h1, numMC, which_sample,1);
     }else if (which_mode == 2){
         h1_results =  chi_h1.Mike_NP_fakedata(h1, fakedata, chi_datah1, chi_h0, chi_h1, numMC, which_sample,1);
     }
@@ -109,7 +109,7 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
         //if(which_sample == 0)     h0_results = chi_h0.SamplePoissonVaryInput(h0, numMC, &pval);
         //else if(which_sample ==1) h0_results = chi_h0.SampleCovarianceVaryInput(h0, numMC, &pval);
     }else if (which_mode==1){
-        h0_results = chi_h0.Mike_NP(h0, chi_h0, chi_h1, numMC,which_sample,0,ext_err_vec_collapsed);
+        h0_results = chi_h0.Mike_NP(h0, chi_h0, chi_h1, numMC,which_sample,0);
     }else if (which_mode==2){
         h0_results = chi_h0.Mike_NP_fakedata(h0, fakedata, chi_datah0, chi_h0, chi_h1, numMC,which_sample,0);
     }
