@@ -5,14 +5,14 @@ usage="$(basename "$0") [-h] [-c -t -d -m -a -x -y] -- script to run the simple 
 where:
         -h  show this help text
         -c  input channel name of interest (options: '1eNp','1e0p','combined', default:combined)
-    	-t  tag to use for the xml file (default: ${s}FullMCunisim)
+    	-t  tag to use for the xml file (default: mc_collabOctFullMCunisim)
         -d  add detsys error and perform the full systematics frequentist test by default
         -m  add mc stats error
         -a  add zero bin ext error
         -x  perform the stats only frequentist test
         -y  perform the flux+xsec systematics frequentist test"
 
-tag="${s}FullMCunisim"; detsys=false; mcstats=false; zerobin=false; statsonly=false; syst=false
+tag="mc_collabOctFullMCunisim"; detsys=false; mcstats=false; zerobin=false; statsonly=false; syst=false
 
 while getopts ':hdmaxy:c:t:' option; do
     case "$option" in
