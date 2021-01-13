@@ -1,6 +1,6 @@
 #!/bin/bash
 
-usage="$(basename "$0") [-h] [-c -t -d -m -a] -- script to run the simple hypothesis test
+usage="$(basename "$0") [-h] [-c -t -d -m -a -x -y] -- script to run the simple hypothesis test
 
 where:
         -h  show this help text
