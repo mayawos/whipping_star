@@ -2,9 +2,9 @@ for t in np_numu_reco_e #zp_numu_reco_e np_zp_numu_reco_e
 do
     for s in mc_collabOctFullMCunisim #this tag identify the xml with the correct treatment of the unisim error
     do
-	#make
-	#./sbnfit_make_covariance -x ${t}_H1_${s}.xml -t ${t}_H1_${s} #-p
-	#./sbnfit_make_covariance -x numu_reco_e_H1_DATA_mc_collabOct.xml -t numu_reco_e_H1_DATA_mc_collabOct #-p
+	make
+	./sbnfit_make_covariance -x ${t}_H1_${s}.xml -t ${t}_H1_${s} #-p
+	./sbnfit_make_covariance -x numu_reco_e_H1_DATA_mc_collabOct.xml -t numu_reco_e_H1_DATA_mc_collabOct #-p
 	
 	cd ../examples/
 	make
