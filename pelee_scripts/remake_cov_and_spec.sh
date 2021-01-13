@@ -14,7 +14,7 @@ do
 	#  -n, -z, -c : channels: 1eNp+numu, 1e0p+numu, 1eNp+1e0p+numu
 	#  -d : add PeLEE detsys error to the diagonals of full covariance matrix, then collapse, and constrain
 	#  -m : add mc stats error to the diagonal of the  full covariance matrix, then collapse, and constrain
-	#  -a : add zero ext bin error to the diagonal of the full covariance matrix, then collapse, and constrain
+	#  -a : create a separate zero ext bin error matrix with the same size as full covariance matrix. Will be added to the stats error later when doing sensitivity test
 	if [[ "`echo $t`" == "np_numu_reco_e" ]]; then
 	    ./CreateConstrainedMatrix -x ../bin/${t}_H1_${s}.xml -t ${t}_H1_${s} -f ../bin/numu_reco_e_H1_DATA_mc_collabOct.SBNspec.root -n  
 	    ./CreateConstrainedMatrix -x ../bin/${t}_H1_${s}.xml -t ${t}_H1_${s} -f ../bin/numu_reco_e_H1_DATA_mc_collabOct.SBNspec.root -n -a 
