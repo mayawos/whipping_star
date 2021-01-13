@@ -250,7 +250,7 @@ int main(int argc, char* argv[])
   int nue_bins = sig_spectra.num_bins_total_compressed-numu_bins;
   int np_bins = 0, zp_bins = 0;
   if(np || combined ) np_bins = h_1eNp_bg_ext->GetNbinsX();
-  if(zp || combined ) zp_bins = h_1eNp_bg_ext->GetNbinsX();
+  if(zp || combined ) zp_bins = h_1e0p_bg_ext->GetNbinsX();
   
   for(int i=0; i < detsyscoll.GetNrows(); i++){
      sig_collvec_noext.push_back( sig_collvec[i] - collapsed_ext[i] );
@@ -331,17 +331,16 @@ int main(int argc, char* argv[])
   //Recalculate cov matrix by adding mc intrinsic error
   TMatrixD collapsed;
   collapsed.ResizeTo(sig_spectra.num_bins_total_compressed, sig_spectra.num_bins_total_compressed);
-   fullcov->Zero();
+  fullcov->Zero();
   TMatrixT<double> fullsig = chi_h1.CalcCovarianceMatrix(fullcov, sig_fullvec, sig_errfullvec, false);  
-  //*cov = *cov + detsyscoll;
   chi_h1.CollapseModes(fullsig, collapsed);
+  collapsed.Print();
   if(mcerr){ 
 	std::cout << "ADD MC ERR" << std::endl;
 	tag=tag+"_with_mc_err";
         for(int i=0; i < detsyscoll.GetNrows(); i++) std::cout << tag << "  Matrix diag mc err, sample: " << sqrt((*cov)(i,i)) << ", " << collapsed(i,i) << ", " << sig_collvec[i] << std::endl; 
-  	*cov = collapsed + detsyscoll;
+  	*cov += collapsed;
   }
-  else *cov = *cov + detsyscoll;
   //create the zero bin ext bnb err matrix
   TMatrixD fullext;
   fullext.ResizeTo(sig_spectra.num_bins_total, sig_spectra.num_bins_total);
@@ -357,6 +356,7 @@ int main(int argc, char* argv[])
         //add to full covariance matrix (collapsed)
         *cov += collext;
   }
+  if(detsys)  *cov += detsyscoll;
   //frac cov
   for(int i=0; i < detsyscoll.GetNrows(); i++){
   for(int j=0; j < detsyscoll.GetNcols(); j++){
@@ -370,6 +370,7 @@ int main(int argc, char* argv[])
 
   if(!addext) collext.Zero();
   if(!mcerr) collapsed.Zero();
+
   for(int i=0; i < sig_spectra.num_bins_total_compressed; i++ ){ collapsed(i,i) += collext(i,i); std::cout << "coll ext err: " << collext(i,i) << std::endl; }
 
   //calculate cov matrix before constraint
@@ -403,10 +404,10 @@ int main(int argc, char* argv[])
 
 
   //Draw before constraint
-  TH1D* h_1eNp_lee_before = (TH1D*) h_numu_data->Clone("1eNp_lee_before");
-  TH1D* h_1eNp_bg_before  = (TH1D*) h_numu_data->Clone("1eNp_bg_before");
-  TH1D* h_1e0p_lee_before = (TH1D*) h_numu_data->Clone("1e0p_lee_before");
-  TH1D* h_1e0p_bg_before  = (TH1D*) h_numu_data->Clone("1e0p_bg_before");
+  TH1D* h_1eNp_lee_before = (TH1D*) h_1eNp_bg_ext->Clone("1eNp_lee_before");
+  TH1D* h_1eNp_bg_before  = (TH1D*) h_1eNp_bg_ext->Clone("1eNp_bg_before");
+  TH1D* h_1e0p_lee_before = (TH1D*) h_1e0p_bg_ext->Clone("1e0p_lee_before");
+  TH1D* h_1e0p_bg_before  = (TH1D*) h_1e0p_bg_ext->Clone("1e0p_bg_before");
   TH1D* h_numu_before     = (TH1D*) h_numu_data->Clone("numu_before"); 
   
   //Draw before constraint
@@ -430,29 +431,29 @@ int main(int argc, char* argv[])
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+2*np_bins+zp_bins]);
     for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+2*np_bins+2*zp_bins]);
     //set bin error
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+np_bins]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins][bin+2*np_bins]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins+zp_bins][bin+2*np_bins+zp_bins]));
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins+2*zp_bins][bin+2*np_bins+2*zp_bins]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt((*cov)[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+np_bins][bin+np_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt((*cov)[bin+2*np_bins][bin+2*np_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+2*np_bins+zp_bins][bin+2*np_bins+zp_bins]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt((*cov)[bin+2*np_bins+2*zp_bins][bin+2*np_bins+2*zp_bins]));
   }else if(np){
     //set bin content
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+np_bins]);
     for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+2*np_bins]);
     //set bin error
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+np_bins]));
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins][bin+2*np_bins]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt((*cov)[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+np_bins][bin+np_bins]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt((*cov)[bin+2*np_bins][bin+2*np_bins]));
   }else if(zp){
     //set bin content
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+zp_bins]);
     for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+2*zp_bins]);
     //set bin error
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+zp_bins][bin+zp_bins]));
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+2*zp_bins][bin+2*zp_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt((*cov)[bin][bin]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt((*cov)[bin+zp_bins][bin+zp_bins]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt((*cov)[bin+2*zp_bins][bin+2*zp_bins]));
   }
 
   if(detsys) tag += "_detsys";
@@ -505,6 +506,7 @@ int main(int argc, char* argv[])
     std::cout << "Decomposition failed, matrix singular ?" << std::endl;
   }else{
     InvertNumu = numumatrix.Invert();
+    InvertNumu.Print();
   }
   
   TMatrixD A(nuenumumatrix.GetNrows(),nuenumumatrix.GetNcols());
@@ -523,7 +525,7 @@ int main(int argc, char* argv[])
     double scaled = 0.;
     for( int biny = 0; biny < delta_numu.size(); biny++ ){
       scaled += C(binx,biny) * delta_numu[biny];
-      //std::cout << "binx, biny, delta_numu = " << binx << ", " << biny << ", " << delta_numu[biny] << std::endl;
+      //std::cout << "binx, biny, delta_numu = " << binx << ", " << biny << ", " << delta_numu[biny] << ", " << C(binx,biny) << std::endl;
     }
     double constnue =  sig_collvec[binx] + scaled;
     double constnue_noext =  sig_collvec[binx] + scaled - collapsed_ext[binx];
@@ -559,12 +561,12 @@ int main(int argc, char* argv[])
   TH1D* h_1e0p_bg;
   TH1D* h_1e0p_data; 
   
-  h_1eNp_lee  = (TH1D*)histo_dummy->Clone("nu_uBooNE_1eNp_lee"); 
-  h_1eNp_bg   = (TH1D*)histo_dummy->Clone("nu_uBooNE_1eNp_bg");
-  h_1eNp_data = (TH1D*)histo_dummy->Clone("nu_uBooNE_1eNp_data");
-  h_1e0p_lee  = (TH1D*)histo_dummy->Clone("nu_uBooNE_1e0p_lee");
-  h_1e0p_bg   = (TH1D*)histo_dummy->Clone("nu_uBooNE_1e0p_bg");
-  h_1e0p_data = (TH1D*)histo_dummy->Clone("nu_uBooNE_1e0p_data");
+  h_1eNp_lee  = (TH1D*)h_1eNp_bg_ext->Clone("nu_uBooNE_1eNp_lee"); 
+  h_1eNp_bg   = (TH1D*)h_1eNp_bg_ext->Clone("nu_uBooNE_1eNp_bg");
+  h_1eNp_data = (TH1D*)h_1eNp_bg_ext->Clone("nu_uBooNE_1eNp_data");
+  h_1e0p_lee  = (TH1D*)h_1e0p_bg_ext->Clone("nu_uBooNE_1e0p_lee");
+  h_1e0p_bg   = (TH1D*)h_1e0p_bg_ext->Clone("nu_uBooNE_1e0p_bg");
+  h_1e0p_data = (TH1D*)h_1e0p_bg_ext->Clone("nu_uBooNE_1e0p_data");
   
   //reset the histograms
   h_1eNp_lee->Reset(); 
@@ -584,25 +586,25 @@ int main(int argc, char* argv[])
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+2*np_bins+zp_bins]);
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinContent(bin+1,0);
     //set bin content error
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+np_bins]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(constnuematrix[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+np_bins][bin+np_bins]));
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins][bin+2*np_bins]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins+zp_bins][2*np_bins+zp_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(constnuematrix[bin+2*np_bins][bin+2*np_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+2*np_bins+zp_bins][2*np_bins+zp_bins]));
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }else if(np){
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinContent(bin+1,input_nue_constrained[bin]);
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinContent(bin+1,input_nue_constrained[bin+np_bins]);
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinContent(bin+1,0.);
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+1*np_bins]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee->SetBinError(bin+1,sqrt(constnuematrix[bin][bin]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+np_bins][bin+1*np_bins]));
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_data->SetBinError(bin+1,0.);
   }else if(zp){
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinContent(bin+1,input_nue_constrained[bin]);
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinContent(bin+1,input_nue_constrained[bin+zp_bins]);
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinContent(bin+1,0.);
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(collapsed[bin+zp_bins][bin+zp_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee->SetBinError(bin+1,sqrt(constnuematrix[bin][bin]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg->SetBinError(bin+1,sqrt(constnuematrix[bin+zp_bins][bin+zp_bins]));
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_data->SetBinError(bin+1,0.);
   }
  

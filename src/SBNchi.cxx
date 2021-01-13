@@ -762,7 +762,7 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
                 if(i==j) Mout(i,j) += mcerr[i]*mcerr[i]; 
             }
 	    if(add_stats) {
-            if(i==j) Mout(i,i) += spec[i];   //stats part
+               if(i==j) Mout(i,i) += spec[i];   //stats part
             }
         }
     }
