@@ -425,34 +425,34 @@ int main(int argc, char* argv[])
     std::cout << "sig_collvec size = " << sig_collvec.size() << std::endl;
     //set bin content
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin+28]);
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+42]);
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+56]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+np_bins]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin+2*np_bins]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+2*np_bins+zp_bins]);
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+2*np_bins+2*zp_bins]);
     //set bin error
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+14][bin+14]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(collapsed[bin+28][bin+28]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+42][bin+42]));
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+56][bin+56]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+np_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins][bin+2*np_bins]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins+zp_bins][bin+2*np_bins+zp_bins]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins+2*zp_bins][bin+2*np_bins+2*zp_bins]));
   }else if(np){
     //set bin content
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinContent(bin+1,sig_collvec[bin+np_bins]);
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+2*np_bins]);
     //set bin error
     for(int bin=0; bin < np_bins; bin++ ) h_1eNp_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+14][bin+14]));
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+28][bin+28]));
+    for(int bin=0; bin < np_bins; bin++ ) h_1eNp_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+np_bins][bin+np_bins]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+2*np_bins][bin+2*np_bins]));
   }else if(zp){
     //set bin content
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinContent(bin+1,sig_collvec[bin]);
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+14]);
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+28]);
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinContent(bin+1,sig_collvec[bin+zp_bins]);
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinContent(bin+1,sig_collvec[bin+2*zp_bins]);
     //set bin error
     for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_lee_before->SetBinError(bin+1,sqrt(collapsed[bin][bin]));
-    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+14][bin+14]));
-    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+28][bin+28]));
+    for(int bin=0; bin < zp_bins; bin++ ) h_1e0p_bg_before->SetBinError(bin+1,sqrt(collapsed[bin+zp_bins][bin+zp_bins]));
+    for(int bin=0; bin < numu_bins; bin++ ) h_numu_before->SetBinError(bin+1,sqrt(collapsed[bin+2*zp_bins][bin+2*zp_bins]));
   }
 
   if(detsys) tag += "_detsys";
