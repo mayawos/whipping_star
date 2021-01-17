@@ -215,9 +215,7 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
                     matrix_systematics(i,j) = 0;
                 else
                     matrix_systematics(i,j) = matrix_systematics(i,j)*core_spectrum.full_vector.at(i)*core_spectrum.full_vector.at(j);
-                    //if(i==j) std::cout << "1 mc err, mc stats err  =  " << matrix_systematics(i,j) << ", " << pow(core_spectrum.full_error[i],2) << std::endl;
                     //if(i==j) matrix_systematics(i,j) += pow(core_spectrum.full_error[i],2); //we are including the MC intrinsic error in the constraint so commenting this out for now
-                    //if(i==j) std::cout << "2 mc err, mc stats err  =  " << matrix_systematics(i,j) << ", " << pow(core_spectrum.full_error[i],2) << std::endl;
             }
         }
     }
@@ -427,6 +425,7 @@ double SBNchi::CalcChi(SBNspec *sigSpec){
             }
             vec_last_calculated_chi.at(i).at(j) =(core_spectrum.collapsed_vector.at(i)-sigSpec->collapsed_vector.at(i))*vec_matrix_inverted.at(i).at(j)*(core_spectrum.collapsed_vector.at(j)-sigSpec->collapsed_vector.at(j) );
             tchi += vec_last_calculated_chi.at(i).at(j);
+            //if(i==j)std::cout << "cv: "<<i<<" invert_matrix: " << vec_matrix_inverted.at(i).at(j) << ", " << core_spectrum.collapsed_vector.at(i) << ", " << sigSpec->collapsed_vector.at(i) << ", " << core_spectrum.collapsed_vector.at(j) << ", " << sigSpec->collapsed_vector.at(j) << ", " << tchi << std::endl;
         }
     }
 
@@ -500,7 +499,7 @@ float SBNchi::CalcChi(float **invert_matrix, float* core, float *sig){
             //if(i==j)std::cout << "1. invert_matrix: " << invert_matrix[i][j] << ", " << core[i] << ", " << sig[i] << ", " << core[j] << ", " << sig[j] << ", " << tchi << std::endl;
         }
     }
-   // std::cout << "tchi = " << tchi << std::endl;
+    //std::cout << "tchi = " << tchi << std::endl;
 
    return tchi;
 }
@@ -1126,24 +1125,6 @@ std::vector<std::vector<double >> SBNchi::TMatrixDToVector(TMatrixT <double > Mi
     return ans;
 }
 
-/*void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag, std::vector<double> add_stats_err){
-    int matrix_size = M.GetNrows();
-
-    std::cout << "matrix size, diag size = " << matrix_size << ", " << diag.size() << ", " << add_stats_err.size() << std::endl;
-    if(matrix_size != diag.size()){std::cout<<"#ERROR: FillStatsMatrix, matrix not equal to diagonal"<<std::endl;}
-    if(M.GetNrows()!=M.GetNcols()){std::cout<<"#ERROR: not a square matrix!"<<std::endl;}
-
-    M.Zero();
-
-    for(int i=0; i<matrix_size; i++)
-    {
-        std::cout << "add stats err = " << add_stats_err.at(i) << std::endl;
-        M(i,i) = diag.at(i) + (add_stats_err.at(i)*add_stats_err.at(i));
-    }
-
-    return ;
-}*/
-
 void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag ){
     int matrix_size = M.GetNrows();
 
@@ -1156,7 +1137,6 @@ void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag ){
     for(int i=0; i<matrix_size; i++)
     {
         M(i,i) = diag.at(i);
-        std::cout << "stats error = " <<  M(i,i) << std::endl;
     }
 
     return ;
@@ -2823,6 +2803,7 @@ TH1D SBNchi::SamplePoissonVaryCore(SBNspec *specin, int num_MC){
 
 //Pelee specific detsys
 void SBNchi::FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool frac){
+
     int matrix_size = M.GetNrows();
 
     if(matrix_size != (core_spectrum.full_vector).size()){std::cout<<"#ERROR: FillStatsMatrix, matrix not equal to diagonal"<<std::endl;}
@@ -2833,14 +2814,14 @@ void SBNchi::FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool 
     int j=0;
 
     //BDT
-    std::vector<double> np_detsys = {0.2007, 0.1077, 0.0922, 0.0574, 0.0663, 0.0755, 0.0721, 0.0872, 0.0975, 0.1034, 0.2551, 0.0849, 0.1428, 0.1764, 0.1806, 0.2042, 0.1841, 0.1688, 0.1811}; //RealAnalysis
-    //std::vector<double> np_detsys = {0.2454, 0.1523, 0.1546, 0.0900, 0.1500, 0.0608, 0.1530, 0.0781, 0.1114, 0.1145, 0.2005, 0.1237, 0.1871, 0.1105, 0.1349, 0.1612, 0.2478}; //FD
+    //std::vector<double> np_detsys = {0.2007, 0.1077, 0.0922, 0.0574, 0.0663, 0.0755, 0.0721, 0.0872, 0.0975, 0.1034, 0.2551, 0.0849, 0.1428, 0.1764, 0.1806, 0.2042, 0.1841, 0.1688, 0.1811}; //RealAnalysis
+    std::vector<double> np_detsys = {0.245, 0.152, 0.155, 0.090, 0.150, 0.061, 0.153, 0.078, 0.112, 0.115, 0.200, 0.124, 0.187, 0.111}; //new number
     //1e0p
-    std::vector<double> zp_detsys = {0.0985, 0.0985, 0.1015, 0.1015, 0.1929, 0.1929, 0.2326, 0.2326, 0.3289, 0.3289, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720}; //RealAnalysis
-    //std::vector<double> zp_detsys = {0.1520, 0.1520, 0.0980, 0.0980, 0.1939, 0.1939, 0.4064, 0.4064, 0.3259, 0.3259, 0.1819, 0.1819, 0.1819, 0.1819, 0.2540, 0.2540, 0.2540, 0.2540, 0.2540}; //FD
+    //std::vector<double> zp_detsys = {0.0985, 0.0985, 0.1015, 0.1015, 0.1929, 0.1929, 0.2326, 0.2326, 0.3289, 0.3289, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720, 0.1720}; //RealAnalysis
+    std::vector<double> zp_detsys = {0.152, 0.152, 0.975, 0.975, 0.194, 0.194, 0.404, 0.404, 0.325, 0.325, 0.182, 0.182, 0.182, 0.182}; //new number
     //numu
-    std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261};//RealAnalysis
-    //std::vector<double> numu_detsys = {0.1655, 0.1044, 0.1233, 0.0574, 0.0500, 0.0849, 0.0686, 0.1449, 0.1158, 0.0849, 0.0980, 0.1536, 0.1556, 0.1879, 0.2987}; //FD
+    //std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261};//RealAnalysis
+    std::vector<double> numu_detsys = {0.119, 0.139, 0.106, 0.063, 0.050, 0.071, 0.052, 0.099, 0.054, 0.115, 0.087, 0.183, 0.132, 0.175}; //new number
 
     //initialize vectors to store index of lee and intrinsic to make the correlation
     std::vector<int> col_intrinsic_np, col_lee_np, col_intrinsic_zp, col_lee_zp;
@@ -2848,52 +2829,51 @@ void SBNchi::FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool 
         std::string hname = h.GetName();
         for( int i=1; i < h.GetNbinsX()+1; i++ ){
           if( hname.find("1eNp_bg_intrinsic") != std::string::npos ){
-            std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j <<std::endl;
+            //if(i==1) std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j <<std::endl;
             if(!frac) M(j,j) = np_detsys[i-1]*np_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
             else M(j,j) = np_detsys[i-1]*np_detsys[i-1];
-            std::cout << ", " << np_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
+            //if(i==1) std::cout << ", " << np_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
             col_intrinsic_np.push_back(j);
           }
           else if( hname.find("1eNp_sig_lee") != std::string::npos ){
-            std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            //std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
             if(!frac) M(j,j) = np_detsys[i-1]*np_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
             else M(j,j) = np_detsys[i-1]*np_detsys[i-1];
-            std::cout << ", " << np_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
+            //std::cout << ", " << np_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
             col_lee_np.push_back(j);
           }
           else if( hname.find("1e0p_bg_intrinsic") != std::string::npos ){
-            std::cout << "Fill 1e0p signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            //std::cout << "Fill 1e0p signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
             if(!frac) M(j,j) = zp_detsys[i-1]*zp_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
             else M(j,j) = zp_detsys[i-1]*zp_detsys[i-1];
-            std::cout << ", " << zp_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
+            //std::cout << ", " << zp_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
             col_intrinsic_zp.push_back(j);
           }
           else if( hname.find("1e0p_sig_lee") != std::string::npos){
-            std::cout << "Fill 1e0p signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            //std::cout << "Fill 1e0p signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
             if(!frac) M(j,j) = zp_detsys[i-1]*zp_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
             else M(j,j) = zp_detsys[i-1]*zp_detsys[i-1];
-            std::cout << ", " << zp_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
+            //std::cout << ", " << zp_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
             col_lee_zp.push_back(j);
           }
           else if( hname.find("numu_bnb") != std::string::npos ){
-            std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            //std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
             if(!frac) M(j,j) = numu_detsys[i-1]*numu_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
             else M(j,j) = numu_detsys[i-1]*numu_detsys[i-1];
-            std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
+            //std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
             //col_numu_bnb.push_back(j); 
           }
           else if( hname.find("numu_dirt") != std::string::npos ){
-            std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            //std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
             if(!frac) M(j,j) = 0.2*0.2*h.GetBinContent(i)*h.GetBinContent(i);
             else M(j,j) = 0.2*0.2;
-            std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
-            //col_numu_bnb.push_back(j); 
+            //std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
           }
 	  else if( hname.find("ext") == std::string::npos && hname.find("data") == std::string::npos ){
-          std::cout << "Fill bg detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            if(i==1) std::cout << "Fill bg detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
             if(!frac)M(j,j) = 0.2*0.2*h.GetBinContent(i)*h.GetBinContent(i);
             else M(j,j) = 0.2*0.2;
-            std::cout << ", 0.2 , " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
+            //std::cout << ", 0.2 , " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
           }
 	  else if( hname.find("ext") != std::string::npos ){ std::cout << "@@@@@@@@ histo name, bin, number of event: " << h.GetName() << ", " << i << ", " << h.GetBinContent(i) << std::endl;}
           j++; 
@@ -2902,14 +2882,14 @@ void SBNchi::FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool 
     //fill correlation between nue and lee
     core_spectrum.CalcFullVector();
     //1eNp
-    std::cout << "col_intrinsic_np.size() = " << col_intrinsic_np.size() << std::endl;
+    //std::cout << "col_intrinsic_np.size() = " << col_intrinsic_np.size() << std::endl;
     for(int i=0; i<col_intrinsic_np.size(); i++){
-      std::cout << "i, col_lee_np[i] = " << i << ", " << col_lee_np[i] << std::endl;
+      //std::cout << "i, col_lee_np[i] = " << i << ", " << col_lee_np[i] << std::endl;
       M(col_intrinsic_np[i],col_lee_np[i]) = sqrt(M(col_intrinsic_np[i],col_intrinsic_np[i])*M(col_lee_np[i],col_lee_np[i])); 
       M(col_lee_np[i],col_intrinsic_np[i]) = sqrt(M(col_lee_np[i],col_lee_np[i])*M(col_intrinsic_np[i],col_intrinsic_np[i])); 
     }
     //1eNp
-    std::cout << "col_intrinsic_zp.size() = " << col_intrinsic_zp.size() << std::endl;
+    //std::cout << "col_intrinsic_zp.size() = " << col_intrinsic_zp.size() << std::endl;
     for(int i=0; i<col_intrinsic_zp.size(); i++){
       M(col_intrinsic_zp[i],col_lee_zp[i]) = sqrt(M(col_intrinsic_zp[i],col_intrinsic_zp[i])*M(col_lee_zp[i],col_lee_zp[i])); 
       M(col_lee_zp[i],col_intrinsic_zp[i]) = sqrt(M(col_lee_zp[i],col_lee_zp[i])*M(col_intrinsic_zp[i],col_intrinsic_zp[i])); 
