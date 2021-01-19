@@ -44,7 +44,6 @@
     <bins
         edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
         />
-    <subchannel name="lee"/>
     <subchannel name="intrinsic" />
     <subchannel name="nu" />
     <subchannel name="CCmuNoPi" />
@@ -157,21 +156,21 @@
  </MultisimFile>
 
  <!-- 1e0p -->
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nue_1e0p.root" scale= "1.0" pot = "5.27e22" > 
-     <branch
-         name="neutrinoenergy"
-         type="double"
-         associated_subchannel="nu_uBooNE_1e0p_bg_intrinsic"
-         additional_weight="weightSplineTimesTune"
-      />
- </MultisimFile>
-
  <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/fakedata5/nue_1e0p.root" scale= "1.0" pot = "5.27e22" > 
      <branch
          name="neutrinoenergy"
          type="double"
          associated_subchannel="nu_uBooNE_1e0p_sig_lee"
          additional_weight="leeweight*weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nue_1e0p.root" scale= "1.0" pot = "5.27e22" > 
+     <branch
+         name="neutrinoenergy"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_bg_intrinsic"
+         additional_weight="weightSplineTimesTune"
       />
  </MultisimFile>
 
@@ -262,4 +261,24 @@
 -->
  <WeightMaps>
     <variation pattern="_AllGenie" weight_formula="1.0/weightTune"/>
+ </WeightMaps>
+
+ <variation_list>
+   <blacklist>XSecShape_CCMEC_Genie</blacklist>
+ </variation_list>
+
+<!-- weights -->
+ <WeightMaps>
+    <variation pattern="All_Genie" weight_formula="1.0/weightTune"/>
+    <variation pattern="NormCCCOH_Genie" />
+    <variation pattern="NormNCCOH_Genie" />
+    <variation pattern="RPA_CCQE_Genie" />
+    <variation pattern="RootinoFix_Genie" />
+    <variation pattern="TunedCentralValue_Genie" />
+    <variation pattern="AxFFCCQEshape_Genie"  mode="minmax"/>
+    <variation pattern="DecayAngMEC_Genie"  mode="minmax"/>
+    <variation pattern="ThetaDelta2NRad_Genie"  mode="minmax"/>
+    <variation pattern="Theta_Delta2Npi_Genie"  mode="minmax"/>
+    <variation pattern="VecFFCCQEshape_Genie"  mode="minmax"/>
+    <variation pattern="XSecShape_CCMEC_Genie"  mode="minmax"/>
  </WeightMaps>

@@ -1,29 +1,51 @@
-<?xml version="0.0" ?>
+<?xml version="1.0" ?>
 
 <!-- For this simple example we have one mode: Neutrino mode (nu) and one detector (uBooNE) -->
 <mode name="nu" />
 <detector name="uBooNE"  />
 
 <!-- We have three channels. Each "Channel" referes to a physically observable selelection. In this case nue-like and numu-like. -->
-<channel name="1eNp" unit="GeV"  >
+<channel name="1eNp_sig" unit="GeV"  >
     <bins
         edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
         />
-    <subchannel name="nu" />
-    <subchannel name="CCmuNoPi" />
-    <subchannel name="NCcPiNoPi0" />
-    <subchannel name="ccpi0" />
-    <subchannel name="ncnopi" />
-    <subchannel name="ncpi0" />
-    <subchannel name="CCmuCPiNoPi0" />
-    <subchannel name="intrinsic" />
     <subchannel name="lee"/>
 </channel>
 
-<channel name="1e0p" unit="GeV"  >
+<channel name="1eNp_bg" unit="GeV"  >
     <bins
         edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
         />
+    <subchannel name="intrinsic" />
+    <subchannel name="nu" />
+    <subchannel name="CCmuNoPi" />
+    <subchannel name="NCcPiNoPi0" />
+    <subchannel name="ccpi0" />
+    <subchannel name="ncnopi" />
+    <subchannel name="ncpi0" />
+    <subchannel name="CCmuCPiNoPi0" />
+</channel>
+
+<channel name="1eNp_data" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="data"/>
+</channel>
+
+<channel name="1e0p_sig" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="lee"/>
+</channel>
+
+<channel name="1e0p_bg" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="lee"/>
+    <subchannel name="intrinsic" />
     <subchannel name="nu" />
     <subchannel name="CCmuNoPi" />
     <subchannel name="NCcPiNoPi0" />
@@ -31,8 +53,13 @@
     <subchannel name="ncpi0" />
     <subchannel name="ccpi0" />
     <subchannel name="CCmuCPiNoPi0" />
-    <subchannel name="intrinsic" />
-    <subchannel name="lee"/>
+</channel>
+
+<channel name="1e0p_data" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="data"/>
 </channel>
 
 <channel name="numu" unit="GeV"  >
@@ -40,7 +67,6 @@
         edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
         />
     <subchannel name="bnb" />
-    <!--subchannel name="data" /-->
 </channel>
 
 <plotpot value=7.97e20/>
@@ -49,21 +75,11 @@
 <!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
 
  <!-- 1eNp -->
-<!--
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_1eNp_fakedata1.root" scale= "0.00181" pot = "5.01e20" > 
-     <branch
-         name="reco_e_d"
-         type="double"
-         associated_subchannel="nu_uBooNE_1eNp_intrinsic"
-         additional_weight="weightSplineTimesTune"
-      />
- </MultisimFile>
--->
  <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata1/nue_1eNp_fakedata1.root" scale= "1.0" pot = "1.77e23" > 
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_intrinsic"
+         associated_subchannel="nu_uBooNE_1eNp_bg_intrinsic"
          additional_weight="weightSplineTimesTune"
       />
  </MultisimFile>
@@ -72,7 +88,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_lee"
+         associated_subchannel="nu_uBooNE_1eNp_sig_lee"
          additional_weight="leeweight*weightSplineTimesTune"
       />
  </MultisimFile>
@@ -81,7 +97,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_nu"
+         associated_subchannel="nu_uBooNE_1eNp_bg_nu"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -90,7 +106,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_CCmuNoPi"
+         associated_subchannel="nu_uBooNE_1eNp_bg_CCmuNoPi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -99,7 +115,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_ccpi0"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ccpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -108,7 +124,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_NCcPiNoPi0"
+         associated_subchannel="nu_uBooNE_1eNp_bg_NCcPiNoPi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -117,7 +133,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_ncnopi"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ncnopi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -126,7 +142,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_ncpi0"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ncpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -135,7 +151,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1eNp_CCmuCPiNoPi0"
+         associated_subchannel="nu_uBooNE_1eNp_bg_CCmuCPiNoPi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -145,7 +161,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_intrinsic"
+         associated_subchannel="nu_uBooNE_1e0p_bg_intrinsic"
          additional_weight="weightSplineTimesTune"
       />
  </MultisimFile>
@@ -154,7 +170,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_lee"
+         associated_subchannel="nu_uBooNE_1e0p_sig_lee"
          additional_weight="leeweight*weightSplineTimesTune"
       />
  </MultisimFile>
@@ -163,7 +179,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_nu"
+         associated_subchannel="nu_uBooNE_1e0p_bg_nu"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -172,7 +188,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_CCmuNoPi"
+         associated_subchannel="nu_uBooNE_1e0p_bg_CCmuNoPi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -181,7 +197,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_ccpi0"
+         associated_subchannel="nu_uBooNE_1e0p_bg_ccpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -190,7 +206,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_NCcPiNoPi0"
+         associated_subchannel="nu_uBooNE_1e0p_bg_NCcPiNoPi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -199,7 +215,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_ncnopi"
+         associated_subchannel="nu_uBooNE_1e0p_bg_ncnopi"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -208,7 +224,7 @@
      <branch
          name="reco_e_d"
          type="double"
-         associated_subchannel="nu_uBooNE_1e0p_ncpi0"
+         associated_subchannel="nu_uBooNE_1e0p_bg_ncpi0"
          additional_weight="weightSplineTimesTune"
          />
  </MultisimFile>
@@ -224,21 +240,27 @@
       />
  </MultisimFile>
 
-<!--
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_numu_fakedata1.root" scale = "1.0" pot = "2.94e20" > 
-     <branch
-         name="neutrinoenergy"
-         type="double"
-         associated_subchannel="nu_uBooNE_numu_data"
-         additional_weight="weightSplineTimesTune"
-      />
- </MultisimFile>
--->
  <WeightMaps>
     <variation pattern="_AllGenie" weight_formula="1.0/weightTune"/>
-    <!--
-    <variation pattern="_Genie" weight_formula="weightSpline"/>
-    <variation pattern="_PrimaryHadron" weight_formula="weightSplineTimesTune" />
-    <variation pattern="_FluxUnisim" weight_formula="weightSplineTimesTune"/>
-    -->
+ </WeightMaps>
+
+<variation_list>
+   <blacklist>XSecShape_CCMEC_Genie</blacklist>
+</variation_list>
+
+
+<!-- weights -->
+ <WeightMaps>
+    <variation pattern="All_Genie" weight_formula="1.0/weightTune"/>
+    <variation pattern="NormCCCOH_Genie" />
+    <variation pattern="NormNCCOH_Genie" />
+    <variation pattern="RPA_CCQE_Genie" />
+    <variation pattern="RootinoFix_Genie" />
+    <variation pattern="TunedCentralValue_Genie" />
+    <variation pattern="AxFFCCQEshape_Genie"  mode="minmax"/>
+    <variation pattern="DecayAngMEC_Genie"  mode="minmax"/>
+    <variation pattern="ThetaDelta2NRad_Genie"  mode="minmax"/>
+    <variation pattern="Theta_Delta2Npi_Genie"  mode="minmax"/>
+    <variation pattern="VecFFCCQEshape_Genie"  mode="minmax"/>
+    <variation pattern="XSecShape_CCMEC_Genie"  mode="minmax"/>
  </WeightMaps>
