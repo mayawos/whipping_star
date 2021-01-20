@@ -638,7 +638,7 @@ void SBNcovariance::ProcessEvent(
             << " as its either inf/nan: " << global_weight << std::endl;
         throw std::runtime_error(ss.str());
     }
-
+    if(global_weight < 0) std::cout<<"ERROR! the global weight is negative: " << global_weight <<  ", " << montecarlo_additional_weight_formulas[fileid]->GetNdata() << std::endl;
     if(!EventSelection(fileid)) return;
 
     // precompute the weight size
@@ -659,8 +659,10 @@ void SBNcovariance::ProcessEvent(
         m_variation_weight_formulas[fileid][vid]->GetNdata();
         double indiv_variation_weight = m_variation_weight_formulas[fileid][vid]->EvalInstance();
         if((indiv_variation_weight!= indiv_variation_weight || indiv_variation_weight <0 )&& !montecarlo_fake[fileid]){
-            std::cout<<"ERROR! the individual variation weight is nan or negative "<<indiv_variation_weight<<" Breakign!"<<std::endl;
-            exit(EXIT_FAILURE);
+            std::cout<<"ERROR! the individual variation ("<< var <<") weight is nan or negative "<<indiv_variation_weight<<" Breakign! weight is "<< m_variation_weight_formulas[fileid][vid]->GetNdata() <<  std::endl;
+            std::cout<<"Setting weight to 1.0! And I will not exit this code" << std::endl;
+            indiv_variation_weight=1.0; 
+            //exit(EXIT_FAILURE);
         }
         //std::cout<<var<<" "<<indiv_variation_weight<<" "<<fileid<<" "<<vid<<std::endl;
 

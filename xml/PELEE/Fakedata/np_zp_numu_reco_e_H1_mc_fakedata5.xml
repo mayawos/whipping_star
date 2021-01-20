@@ -75,7 +75,7 @@
 <!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
 
  <!-- 1eNp -->
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nue_1eNp.root" scale= "1.0" fake="1" pot = "5.27e22" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nue_1eNp.root" scale= "1.0" pot = "5.27e22" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -84,7 +84,7 @@
       />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/fakedata5/nue_1eNp.root" scale= "1.0" fake="1" pot = "5.27e22" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/fakedata5/nue_1eNp.root" scale= "1.0" pot = "5.27e22" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -93,7 +93,7 @@
       />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/mc_1eNp.root" scale = "1.0" fake="1" pot = "1.31e21" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/mc_1eNp.root" scale = "1.0" pot = "1.31e21" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -102,7 +102,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccnopi_1eNp.root" scale = "1.0" fake="1" pot = "4.63e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccnopi_1eNp.root" scale = "1.0" pot = "4.63e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -111,7 +111,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccpi0_1eNp.root" scale = "1.0" fake="1" pot = "3.4873e21" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccpi0_1eNp.root" scale = "1.0" pot = "3.4873e21" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -120,7 +120,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nccpi_1eNp.root" scale = "1.0" fake="1" pot = "8.95e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nccpi_1eNp.root" scale = "1.0" pot = "8.95e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -129,7 +129,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncnopi_1eNp.root" scale = "1.0" fake="1" pot = "3.64e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncnopi_1eNp.root" scale = "1.0" pot = "3.64e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -138,7 +138,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncpi0_1eNp.root" scale = "1.0" fake="1" pot = "2.67e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncpi0_1eNp.root" scale = "1.0" pot = "2.67e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -147,7 +147,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/cccpi_1eNp.root" scale = "1.0" fake="1" pot = "6.05e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/cccpi_1eNp.root" scale = "1.0" pot = "6.05e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -157,7 +157,7 @@
  </MultisimFile>
 
  <!-- 1e0p -->
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nue_1e0p.root" scale= "1.0" fake="1" pot = "5.27e22" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nue_1e0p.root" scale= "1.0" pot = "5.27e22" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -166,7 +166,7 @@
       />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/fakedata5/nue_1e0p.root" scale= "1.0" fake="1" pot = "5.27e22" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/fakedata5/nue_1e0p.root" scale= "1.0" pot = "5.27e22" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -175,7 +175,7 @@
       />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/mc_1e0p.root" scale = "1.0" fake="1" pot = "1.31e21" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/mc_1e0p.root" scale = "1.0" pot = "1.31e21" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -184,7 +184,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccnopi_1e0p.root" scale = "1.0" fake="1" pot = "9.08e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccnopi_1e0p.root" scale = "1.0" pot = "9.08e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -193,7 +193,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccpi0_1e0p.root" scale = "1.0" fake="1" pot = "3.4873e21" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ccpi0_1e0p.root" scale = "1.0" pot = "3.4873e21" > 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -202,7 +202,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nccpi_1e0p.root" scale = "1.0" fake="1" pot = "8.95e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/nccpi_1e0p.root" scale = "1.0" pot = "8.95e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -211,7 +211,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncnopi_1e0p.root" scale = "1.0" fake="1" pot = "3.64e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncnopi_1e0p.root" scale = "1.0" pot = "3.64e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -220,7 +220,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncpi0_1e0p.root" scale = "1.0" fake="1" pot = "2.67e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/ncpi0_1e0p.root" scale = "1.0" pot = "2.67e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -229,7 +229,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/cccpi_1e0p.root" scale = "1.0" fake="1" pot = "6.05e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/cccpi_1e0p.root" scale = "1.0" pot = "6.05e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -241,7 +241,7 @@
 
 <!-- NuMu selection -->
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/mc_numu.root" scale = "1.0" fake="1" pot = "1.31e21"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/mc_numu.root" scale = "1.0" pot = "1.31e21"> 
      <branch
          name="neutrinoenergy"
          type="double"
@@ -251,7 +251,7 @@
  </MultisimFile>
 
 <!--
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/data_numu_fakedata1.root" scale = "1.0" fake="1" pot = "2.94e20" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_43/0624/fakedata/SBNFit/fakedata5/data_numu_fakedata1.root" scale = "1.0" pot = "2.94e20" > 
      <branch
          name="neutrinoenergy"
          type="double"
