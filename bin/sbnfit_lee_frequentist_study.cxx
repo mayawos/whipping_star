@@ -252,19 +252,19 @@ int main(int argc, char* argv[])
     if(fakedata_file != "EMPTY"){
       std::cout << "Loading fakedata file: " << fakedata_file << std::endl;
       fdata = new TFile(fakedata_file.c_str(),"read");
-      h_fakedata_1eNp = (TH1D*)fdata->Get("nu_uBooNE_nue_data");
+      h_fakedata_1eNp = (TH1D*)fdata->Get("nu_uBooNE_1eNp_data");
       h_fakedata_1e0p = (TH1D*)fdata->Get("nu_uBooNE_1e0p_data");
       h_fakedata_numu = (TH1D*)fdata->Get("nu_uBooNE_numu_data");
     }
     std::cout << "create vector of fakedata" << std::endl; 
     //create vector of fakedata:
     std::vector<float> fakedata;
-    if( which_mode==2 ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
-    if( which_mode==2 ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
-    if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
     if( which_mode==2 ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; }
     if( which_mode==2 ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; }
-    if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_numu->GetBinContent k " << k << " = " <<  h_fakedata_numu->GetBinContent(k) << std::endl; }
+    //if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_numu->GetBinContent k " << k << " = " <<  h_fakedata_numu->GetBinContent(k) << std::endl; }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
+    if( which_mode==2 ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
+    //if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
     
     std::cout << "size of fakedata vector: " << fakedata.size() << std::endl;
     //End of PeLEE hacks for incorporating fake data

@@ -182,16 +182,16 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
     
     std::vector<std::string> nice_names = {"Pearson_Chi","Poisson_Log_Likelihood","CNP_Chi"};
     for(int i=0;i< 3;i++){
-      if(which_mode == 2) makePlotsFakedata( h0_results[i], h1_results[i], chi_datah0[i], data_results[i], tag+nice_names[i], which_mode);
+      if(which_mode == 2) makePlotsFakedata( h0_results[i], h1_results[i], chi_datah0[i], data_results[i], tag+nice_names[i], 1);
       else  makePlots( h0_results[i], h1_results[i], tag+nice_names[i], which_mode);
     }
     if(which_mode == 2){
-      makePlotsFakedata( h0_results[3], h1_results[3], chi_datah0[3], data_results[3], tag+"_Chi2Only_Pearson_H0", which_mode);
-      makePlotsFakedata( h0_results[4], h1_results[4], chi_datah0[4], data_results[4], tag+"_Chi2Only_Pearson_H1", which_mode);
-      makePlotsFakedata( h0_results[5], h1_results[5], chi_datah0[5], data_results[5], tag+"_Chi2Only_Pois_H0", which_mode);
-      makePlotsFakedata( h0_results[6], h1_results[6], chi_datah0[6], data_results[6], tag+"_Chi2Only_Pois_H1", which_mode);
-      makePlotsFakedata( h0_results[7], h1_results[7], chi_datah0[7], data_results[7], tag+"_Chi2Only_CNP_H0", which_mode);
-      makePlotsFakedata( h0_results[8], h1_results[8], chi_datah0[8], data_results[8], tag+"_Chi2Only_CNP_H1", which_mode);
+      makePlotsFakedata( h0_results[3], h1_results[3], chi_datah0[3], data_results[3], tag+"_Chi2Only_Pearson_H0", 1);
+      makePlotsFakedata( h0_results[4], h1_results[4], chi_datah0[4], data_results[4], tag+"_Chi2Only_Pearson_H1", 1);
+      makePlotsFakedata( h0_results[5], h1_results[5], chi_datah0[5], data_results[5], tag+"_Chi2Only_Pois_H0", 1);
+      makePlotsFakedata( h0_results[6], h1_results[6], chi_datah0[6], data_results[6], tag+"_Chi2Only_Pois_H1", 1);
+      makePlotsFakedata( h0_results[7], h1_results[7], chi_datah0[7], data_results[7], tag+"_Chi2Only_CNP_H0", 1);
+      makePlotsFakedata( h0_results[8], h1_results[8], chi_datah0[8], data_results[8], tag+"_Chi2Only_CNP_H1", 1);
       makePlotsFakedata( h0_results[3], h0_results[4], chi_datah0[3], data_results[3], tag+"_Base_PearsonChi_true_H0", 0);
       makePlotsFakedata( h1_results[3], h1_results[4], chi_datah1[3], data_results[4], tag+"_Base_PearsonChi_true_H1", 0);
    }else{
