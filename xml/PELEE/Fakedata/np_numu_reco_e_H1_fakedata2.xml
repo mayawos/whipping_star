@@ -19,13 +19,13 @@
     <subchannel name="data" />
 </channel>
 
-<plotpot value=9e20/>
+<plotpot value=7.97e20/>
 
 <!-- ############################# BUILDING A COVARIANCE MATRIX  #####################################################-->
 <!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
 
  <!-- 1eNp -->
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_1eNp_fakedata5.root" scale= "1.0" pot = "9e20" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_1eNp_fakedata2.root" scale= "1.0" pot = "7.97e20" > 
      <branch
          name="reco_e_d"
          type="double"
@@ -35,7 +35,7 @@
 
 <!-- NuMu selection -->
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_numu_fakedata5.root" scale = "1.0" pot = "9e20" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_numu_fakedata2.root" scale = "0.491" pot = "3.91e20" > 
      <branch
          name="neutrinoenergy"
          type="double"
