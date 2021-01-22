@@ -264,6 +264,10 @@
     <variation pattern="_AllGenie" weight_formula="1.0/weightTune"/>
  </WeightMaps>
 
+<variation_list>
+   <blacklist>XSecShape_CCMEC_Genie</blacklist>
+</variation_list>
+ 
 <!-- weights -->
  <WeightMaps>
     <variation pattern="All_Genie" weight_formula="1.0/weightTune"/>
