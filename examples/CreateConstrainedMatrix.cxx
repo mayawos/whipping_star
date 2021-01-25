@@ -521,6 +521,7 @@ int main(int argc, char* argv[])
   TH1D* h_1eNp_sum_before, *h_1eNp_bg_before; 
   TH1D* h_1e0p_sum_before, *h_1e0p_bg_before; 
   TH1D* h_1eNp_dummy, *h_1e0p_dummy; 
+  TH1D* h_numu_before; 
   if(combined){
     for(int ic=0; ic<sig_spectra.num_channels; ic++){
       std::cout << channel_hists[ic]->GetName() << std::endl;
@@ -531,6 +532,7 @@ int main(int argc, char* argv[])
       if(name.find("1e0p_sig") != std::string::npos){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_sum_before = (TH1D*)channel_hists[ic]->Clone("Zp_sum_lee");}
       if(name.find("1e0p_bg") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_bg_before  = (TH1D*)channel_hists[ic]->Clone("Zp_bg");}
       if(name.find("1e0p_bg") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_dummy = (TH1D*)channel_hists[ic]->Clone("Zp_dummy"); h_1e0p_dummy->Reset();}
+      if(name.find("numu") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_numu_before = (TH1D*)channel_hists[ic]->Clone("numu_before"); }
     }
     
     //1eNp before constraint
@@ -540,12 +542,14 @@ int main(int argc, char* argv[])
     
     //Draw the before constraint plots
     
-    cname = tag + "_before_constraint_numu";
+    cname = tag + "_before_constraint_1eNp";
     if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_nue_np_fake_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1eNp0#pi Selection");	
     else DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_1eNp_dummy, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1eNp0#pi Selection");	
     cname = tag + "_before_constraint_1e0p";
     if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_nue_0p_fake_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1e0p0#pi Selection");	
     else DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_1e0p_dummy, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1e0p0#pi Selection");	
+    cname = tag + "_before_constraint_numu";
+    DrawDataMCAndSyst(cname, h_numu_before, h_numu_before, h_numu_data, "Reconstructed Visible Energy [GeV]", "#nu_{#mu} Selection");	
   }
  
   //======================================================
@@ -678,12 +682,13 @@ int main(int argc, char* argv[])
     //set bin content
     for(int bin=0; bin < channel_bins[ic]; bin++){ 
       channel_hists_after[ic]->SetBinContent(bin+1,input_nue_constrained[bin+channel_edges[ic]]);
+      channel_hists_after[ic]->SetBinError(bin+1,sqrt((constnuematrix)[bin+channel_edges[ic]][bin+channel_edges[ic]]));
       if(channel_hists_after[ic]->GetBinContent(bin+1) < 0 ) channel_hists_after[ic]->SetBinContent(bin+1,0.);
     }
     //set bin content
     for(int bin=0; bin < channel_signalbins[0]; bin++){ 
       channel_hists_after_signalbins[ic]->SetBinContent(bin+1,input_nue_constrained[bin+channel_edges[ic]]);
-      channel_hists_after_signalbins[ic]->SetBinError(bin+1,channel_hists_after[ic]->GetBinError(bin+1));
+      channel_hists_after_signalbins[ic]->SetBinError(bin+1,sqrt((constnuematrix)[bin+channel_edges[ic]][bin+channel_edges[ic]]));
       if(channel_hists_after_signalbins[ic]->GetBinContent(bin+1) < 0 ) channel_hists_after_signalbins[ic]->SetBinContent(bin+1,0.);
     }
     //set bin error -- note that the new FC code adds the mc stats separately
