@@ -199,7 +199,10 @@ int main(int argc, char* argv[])
   //get hist based on order of the channels
   std::vector<TH1D*> channel_hists;
   std::vector<TH1D*> channel_hists_after;
+  std::vector<TH1D*> channel_hists_after_signalbins;
+  std::vector<TH1D*> channel_hists_data_signalbins;
   std::vector<int> channel_bins;
+  std::vector<int> channel_signalbins;
   std::vector<int> channel_edges;
   std::vector<int> num_bins_coll_vec;
   int edge = 0;
@@ -219,8 +222,15 @@ int main(int argc, char* argv[])
     channel_edges.push_back(edge);
     TH1D* histo1 = (TH1D*)sig_spectra.hist[wh].Clone(Form("%s_before",sig_spectra.channel_names[ic].c_str()));
     TH1D* histo2 = (TH1D*)sig_spectra.hist[wh].Clone(Form("%s_after",sig_spectra.channel_names[ic].c_str()));
+    TH1D* histo3 = (TH1D*)sig_spectra.hist[wh].Clone(Form("%s_after_signalbins",sig_spectra.channel_names[ic].c_str()));
+    TH1D* histo4 = (TH1D*)sig_spectra.hist[wh].Clone(Form("%s_data_signalbins",sig_spectra.channel_names[ic].c_str()));
     channel_hists.push_back(histo1);
     channel_hists_after.push_back(histo2);
+    histo3->Reset();
+    channel_hists_after_signalbins.push_back(histo3);
+    channel_signalbins.push_back(histo4->FindBin(0.85) - 1);
+    histo4->Reset();
+    channel_hists_data_signalbins.push_back(histo4);
   }
 
   //use the vector of channel histograms to define 
@@ -624,6 +634,10 @@ int main(int argc, char* argv[])
   TMatrixD fracnuematrix(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD fracnuematrix_noext(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD corrnuematrix(nuematrix.GetNrows(),nuematrix.GetNcols());
+  TMatrixD covnue_signal(nuematrix.GetNrows(),nuematrix.GetNcols());
+  TMatrixD fracnue_signal(nuematrix.GetNrows(),nuematrix.GetNcols());
+  TMatrixD fracnue_noext_signal(nuematrix.GetNrows(),nuematrix.GetNcols());
+  TMatrixD corrnue_signal(nuematrix.GetNrows(),nuematrix.GetNcols());
   for( int i = 0; i < nuematrix.GetNrows(); i++ ){
     for( int j = 0; j < nuematrix.GetNcols(); j++ ){
       constnuematrix(i,j) = nuematrix(i,j) - B(i,j);
@@ -633,9 +647,17 @@ int main(int argc, char* argv[])
       else fracnuematrix_noext(i,j) = 0.0;
       corrnuematrix(i,j) = constnuematrix(i,j)/sqrt(constnuematrix(i,i)*constnuematrix(j,j));
       if(verbose){ if(i==j) std::cout << i << " fracnuematrix = " << fracnuematrix(i,j) << std::endl; }
+      covnue_signal(i,j) = nuematrix(i,j) - B(i,j);
+      if( input_nue_constrained[i] != 0 && input_nue_constrained[j] != 0 ) fracnue_signal(i,j) = constnuematrix(i,j)/(input_nue_constrained[i]*input_nue_constrained[j]);
+      else fracnue_signal(i,j) = 0.0;
+      if( input_nue_constrained_noext[i] != 0 && input_nue_constrained_noext[j] != 0) fracnue_noext_signal(i,j) = constnuematrix(i,j)/(input_nue_constrained_noext[i]*input_nue_constrained_noext[j]);
+      else fracnue_noext_signal(i,j) = 0.0;
+      corrnue_signal(i,j) = constnuematrix(i,j)/sqrt(constnuematrix(i,i)*constnuematrix(j,j));
+      if(channel_bins.size() == 4 && (i >= channel_signalbins[0] && i < channel_bins[0]) || (i >= channel_signalbins[1] && i < channel_bins[1]) || (j >= channel_signalbins[0] && j < channel_bins[0]) || (j >= channel_signalbins[1] && j < channel_bins[1]) ){ fracnue_signal(i,j) = 0.0; covnue_signal(i,j) = 0.0; corrnue_signal = 0.0; fracnue_noext_signal = 0.0; }
+      if(channel_bins.size() == 7 && (i >= channel_signalbins[0] && i < channel_bins[0]) || (i >= channel_signalbins[1] && i < channel_bins[1]) || (j >= channel_signalbins[0] && j < channel_bins[0]) || (j >= channel_signalbins[1] && j < channel_bins[1]) ){ fracnue_signal(i,j) = 0.0; covnue_signal(i,j) = 0.0; corrnue_signal = 0.0; fracnue_noext_signal = 0.0;}
+      if(channel_bins.size() == 7 && (i >= channel_signalbins[3] && i < channel_bins[3]) || (i >= channel_signalbins[4] && i < channel_bins[4]) || (j >= channel_signalbins[3] && j < channel_bins[3]) || (j >= channel_signalbins[4] && j < channel_bins[4]) ){ fracnue_signal(i,j) = 0.0; covnue_signal(i,j) = 0.0; corrnue_signal = 0.0; fracnue_noext_signal = 0.0;}
     }
   }
- 
   //write out the diagonals of the frac covariance matrix to the tex format
   if(combined && !doFakedata){ 
     for(int ic=0; ic<sig_spectra.num_channels; ic++){
@@ -658,12 +680,30 @@ int main(int argc, char* argv[])
       channel_hists_after[ic]->SetBinContent(bin+1,input_nue_constrained[bin+channel_edges[ic]]);
       if(channel_hists_after[ic]->GetBinContent(bin+1) < 0 ) channel_hists_after[ic]->SetBinContent(bin+1,0.);
     }
+    //set bin content
+    for(int bin=0; bin < channel_signalbins[0]; bin++){ 
+      channel_hists_after_signalbins[ic]->SetBinContent(bin+1,input_nue_constrained[bin+channel_edges[ic]]);
+      channel_hists_after_signalbins[ic]->SetBinError(bin+1,channel_hists_after[ic]->GetBinError(bin+1));
+      if(channel_hists_after_signalbins[ic]->GetBinContent(bin+1) < 0 ) channel_hists_after_signalbins[ic]->SetBinContent(bin+1,0.);
+    }
     //set bin error -- note that the new FC code adds the mc stats separately
     //in our case the MC stats is already added to the resulting covariance matrix
     //the fc flag is still in testing mode and need further validation
     if(fc){  for(int bin=0; bin < channel_bins[ic]; bin++) channel_hists_after[ic]->SetBinError(bin+1,sqrt(mc_stats_collapsed[bin+channel_edges[ic]][bin+channel_edges[ic]])); }
     else{ for(int bin=0; bin < channel_bins[ic]; bin++) channel_hists_after[ic]->SetBinError(bin+1,sqrt(constnuematrix[bin+channel_edges[ic]][bin+channel_edges[ic]])); }
   }
+
+  TH1D *h_1eNp_data_signal, *h_1e0p_data_signal;
+  //1eNp data
+  if( doFakedata && (np || combined) ){ h_1eNp_data_signal = (TH1D*)h_nue_np_fake_data->Clone("data_1eNp");
+  h_1eNp_data_signal->Reset();
+  for(int bin=0; bin < h_1eNp_data_signal->FindBin(0.85)-1; bin++) h_1eNp_data_signal->SetBinContent(bin+1,h_nue_np_fake_data->GetBinContent(bin+1));
+  for(int bin=0; bin < h_1eNp_data_signal->FindBin(0.85)-1; bin++) h_1eNp_data_signal->SetBinError(bin+1,h_nue_np_fake_data->GetBinError(bin+1));}
+  //1e0p data
+  if( doFakedata && (zp || combined) ){ h_1e0p_data_signal = (TH1D*)h_nue_0p_fake_data->Clone("data_1e0p");
+  h_1e0p_data_signal->Reset();
+  for(int bin=0; bin < h_1e0p_data_signal->FindBin(0.85)-1; bin++) h_1e0p_data_signal->SetBinContent(bin+1,h_nue_0p_fake_data->GetBinContent(bin+1));
+  for(int bin=0; bin < h_1e0p_data_signal->FindBin(0.85)-1; bin++) h_1e0p_data_signal->SetBinError(bin+1,h_nue_0p_fake_data->GetBinError(bin+1)); }
   
 
   //Draw the after constraint
@@ -696,13 +736,14 @@ int main(int argc, char* argv[])
   //For the unconstrained matrix, we need to make the number of columns to be consistent with the number of the nue bins
   //Basically we are making a copy of the covariance matrix without the numu part
   TMatrixD covnue(nuematrix.GetNrows(),nuematrix.GetNcols());
+  TMatrixD corrnue(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD fracnue(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD fracnue_noext(nuematrix.GetNrows(),nuematrix.GetNcols());
-  TMatrixD corrnue(nuematrix.GetNrows(),nuematrix.GetNcols());
   for( int i = 0; i < nuematrix.GetNrows(); i++ ){
     for( int j = 0; j < nuematrix.GetNcols(); j++ ){
       covnue(i,j) = (*cov)(i,j);
       fracnue(i,j) = 0.0;
+      fracnue_signal(i,j) = 0.0;
       if(sig_collvec[i] != 0 && sig_collvec[j] != 0) fracnue(i,j) = (*cov)(i,j)/(sig_collvec[i]*sig_collvec[j]);
       fracnue_noext(i,j) = 0.0;
       if(sig_collvec_noext[i] != 0 && sig_collvec_noext[j] != 0) fracnue_noext(i,j) = (*cov)(i,j)/(sig_collvec_noext[i]*sig_collvec_noext[j]);
@@ -751,6 +792,33 @@ int main(int argc, char* argv[])
   }
   fspec2->Close();
   
+  //write out the output 
+  TFile * fspec3 = new TFile(Form("constrained_%s_signal.SBNspec.root",tag.c_str()),"recreate");
+  fspec3->cd();
+  //loop over all channels
+  for(int ic=0; ic<sig_spectra.num_channels-1; ic++){
+    std::string name = channel_hists_after_signalbins[ic]->GetName();
+    std::string title = "";
+    if(name.find("1eNp_sig_after") != std::string::npos ) title = "nu_uBooNE_1eNp_lee";
+    if(name.find("1eNp_bg_after") != std::string::npos ) title = "nu_uBooNE_1eNp_bg";
+    if(name.find("1eNp_data") != std::string::npos ) title = "nu_uBooNE_1eNp_data";
+    if(name.find("1e0p_sig_after") != std::string::npos ) title = "nu_uBooNE_1e0p_lee";
+    if(name.find("1e0p_bg_after") != std::string::npos ) title = "nu_uBooNE_1e0p_bg";
+    if(name.find("1e0p_data") != std::string::npos ) title = "nu_uBooNE_1e0p_data";
+    std::cout << "write out " <<title<< std::endl;
+    channel_hists_after_signalbins[ic]->SetName(title.c_str());
+    channel_hists_after_signalbins[ic]->SetTitle(title.c_str());
+    (TH1D*)channel_hists_after_signalbins[ic]->Write(title.c_str());
+  }
+  fspec3->Close();
+  
+  //write out the output 
+  TFile * fspec4 = new TFile(Form("constrained_%s_signal_DATA.SBNspec.root",tag.c_str()),"recreate");
+  fspec4->cd();
+  if( combined || np ) (TH1D*)h_1eNp_data_signal->Write("nu_uBooNE_1eNp_data");
+  if( combined || zp ) (TH1D*)h_1e0p_data_signal->Write("nu_uBooNE_1e0p_data");
+  fspec4->Close();
+  
   TFile * fcovar = new TFile(Form("constrained_%s.SBNcovar.root",tag.c_str()),"recreate");
   fcovar->cd();
   (TMatrixD*)constnuematrix.Write("full_covariance");
@@ -764,6 +832,13 @@ int main(int argc, char* argv[])
   (TMatrixD*)fracnue.Write("frac_covariance");
   (TMatrixD*)corrnue.Write("full_correlation");
   fcovar2->Close();
+  
+  TFile * fcovar3 = new TFile(Form("constrained_%s_signal.SBNcovar.root",tag.c_str()),"recreate");
+  fcovar3->cd();
+  (TMatrixD*)covnue_signal.Write("full_covariance");
+  (TMatrixD*)fracnue_signal.Write("frac_covariance");
+  (TMatrixD*)corrnue_signal.Write("full_correlation");
+  fcovar3->Close();
   
   TFile * fcollext = new TFile(Form("collapsed_zero_ext_bin_%s.SBNcovar.root",tag.c_str()),"recreate");
   fcollext->cd();
@@ -877,8 +952,7 @@ void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::str
   sysErr2->Draw("E2 same");
   tmpMC1->Draw("hist same"); 
   tmpMC2->Draw("hist same"); 
-  if(title == "#nu_{#mu} Selection")tmpData->Draw("PE same"); 
-  if(std::string(cName).find("nowgt") != std::string::npos && std::string(cName).find("nue") != std::string::npos ) tmpData->Draw("hist same"); 
+  if(title == "#nu_{#mu} Selection" || std::string(cName).find("fakedata") != std::string::npos ) tmpData->Draw("PE same"); 
 
   double x1=0.0; 
   double y1=0.0; 
@@ -917,7 +991,7 @@ void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::str
     }else{
       legend->AddEntry(tmpMC1,Form("LEE: %.2f",tmpMC1->Integral()-tmpMC2->Integral()),"l"); 
       legend->AddEntry(tmpMC2,Form("intrinsic: %.2f",tmpMC2->Integral()),"le");
-      //legend->AddEntry(tmpData,"fake data","le");
+      if( std::string(cName).find("fakedata") != std::string::npos ) legend->AddEntry(tmpData,"fake data","le");
     }
   } 
   legend->Draw("same");
