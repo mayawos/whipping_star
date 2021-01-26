@@ -310,8 +310,6 @@
     <variation pattern="NormCCCOH_UBGenie" weight_formula="1.0/weightTune"/>
     <variation pattern="NormNCCOH_UBGenie" weight_formula="1.0/weightTune"/>
     <variation pattern="RPA_CCQE_UBGenie" weight_formula="1.0/weightTune"/>
-    <variation pattern="RootinoFix_UBGenie" weight_formula="1.0/weightTune"/>
-    <variation pattern="TunedCentralValue_UBGenie" weight_formula="1.0/weightTune"/>
     <variation pattern="AxFFCCQEshape_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
     <variation pattern="DecayAngMEC_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
     <variation pattern="ThetaDelta2NRad_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>

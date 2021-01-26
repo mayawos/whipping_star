@@ -308,19 +308,20 @@
     <variation pattern="XSecShape_CCMEC_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
  </WeightMaps>
 
- <!-- not including CCMEC (mc from July) -->
+ <!-- whitelist -->
  <variation_list>
-    <whitelist>All_UBGenie</whitelist>
-    <whitelist>NormCCCOH_UBGenie</whitelist>
-    <whitelist>NormNCCOH_UBGenie</whitelist>
-    <whitelist>RPA_CCQE_UBGenie</whitelist>
-    <whitelist>RootinoFix_UBGenie</whitelist>
-    <whitelist>TunedCentralValue_UBGenie</whitelist>
-    <whitelist>AxFFCCQEshape_UBGenie</whitelist>
-    <whitelist>DecayAngMEC_UBGenie</whitelist>
-    <whitelist>ThetaDelta2NRad_UBGenie</whitelist>
-    <whitelist>Theta_Delta2Npi_UBGenie</whitelist>
-    <whitelist>VecFFCCQEshape_UBGenie</whitelist>
-    <whitelist>XSecShape_CCMEC_UBGenie</whitelist>
+   <whitelist>All_UBGenie</whitelist>
+   <whitelist>AxFFCCQEshape_UBGenie</whitelist>
+   <whitelist>DecayAngMEC_UBGenie</whitelist>
+   <whitelist>NormCCCOH_UBGenie</whitelist>
+   <whitelist>NormNCCOH_UBGenie</whitelist>
+   <whitelist>RPA_CCQE_UBGenie</whitelist>
+   <whitelist>ThetaDelta2NRad_UBGenie</whitelist>
+   <whitelist>Theta_Delta2Npi_UBGenie</whitelist>
+   <whitelist>VecFFCCQEshape_UBGenie</whitelist>
+   <whitelist>xsr_scc_Fa3_SCC</whitelist>
+   <whitelist>xsr_scc_Fv3_SCC</whitelist>
+   <whitelist>XSecShape_CCMEC_UBGenie</whitelist>
+   <whitelist>flux_all</whitelist>
+   <whitelist>reint_all</whitelist>
  </variation_list>
-

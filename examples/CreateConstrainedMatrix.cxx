@@ -229,6 +229,7 @@ int main(int argc, char* argv[])
     histo3->Reset();
     channel_hists_after_signalbins.push_back(histo3);
     channel_signalbins.push_back(histo4->FindBin(0.85) - 1);
+    if(verbose) std::cout << "#### ic, channel bins = " << channel_signalbins.back() << std::endl;
     histo4->Reset();
     channel_hists_data_signalbins.push_back(histo4);
   }
