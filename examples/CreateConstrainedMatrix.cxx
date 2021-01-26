@@ -778,7 +778,6 @@ int main(int argc, char* argv[])
     (TH1D*)channel_hists_after[ic]->Write(title.c_str());
   }
   fspec->Close();
-  
   TFile * fspec2 = new TFile(Form("unconstrained_%s.SBNspec.root",tag.c_str()),"recreate");
   fspec2->cd();
   //loop over all channels
@@ -821,8 +820,8 @@ int main(int argc, char* argv[])
   //write out the output 
   TFile * fspec4 = new TFile(Form("constrained_%s_signal_DATA.SBNspec.root",tag.c_str()),"recreate");
   fspec4->cd();
-  if( combined || np ) (TH1D*)h_1eNp_data_signal->Write("nu_uBooNE_1eNp_data");
-  if( combined || zp ) (TH1D*)h_1e0p_data_signal->Write("nu_uBooNE_1e0p_data");
+  if( doFakedata && ( combined || np ) ) (TH1D*)h_1eNp_data_signal->Write("nu_uBooNE_1eNp_data");
+  if( doFakedata && ( combined || zp ) ) (TH1D*)h_1e0p_data_signal->Write("nu_uBooNE_1e0p_data");
   fspec4->Close();
   
   TFile * fcovar = new TFile(Form("constrained_%s.SBNcovar.root",tag.c_str()),"recreate");
