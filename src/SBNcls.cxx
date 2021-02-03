@@ -125,7 +125,6 @@ int SBNcls::CalcCLS(int numMC, std::string tag){
     }
     //Ok now calc pvalues for h0 based on h1's quantiles!
     for(int i=0; i< h0_results.size(); i++){
-
       h0_results[i].m_nlower.resize(prob_values.size(),0);
       h0h0_results[i].m_nlower.resize(prob_values.size(),0);
       

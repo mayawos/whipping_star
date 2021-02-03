@@ -93,6 +93,7 @@ int main(int argc, char* argv[])
         {0,			no_argument, 		0,  0},
     };
 
+
     while(iarg != -1)
     {
         iarg = getopt_long(argc,argv, "m:a:x:n:s:e:b:d:c:f:r:t:pjkzh", longopts, &index);
