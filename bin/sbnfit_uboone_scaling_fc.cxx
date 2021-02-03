@@ -88,6 +88,8 @@ void runHelp(){
                 std::cout<<"\t-r\t--randomseed\t\tRandomNumber Seed (default from machine)"<<std::endl; 
                 std::cout<<"\t-c\t--cnp\t\tuse a Combined Newman Pearson chi2 (default false)"<<std::endl;
                 std::cout<<"\t-d\t--data\t\ta data SBNspec file to input, use with mode data"<<std::endl;
+                std::cout<<"\t-f\t--frequentist\t\t, perform an equivalent of lee frequentist study, grid dimension is fixed to '1e-6 2 2'"<<std::endl;
+                std::cout<<"\t-y\t--detsys\t\t, add detector systematics matrix to the default covariance matrix"<<std::endl;
                 std::cout<<"\t-h\t--help\t\tThis help menu."<<std::endl;
                 std::cout<<"---------------------------------------------------"<<std::endl;
     return;
@@ -115,6 +117,8 @@ int main(int argc, char* argv[])
         {"data",        required_argument, 0 ,'d'},
         {"input",       required_argument, 0 ,'i'},
         {"randomseed",        required_argument, 0 ,'r'},
+        {"frequentist",        no_argument, 0 ,'f'},
+        {"detsys",        no_argument, 0 ,'y'},
         {"help", 		no_argument,	0, 'h'},
         {0,			    no_argument, 		0,  0},
     };
@@ -130,6 +134,8 @@ int main(int argc, char* argv[])
     int number = 2500;
     double random_number_seed = -1;
     bool use_cnp = false;
+    bool do_simple_hypothesis = false;
+    bool detsys = false;
         
     std::string grid_string = "1e-4 8.0 33";
     std::string input_scale_subchannel = "unset";
@@ -137,7 +143,7 @@ int main(int argc, char* argv[])
 
     while(iarg != -1)
     {
-        iarg = getopt_long(argc,argv, "x:t:m:n:r:d:p:i:g:sch", longopts, &index);
+        iarg = getopt_long(argc,argv, "x:t:m:n:r:d:p:i:g:schfy", longopts, &index);
 
         switch(iarg)
         {
@@ -173,6 +179,12 @@ int main(int argc, char* argv[])
             case 's':
                 bool_stat_only = true;
                 break;
+            case 'f':
+                do_simple_hypothesis = true;
+                break;
+            case 'y':
+                detsys = true;
+                break;
             case '?':
             case 'h':
                 runHelp(); 
@@ -199,24 +211,54 @@ int main(int argc, char* argv[])
     }
     
     NGrid mygrid;
-    mygrid.AddDimension("NCDeltaRadOverlaySM",grid_string);
-   
+
+    if( do_simple_hypothesis ) mygrid.AddDimension(input_scale_subchannel.c_str(),"0. 2. 2");
+    else mygrid.AddDimension(input_scale_subchannel.c_str(),grid_string);
+  
     mygrid.Print();
     SBNfeld myfeld(mygrid,tag,xml);
 
+//check if running constraint?
+bool use_constraint = false;
+if(tag.find("constrained") != std::string::npos ) use_constraint = true;
+
     if(mode_option == "feldman"){
 
-        std::cout<<"Begininning a full Feldman-Cousins analysis for tag : "<<tag<<std::endl;
+        //setup covariance matrix 
+        TFile * fsys;
+        TFile * fdetsys;
+        TMatrixD * cov;
+        TMatrixD * covdetsys;
 
-        myfeld.SetFractionalCovarianceMatrix(tag+".SBNcovar.root","frac_covariance");
-        //myfeld.SetFractionalCovarianceMatrix(Msys);
-        //myfeld.SetStatOnly();
+        //allows for stats-only test
+        std::cout<<"Begininning a full Feldman-Cousins analysis for tag : "<<tag<<std::endl;
+        if(bool_stat_only){
+            myfeld.SetEmptyFractionalCovarianceMatrix();
+            myfeld.SetStatOnly();
+            std::cout<<"RUNNING Statistics uncertainty only!"<<std::endl;
+        }else{
+            std::cout<<"RUNNING Systematics Covariance Matrix!"<<std::endl;
+            std::string tagcovar = tag;
+            if(detsys && use_constraint) tagcovar = tagcovar + "_detsys";
+            fsys = new TFile(Form("%s.SBNcovar.root",tagcovar.c_str()),"read");
+            cov = (TMatrixD*)fsys->Get("frac_covariance");
+            if( detsys && !use_constraint){
+	      fdetsys = new TFile(Form("/uboone/data/users/wospakrk/PeLEE/SBNfit/Fakedata/%s_detsys.root",tag.c_str()),"read");
+	      covdetsys = (TMatrixD*)fdetsys->Get("full_frac_covariance_matrix");
+	      *cov = *cov + *covdetsys;
+	    }
+            myfeld.SetFractionalCovarianceMatrix(cov);
+        }
+
+        if(use_cnp) myfeld.UseCNP();
+        if(do_simple_hypothesis) myfeld.doSimpleHypothesis();
+
         myfeld.m_subchannel_to_scale = input_scale_subchannel;
 
         myfeld.SetCoreSpectrum(tag+"_CV.SBNspec.root");
         myfeld.SetBackgroundSpectrum(tag+"_CV.SBNspec.root",input_scale_subchannel,0.0);
         myfeld.GenerateScaledSpectra();
-
+        
         std::cout<<"Setting random seed "<<random_number_seed<<std::endl;
         myfeld.SetRandomSeed(random_number_seed);
         myfeld.SetNumUniverses(number);
@@ -227,6 +269,7 @@ int main(int argc, char* argv[])
 
         std::cout<<"Beginning to peform FullFeldmanCousins analysis"<<std::endl;
         myfeld.FullFeldmanCousins();
+
 
     }else if(mode_option=="data"){
 
@@ -265,7 +308,7 @@ int main(int argc, char* argv[])
         myfeld.m_subchannel_to_scale = input_scale_subchannel;
 
         if(use_cnp) myfeld.UseCNP();
-
+/*
         myfeld.SetCoreSpectrum(tag+"_CV.SBNspec.root");
         myfeld.SetBackgroundSpectrum(tag+"_CV.SBNspec.root",input_scale_subchannel,1.0);
         myfeld.GenerateScaledSpectra();
@@ -273,13 +316,14 @@ int main(int argc, char* argv[])
         std::cout<<"Calculating the necessary SBNchi objects"<<std::endl;
         myfeld.CalcSBNchis();
         std::cout <<"DONE calculating the necessary SBNchi objects at : " << difftime(time(0), start_time)/60.0 << " Minutes.\n";
-
+*/
         TFile *f = new TFile("scan.root","recreate");
         f->cd();
         std::cout<<"Starting to peform a globalScan analysis"<<std::endl;
         std::vector<std::vector<double>> vec_grid = mygrid.GetGrid();
 
         TFile *fin = new TFile(("SBNfeld_output_"+tag+".root").c_str(),"read");
+        //TFile *fin = new TFile("/uboone/data/users/wospakrk/FCplots/SBNfeld_output_nue_1e0p_numu_reco_e_H1_mc_fakedata1.root","read");
 
         //Some Manual Color Changing and such
         int plotting_true_gridpoint = 5;
@@ -310,7 +354,9 @@ int main(int argc, char* argv[])
             //Whats the critical value?
             TTree *t =  (TTree*)fin->Get(("ttree_"+std::to_string(i)).c_str());
             TH1D * cumul = (TH1D*)fin->Get(("delta_chi2_"+std::to_string(i)+"_cumulative").c_str());
-            TH1D * h_bfval = (TH1D*)fin->Get(("bf_value_"+std::to_string(i)).c_str());//Added by Ivan
+
+            TH1D * h_bfval = (TH1D*)fin->Get(("bf_gridvalue_"+std::to_string(i)).c_str());//Added by Ivan
+
 
             for(int p =0; p< plotting_pvals.size(); ++p){
                 double plotting_pval = plotting_pvals[p];
@@ -323,7 +369,7 @@ int main(int argc, char* argv[])
                         critical_delta_chi2_mid = cumul->GetBinCenter(c);
                         critical_delta_chi2 = lin_interp(cumul->GetBinContent(c+1), cumul->GetBinContent(c), cumul->GetBinLowEdge(c+1), cumul->GetBinLowEdge(c)+cumul->GetBinWidth(c), plotting_pval);
                         break;
-                    }
+                   }
                 }
 
                 std::cout<<"Grid point "<<i<<" has a critical delta chi of "<<critical_delta_chi2<<"("<<critical_delta_chi2_mid<<") for a pval of "<<plotting_pval<<std::endl; 
@@ -341,31 +387,15 @@ int main(int argc, char* argv[])
                 }
             }//end pval loop
 
-       
-            std::vector<double> whatsmedian(t->GetEntries(),-9);
-            double f_bfval = 0;
-            double whatsmean = 0;
-            t->SetBranchAddress("bf_gridvalue",&f_bfval);
-            for(int k=0; k<t->GetEntries(); k++){
-                    t->GetEntry(k);               
-                    whatsmedian[k]=f_bfval;
-                    whatsmean+=f_bfval;
-            }
-            whatsmean=whatsmean/(double)t->GetEntries();
-    
-            
-            //Get median of BF value
+            //adding median best-fit values to confidence belt plot 
             h_bfval->ComputeIntegral();
             std::vector<double> pvalues = { 0.5 };
             std::vector<double> bf_val_quantiles(pvalues.size());
             h_bfval->GetQuantiles(pvalues.size(),&bf_val_quantiles[0], &pvalues[0]);
             double bfval = bf_val_quantiles[0];
+
+            //double bfval = h_bfval->GetMean(); //Added by Ivan
             bfval_v[i] = bfval;
-            
-            bfval_v[i] = quick_median(whatsmedian);
-            //bfval_v[i] = Median(h_bfval);
-            //bfval_v[i] = whatsmean;
-            
             delete cumul;
         }
 
@@ -414,49 +444,22 @@ int main(int argc, char* argv[])
         pad->cd();
         mg->Draw("ALF");
         
-        mg->GetXaxis()->SetTitle("Measured #Delta Radiative Rate (#hat{x}_{#Delta})");
-        mg->GetYaxis()->SetTitle("True #Delta Radiative Rate (x_{#Delta})");
+        mg->GetXaxis()->SetTitle("Measured Signal Strength (#hat{#mu})");
+        mg->GetYaxis()->SetTitle("True Signal Strength (#mu)");
         mg->SetMinimum(v_true.front());
         mg->SetMinimum(v_true.front());
 
-        double mplot = 7.0;
-
-        mg->GetXaxis()->SetLimits(v_true.front(),mplot);      
-        mg->GetHistogram()->SetMaximum(mplot);//v_true.back());          
-        mg->GetHistogram()->SetMinimum(v_true.front());     
- 
-        for(auto &g:gmins)g->Draw("l same");
-        for(auto &g:gmaxs)g->Draw("l same");
-
-        //also draw median
+        //calculate the 2d points based on grid dimension and resolution
         double npoints = vec_grid.size();
         double maxpt = vec_grid.back()[0];
         double scale = (npoints-1)/maxpt;
 
-        mg->GetXaxis()->SetLimits(v_true.front(),maxpt);
+        mg->GetXaxis()->SetLimits(v_true.front(),maxpt);      
         mg->GetHistogram()->SetMaximum(maxpt);//v_true.back());          
-        mg->GetHistogram()->SetMinimum(v_true.front());
-
-        TLine lcross(v_true.front(),v_true.front(),mplot, mplot);
-        lcross.SetLineStyle(9);
-        lcross.SetLineWidth(1);
-        lcross.SetLineColor(kBlack);
-        lcross.Draw("same");
-
-
-            TLine lv1(1.0,0.0,1.0,maxpt);
-            lv1.SetLineStyle(2);
-            lv1.SetLineWidth(1);
-            lv1.SetLineColor(kBlack);
-            //lv1.Draw("same");
-
-            TLine lh3(0.0,3.1, 1.0,3.1);
-            lh3.SetLineStyle(2);
-            lh3.SetLineWidth(1);
-            lh3.SetLineColor(kBlack);
-            //lh3.Draw("same");
-
-
+        mg->GetHistogram()->SetMinimum(v_true.front());     
+ 
+        for(auto &g:gmins)g->Draw("l same");
+        for(auto &g:gmaxs)g->Draw("l same");
         double u_measured[vec_grid.size()];
         double uexp = 0;
 
@@ -467,15 +470,35 @@ int main(int argc, char* argv[])
             u_measured[k] = uexp;
         }
 
-        TGraph *bf_vals_g = new TGraph(vec_grid.size(), bfval_v, &v_true[0]);
-        //bf_vals_g->Draw("same *");
+        //TGraph *bf_vals_g = new TGraph(vec_grid.size(),u_measured,bfval_v);
+        TGraph *bf_vals_g = new TGraph(vec_grid.size(), bfval_v, &v_true[0]); //Given a true value, i.e Y axis point, whats the median reconstructed best fit point
+        bf_vals_g->Draw("same *");
         
+        TLine lcross(v_true.front(),v_true.front(),npoints, npoints);
+
+        lcross.SetLineStyle(9);
+        lcross.SetLineWidth(1);
+        lcross.SetLineColor(kBlack);
+        lcross.Draw("same");
+
+
+        TLine lv1(1.0,0.0,1.0,maxpt);
+        lv1.SetLineStyle(2);
+        lv1.SetLineWidth(1);
+        lv1.SetLineColor(kBlack);
+        //lv1.Draw("same");
+
+        TLine lh3(0.0,3.1, 1.0,3.1);
+        lh3.SetLineStyle(2);
+        lh3.SetLineWidth(1);
+        lh3.SetLineColor(kBlack);
+        //lh3.Draw("same");
+
         pad->Update();
         pad->RedrawAxis();
         // TLine l;
         //  l.DrawLine(gPad->GetUxmin(), gPad->GetUymax(), gPad->GetUxmax(), gPad->GetUymax());
         //   l.DrawLine(gPad->GetUxmax(), gPad->GetUymin(), gPad->GetUxmax(), gPad->GetUymax());
-
         c3->cd();
         TPad *padl = new TPad("padl", "padl", 0.8, 0, 1, 1);
         padl->SetBottomMargin(0.2);
@@ -486,7 +509,6 @@ int main(int argc, char* argv[])
         l_probs->SetLineColor(kWhite);
         l_probs->SetLineWidth(0);
        
-
 
         c3->SaveAs(("FC_confidence_belt_"+tag+".pdf").c_str(),"pdf");
 

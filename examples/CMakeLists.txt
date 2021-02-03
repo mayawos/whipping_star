@@ -6,11 +6,20 @@ target_link_libraries (example1 SBNfitlib tinyxmllib EventWeight)
 add_executable (example2 example_2.cxx)
 target_link_libraries (example2 SBNfitlib tinyxmllib EventWeight)
 
-add_executable (example3 example_3.cxx)
-target_link_libraries (example3 SBNfitlib tinyxmllib EventWeight)
+add_executable (CreateConstrainedMatrix CreateConstrainedMatrix.cxx)
+target_link_libraries (CreateConstrainedMatrix SBNfitlib tinyxmllib EventWeight)
 
-add_executable (exampletest example_test.cxx)
-target_link_libraries (exampletest SBNfitlib tinyxmllib EventWeight)
+add_executable (CreateConstrainedHighNueMatrix CreateConstrainedHighNueMatrix.cxx)
+target_link_libraries (CreateConstrainedHighNueMatrix SBNfitlib tinyxmllib EventWeight)
+
+add_executable (CreateMatrixPlots CreateMatrixPlots.cxx)
+target_link_libraries (CreateMatrixPlots SBNfitlib tinyxmllib EventWeight)
+
+#add_executable (example3 example_3.cxx)
+#target_link_libraries (example3 SBNfitlib tinyxmllib EventWeight)
+
+#add_executable (exampletest example_test.cxx)
+#target_link_libraries (exampletest SBNfitlib tinyxmllib EventWeight)
 
 
 #add_executable (exampleI example_i.cxx)

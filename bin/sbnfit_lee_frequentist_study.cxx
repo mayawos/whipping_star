@@ -46,7 +46,6 @@ int main(int argc, char* argv[])
     int iarg = 0;
     opterr=1;
     int index;
-    bool sample_with_gaussian = false;
     bool sample_from_covariance = true;
     bool sample_from_collapsed = false;
     bool remove_correlations = false;
@@ -60,18 +59,17 @@ int main(int argc, char* argv[])
     std::string signal_file = "EMPTY";
     std::string background_file = "EMPTY";
     std::string covariance_file = "EMPTY";
+    std::string fakedata_file = "EMPTY";
+    std::string ext_err_file = "EMPTY";
 
     bool bool_flat_det_sys = false;
+    bool bool_fill_det_sys = false; //PeLEE updates
+    bool bool_ext_err = false; //PeLEE updates
     double flat_det_sys_percent = 0.0;
 
     bool zero_off_diag = false;
     bool tester=false;
     double epsilon = 1e-12;
-
-    bool reverse_colors = false;
-    std::string legends = "H_{0}|H_{1}";
-
-    std::string real_data_string = "null";
 
     const struct option longopts[] =
     {
@@ -81,17 +79,16 @@ int main(int argc, char* argv[])
         {"signal", 		required_argument,	0,'s'},
         {"mode", 	    	required_argument,	0,'m'},
         {"background", 	required_argument,	0,'b'},
+        {"fakedata", 	required_argument,	0,'d'},
+        {"exterr", 	required_argument,	0,'r'},
         {"tag", 	    required_argument,	0,'t'},
         {"epsilon", required_argument,0,'e'},
-        {"legend",required_argument,0,'l'},
         {"cnp",no_argument,0,'a'},
         {"zero",no_argument,0,'z'},
-        {"gaussian",no_argument,0,'g'},
-        {"data",required_argument,0,'d'},
         {"tester",no_argument,0,'k'},
-        {"reverse",no_argument,0,'r'},
         {"poisson", no_argument,0,'p'},
         {"flat", required_argument,0,'f'},
+        {"filldetsys", required_argument,0,'d'},
         {"help",no_argument,0,'h'},
         {0,			no_argument, 		0,  0},
     };
@@ -99,7 +96,7 @@ int main(int argc, char* argv[])
 
     while(iarg != -1)
     {
-        iarg = getopt_long(argc,argv, "m:d:a:x:n:s:e:b:c:l:f:t:u:q:pjgrkzh", longopts, &index);
+        iarg = getopt_long(argc,argv, "m:a:x:n:s:e:b:d:c:f:r:t:pjkzh", longopts, &index);
 
         switch(iarg)
         {
@@ -115,12 +112,6 @@ int main(int argc, char* argv[])
             case 'm':
                 which_mode = (int)strtod(optarg,NULL);
                 break;
-            case 'l':
-                legends = optarg;
-                break;
-            case 'r':
-                reverse_colors = true;
-                break;
             case 'x':
                 xml = optarg;
                 break;
@@ -130,9 +121,19 @@ int main(int argc, char* argv[])
             case 'b':
                 background_file = optarg;
                 break;
+            case 'd':
+                which_mode = 2;         //PeLEE specific hacks for fakedata
+                fakedata_file = optarg;
+                break;
+            case 'r':
+                ext_err_file = optarg;
+                break;
             case 'f':
                 bool_flat_det_sys = true;
                 flat_det_sys_percent = (double)strtod(optarg,NULL);
+                break;
+            case 'y':
+                bool_fill_det_sys = true;
                 break;
             case 'e':
                 epsilon = (double)strtod(optarg,NULL);
@@ -146,17 +147,11 @@ int main(int argc, char* argv[])
             case 'c':
                 covariance_file = optarg;
                 break;
-            case 'g':
-                sample_with_gaussian  = true;
-                break;
             case 'n':
                 num_MC_events = (int)strtod(optarg,NULL);
                 break;
             case 'p':
                 sample_from_covariance = false;
-                break;
-            case 'd':
-                real_data_string = optarg;
                 break;
             case '?':
             case 'h':
@@ -168,17 +163,17 @@ int main(int argc, char* argv[])
                 std::cout<<"\t-t\t--tag\t\t\tA unique tag to identify the outputs [Default to TEST]"<<std::endl;
                 std::cout<<"\t-s\t--signal\t\tInput signal SBNspec.root file"<<std::endl;
                 std::cout<<"\t-b\t--background\t\tInput background only SBNspec.root file"<<std::endl;
+                std::cout<<"\t-d\t--fakedata\t\tInput fakedata SBNspec.root file"<<std::endl;
                 std::cout<<"\t-c\t--covariance\t\tInput Fractional Covariance Matrix SBNcovar.root file. If not passed, defaults to stats only!"<<std::endl;
                 std::cout<<"--- Optional arguments: ---"<<std::endl;
                 std::cout<<"\t-j\t--collapse\t\tSample from collapsed rather than full covariance matrix (default false, experimental!)"<<std::endl;
                 std::cout<<"\t-f\t--flat\t\tAdd a flat percent systematic to fractional covariance matrix (all channels) (default false, pass in percent, i.e 5.0 for 5\% experimental)"<<std::endl;
+                std::cout<<"\t-r\t--exterr\t\tAdd zero ext bin error to the stat errors (all channels) (default no additional errors)"<<std::endl;
                 std::cout<<"\t-z\t--zero\t\tZero out all off diagonal elements of the systematics covariance matrix (default false, experimental!)"<<std::endl;
                 std::cout<<"\t-e\t--epsilon\t\tEpsilon tolerance by which to add back to diagonal of covariance matrix if determinant is 0 (default 1e-12)"<<std::endl;
                 std::cout<<"\t-n\t--number\t\tNumber of MC events for frequentist studies (default 100k)"<<std::endl;
-                std::cout<<"\t-g\t--gaussian\t\tSample by adding sqrt(N) to covariance rather than 2-step Poisson sampling (default: false)"<<std::endl;
                 std::cout<<"\t-m\t--mode\t\tMode for test statistics 0: absolute chi^2, 1: delta chi^2 (default Delta Chi| obsolete, runs all concurrently)"<<std::endl;
                 std::cout<<"\t-p\t--poisson\t\tUse Poissonian draws for pseudo experiments instead of from covariance matrix"<<std::endl;
-                std::cout<<"\t-d\t--data\t\tReal Data"<<std::endl;
                 std::cout<<"\t-h\t--help\t\t\tThis help menu."<<std::endl;
                 std::cout<<"---------------------------------------------------"<<std::endl;
                 return 0;	
@@ -199,7 +194,11 @@ int main(int argc, char* argv[])
         stats_only = true;
         sample_from_covariance = false;
     }
-
+    if(ext_err_file =="EMPTY"){
+        std::cout<<"Note! No ext bnb error covariance matrix root file with the  `--exterr  XX.SBNcovar.root` or `-r XX.SBNcovar.root`. was passed, running without stats error. "<<std::endl;
+        bool_ext_err = false;
+    }
+    else bool_ext_err = true;
 
     std::cout<<"Loading signal file : "<<signal_file<<" with xml "<<xml<<std::endl;
     SBNspec sig(signal_file,xml);
@@ -207,83 +206,109 @@ int main(int argc, char* argv[])
     std::cout<<"Loading background file : "<<background_file<<" with xml "<<xml<<std::endl;
     SBNspec bkg(background_file,xml);
 
-    std::cout<<"Legends are being set to "<<legends<<std::endl;
-
     std::cout<<"Loading fractional covariance matrix from "<<covariance_file<<std::endl;
-
+    std::cout << "loading frac cov matrix" << std::endl;
     TFile * fsys;
     TMatrixD * cov;
+    TFile * fexterr;
+    TMatrixD * exterr;
     
     if(!stats_only){
         fsys = new TFile(covariance_file.c_str(),"read");
         cov = (TMatrixD*)fsys->Get("frac_covariance");
     }
+    std::cout << "found frac cov matrix: " << cov << std::endl;
 
+    //ext error
+    std::vector<double> coll_ext_err_vec, frac_coll_ext_err_vec;
+    std::vector<double> ext_err_vec, frac_ext_err_vec;
+    coll_ext_err_vec.resize(bkg.num_bins_total_compressed);
+    frac_coll_ext_err_vec.resize(bkg.num_bins_total_compressed);
+    ext_err_vec.resize(bkg.num_bins_total);
+    frac_ext_err_vec.resize(bkg.num_bins_total);
+    std::fill(ext_err_vec.begin(), ext_err_vec.end(), 0.0);
 
-    TMatrixD frac_flat_matrix(bkg.num_bins_total, bkg.num_bins_total);
-
-    if(bool_flat_det_sys){
-	    std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
-	    frac_flat_matrix.ResizeTo(bkg.num_bins_total,bkg.num_bins_total);
-	    frac_flat_matrix.Zero();//(bkg.num_bins_total,bkg.num_bins_total);
-	    for(int i=0 ; i< bkg.num_bins_total; i++){
-               frac_flat_matrix(i,i)=flat_det_sys_percent*flat_det_sys_percent/10000.;
-        }
-        std::cout<<"Just Before"<<std::endl;
-        (*cov) = (*cov)+(frac_flat_matrix);
+    bkg.CalcFullVector();
+    if(bool_ext_err){
+       fexterr = new TFile(ext_err_file.c_str(),"read");
+       exterr = (TMatrixD*)fexterr->Get("full_covariance");
+       //create SBNchi object for the ext error so that it will be consistent when collapsed
+       TMatrixD collext;
+       collext.ResizeTo(bkg.num_bins_total_compressed, bkg.num_bins_total_compressed);
+       SBNchi chiext(bkg,exterr);
+       chiext.CollapseModes(*exterr, collext);
+       for( int i=0; i < bkg.num_bins_total; i++ ){ ext_err_vec[i] = sqrt((*exterr)(i,i)); frac_ext_err_vec[i] = sqrt((*exterr)(i,i))/bkg.full_vector[i]; std::cout << "err: " << ext_err_vec[i] << std::endl; }
+       bkg.CollapseVector();
+       for( int i=0; i< collext.GetNcols(); i++ ){ coll_ext_err_vec[i] = sqrt(collext(i,i)); frac_coll_ext_err_vec[i] = sqrt(collext(i,i)/bkg.collapsed_vector[i]); std::cout << "err coll: " << coll_ext_err_vec[i] << std::endl; }
+       std::cout << "found ext error matrix: " << exterr << std::endl;
     }
 
+
+    //PeLEE hacks for incorporating fake data
+    TFile * fdata;
+    TH1D * h_fakedata_1eNp;
+    TH1D * h_fakedata_1e0p;
+    TH1D * h_fakedata_numu;
+    
+    if(fakedata_file != "EMPTY"){
+      std::cout << "Loading fakedata file: " << fakedata_file << std::endl;
+      fdata = new TFile(fakedata_file.c_str(),"read");
+      h_fakedata_1eNp = (TH1D*)fdata->Get("nu_uBooNE_1eNp_data");
+      h_fakedata_1e0p = (TH1D*)fdata->Get("nu_uBooNE_1e0p_data");
+      h_fakedata_numu = (TH1D*)fdata->Get("nu_uBooNE_numu_data");
+    }
+    std::cout << "create vector of fakedata" << std::endl; 
+    //create vector of fakedata:
+    std::vector<float> fakedata;
+    if( which_mode==2 && h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; }
+    if( which_mode==2 && h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; }
+    if( which_mode==2 && h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
+    //if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
+    
+    std::cout << "size of fakedata vector: " << fakedata.size() << std::endl;
+    //End of PeLEE hacks for incorporating fake data
+    
+    //PELEE hack -- use the actual PELEE diagonal errors for detsys instead of flat systematics
+    TMatrixD frac_flat_matrix(bkg.num_bins_total, bkg.num_bins_total);
+     
+    if(bool_flat_det_sys){
+      std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
+      for(int i=0 ; i< bkg.num_bins_total; i++){
+	frac_flat_matrix(i,i)=flat_det_sys_percent*flat_det_sys_percent/10000.;
+      }
+      std::cout<<"Just Before"<<std::endl;
+      (*cov) = (*cov)+(frac_flat_matrix);
+    }
+
+    std::cout << "Done with systematics!" << std::endl;
 
     if(remove_correlations){
-        std::cout<<"WARNING! We are running in   `Remove All Off Diagional Covariances/Correlations Mode` make sure this is what you want. "<<std::endl;
-        for(int i=0; i<bkg.num_bins_total;i++){ 
-            for(int j=0; j<bkg.num_bins_total;j++){ 
-                if(i==j)continue;
-                (*cov)(i,j) =0.0;
-            }
-        }
+      std::cout<<"WARNING! We are running in   `Remove All Off Diagional Covariances/Correlations Mode` make sure this is what you want. "<<std::endl;
+      for(int i=0; i<bkg.num_bins_total;i++){ 
+	for(int j=0; j<bkg.num_bins_total;j++){ 
+	  if(i==j)continue;
+	  (*cov)(i,j) =0.0;
+	}
+      }
     }
-
-
-
-
+    
     if(!stats_only){
-        std::cout<<"Not running in stats only mode"<<std::endl;
-        SBNcls cls_factory(&bkg, &sig,*cov);
+        SBNcls cls_factory(&bkg, &sig, fakedata, *cov);
         cls_factory.SetTolerance(epsilon);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
         if(sample_from_covariance) cls_factory.SetSampleCovariance();
-        if(sample_with_gaussian) cls_factory.SetGaussianSampling();
-        if(reverse_colors)cls_factory.ReverseColours();
-        cls_factory.SetLegends(legends);
-
         cls_factory.setMode(which_mode);
         if(tester){cls_factory.runConstraintTest();return 0;}
         cls_factory.CalcCLS(num_MC_events, tag);
-
-        if(real_data_string!="null"){
-            SBNspec *data = new SBNspec(real_data_string,xml);
-            cls_factory.compareToRealData(data);
-            TMatrixD empty(data->num_bins_total_compressed,data->num_bins_total_compressed);
-            empty.Zero();
-            sig.CompareSBNspecs(empty,data,tag+"_datamc");
-        }
-
     }else{
-        SBNcls cls_factory(&bkg, &sig);
+        SBNcls cls_factory(&bkg, &sig, fakedata);
         cls_factory.SetTolerance(epsilon);
         if(sample_from_collapsed)  cls_factory.SetSampleFromCollapsed();
-        if(sample_with_gaussian) cls_factory.SetGaussianSampling();
-        if(reverse_colors)cls_factory.ReverseColours();
         cls_factory.setMode(which_mode);
-        
         if(tester){cls_factory.runConstraintTest();return 0;}
-
-        cls_factory.SetLegends(legends);
         cls_factory.CalcCLS(num_MC_events, tag);
     }
-
-
 
     return 0;
 }

@@ -72,8 +72,11 @@ namespace sbn{
 
 			//This is the full concatanated vector (in xml order)	
 			std::vector<double > full_vector;
+			std::vector<double > full_err_vector;
+			std::vector<double > full_ext_err_vector;
 			//This is the compessed vector, collapsing all subchannels down to a single channel
 			std::vector<double > collapsed_vector;
+			std::vector<double > collapsed_err_vector;
 			std::vector<float > f_collapsed_vector;
 
 			std::vector<double > full_error;
@@ -119,6 +122,7 @@ namespace sbn{
 			//Recaculates the full_vector and collapsed_vector's
 			int CalcFullVector();
 			int CollapseVector();
+			int CalcErrorVector();
 
 			double GetTotalEvents();
 

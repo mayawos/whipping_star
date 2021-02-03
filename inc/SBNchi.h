@@ -77,6 +77,7 @@ namespace sbn{
             //This is the core spectra that you are comparing too. This is used to calculate covariance matrix and in a way is on the 'bottom' of the chi^2.
             SBNspec core_spectrum;
             bool is_stat_only;
+            bool _add_stats_err;
 
             //always contains the last chi^2 value calculated
             double last_calculated_chi;
@@ -91,6 +92,7 @@ namespace sbn{
 
             //Used in cholosky decompositions
             double m_tolerance;
+            std::vector<double> m_add_stats_err;
             bool cholosky_performed;
             TMatrixT<float> matrix_lower_triangular;
             std::vector<std::vector<float>> vec_matrix_lower_triangular;
@@ -118,7 +120,6 @@ namespace sbn{
             int plot_one(TMatrixD matrix, std::string tag, TFile *fin,bool,bool,bool);
 
 
-
             int ReloadCoreSpectrum(SBNspec *bkgin);
 
             //load up systematic covariabnce matrix from a rootfile, location in xml
@@ -127,6 +128,7 @@ namespace sbn{
             TMatrixT<double> FillSystematicsFromXML();
 
             void FakeFillMatrix(TMatrixT <double>&  M);
+            //void FillStatsMatrix(TMatrixT <double>&  M, std::vector<double> diag, std::vector<double> add_stats_err);
             void FillStatsMatrix(TMatrixT <double>&  M, std::vector<double> diag);
 
             // These are the powerhouse of of the SBNchi, the ability to collapse any number of modes,detectors,channels and subchannels down to a physically observable subSet
@@ -139,14 +141,14 @@ namespace sbn{
 
             TMatrixT<double> InvertMatrix(TMatrixT<double> &M);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec);
+            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec,bool);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, TVectorT<double> &err);
-            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, bool);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec);
-            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr);
+            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr, bool add_stats);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec,bool);
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<double>& datavec );
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, const std::vector<float>& datavec );
-            TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec );
+            TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec, bool add_stats );
 
 
 
@@ -235,6 +237,10 @@ namespace sbn{
             int PrintMatricies(std::string);
             int DrawSampleCovariance(std::string);
 
+
+            //pelee fakedata and detsys specific function
+            std::vector<CLSresult> Mike_NP_fakedata(SBNspec *specin, std::vector<float> fakedata, std::vector<float> &chidata, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id);
+            void FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool useBDT = true );
     };
 
 

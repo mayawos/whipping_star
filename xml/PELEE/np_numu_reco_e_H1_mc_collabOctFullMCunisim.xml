@@ -1,0 +1,198 @@
+<?xml version="1.0" ?>
+
+<!-- For this simple example we have one mode: Neutrino mode (nu) and one detector (uBooNE) -->
+<mode name="nu" />
+<detector name="uBooNE"  />
+
+<!-- We have three channels. Each "Channel" referes to a physically observable selelection. In this case nue-like and numu-like. -->
+<channel name="1eNp_sig" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="lee" />
+</channel>
+
+<channel name="1eNp_bg" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="dirt" />
+    <subchannel name="nu" />
+    <subchannel name="ccnopi" />
+    <subchannel name="nccpi" />
+    <subchannel name="ccpi0" />
+    <subchannel name="ncnopi" />
+    <subchannel name="ncpi0" />
+    <subchannel name="cccpi" />
+    <subchannel name="intrinsic" />
+    <subchannel name="ext" />
+</channel>
+
+<channel name="numu" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="bnb" />
+    <subchannel name="dirt" />
+    <subchannel name="ext" />
+</channel>
+
+<plotpot value=6.86e20/>
+
+<!-- ############################# BUILDING A COVARIANCE MATRIX  #####################################################-->
+<!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
+
+ <!-- 1eNp -->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/nue.root" scale= "3.55e-3" pot = "6.86e20" > 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_intrinsic"
+         additional_weight="weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/sbnfit_0928/1eNp/nue.root" scale= "3.55e-3" pot = "6.86e20" > 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_sig_lee"
+         additional_weight="leeweight*weightSplineTimesTune"
+      />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/mc.root" scale = "1.87e-1" pot = "6.86e20" > 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_nu"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/ccnopi.root" scale = "3.05e-2" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ccnopi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/ccpi0.root" scale = "6.92e-2" pot = "6.86e20" > 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ccpi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/nccpi.root" scale = "1.07e-2" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_nccpi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/ncnopi.root" scale = "2.37e-2" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ncnopi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/ncpi0.root" scale = "5.91e-2" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ncpi0"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/cccpi.root" scale = "2.27e-2" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_cccpi"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <!--MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/1eNp_fullMC/dirt.root" scale = "4.28e-1" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_dirt"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile-->
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/sbnfit_0928/1eNp/ext.root" scale = "3.71e-1" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_bg_ext"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+
+ <!-- numu -->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/numu/mc.root" scale = "1.59e-1" pot = "6.86e20" > 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_numu_bnb"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/numu/dirt.root" scale = "6.49e-1" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_numu_dirt"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+<!--
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/numu/nue.root" scale = "1.0" pot = "2.13e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_numu_nu"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+-->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/sbnfit_0928/numu/ext.root" scale = "2.57e-1" pot = "6.86e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_numu_ext"
+         additional_weight="weightSplineTimesTune"
+         />
+ </MultisimFile>
+
+
+ <!-- weights -->
+ <WeightMaps>
+    <variation pattern="AllGenie_UBGenie" weight_formula="1.0/weightTune"/>
+    <variation pattern="NormCCCOH_UBGenie_UBGenie" weight_formula="1.0/weightTune"/>
+    <variation pattern="NormNCCOH_UBGenie" weight_formula="1.0/weightTune"/>
+    <variation pattern="RPA_CCQE_UBGenie" weight_formula="1.0/weightTune"/>
+    <variation pattern="RootinoFix_UBGenie" weight_formula="1.0/weightTune"/>
+    <variation pattern="TunedCentralValue_UBGenie" weight_formula="1.0/weightTune"/>
+    <variation pattern="AxFFCCQEshape_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
+    <variation pattern="DecayAngMEC_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
+    <variation pattern="ThetaDelta2NRad_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
+    <variation pattern="Theta_Delta2Npi_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
+    <variation pattern="VecFFCCQEshape_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
+    <variation pattern="XSecShape_CCMEC_UBGenie" weight_formula="1.0/weightTune" mode="minmax"/>
+ </WeightMaps>
