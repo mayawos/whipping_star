@@ -468,24 +468,64 @@ private:
   Eigen::VectorXd m_core, retVec;
   int m_oscmode;
 };
-inline void makeSignalModel(diy::Master* master, SignalGenerator signal, int nbins)
+inline void makeSignalModel(diy::Master* master, SignalGenerator signal, int nbins, int deg)
 {
   // default command line arguments
   int    dom_dim      = 2;                    // dimension of domain (<= pt_dim)
   int    pt_dim       = nbins+dom_dim;        // dimension of input points
   int    geom_degree  = 1;                    // degree for geometry (same for all dims)
-  int    vars_degree  = 40;                    // degree for science variables (same for all dims)
-  int    geom_nctrl   = geom_degree + 1;      // input number of control points for geometry (same for all dims)
-  int    vars_nctrl   = vars_degree + 1;       	            // input number of control points for geometry (same for all dims)
-  int    weighted     = 1;                    // input number of control points for all science variables (same for all dims)
+  int    vars_degree  = deg;                    // degree for science variables (same for all dims)
+  //vector<int> ndomp(dom_dim, 26);             // input number of domain points in each dim (26 by default)
+  vector<int> geom_nctrl(dom_dim);            // number of control points for geometry
+  vector<int> vars_nctrl(dom_dim, 26);        // number of control points for all science variables (same as number input points by default)
+  //int vars_nctrl = vars_degree + 1;
+  //int geom_nctrl = geom_degree + 1;
+  int    weighted     = 0;                    // input number of control points for all science variables (same for all dims)
   real_t noise        = 0.0;                  // fraction of noise
+/*
+    Bounds<real_t> dom_bounds(dom_dim);
+    for (int i = 0; i < dom_dim; ++i)
+    {
+        dom_bounds.min[i] = 0.0;
+        dom_bounds.max[i] = 1.0;
+    }
+*/
+    // minimal number of geometry control points if not specified
+    for (auto i = 0; i < dom_dim; i++)
+    {
+        if (!geom_nctrl[i])
+            geom_nctrl[i] = geom_degree + 1;
+        if (!vars_nctrl[i])
+            vars_nctrl[i] = vars_degree + 1;
+    }
+
+    // echo args
+    fprintf(stderr, "\n--------- Input arguments ----------\n");
+    cerr <<
+        "pt_dim = "         << pt_dim       << " dom_dim = "        << dom_dim      <<
+        "\ngeom_degree = "  << geom_degree  << " vars_degree = "    << vars_degree  << endl;
+
+
+
   // set default args for diy foreach callback functions
   DomainArgs d_args(dom_dim, pt_dim);
   d_args.weighted     = weighted;
   d_args.n            = noise;
   d_args.multiblock   = false;
   d_args.verbose      = 1;
-  
+  /*
+    for (int i = 0; i < dom_dim; i++)
+    {
+        d_args.geom_p[i]            = geom_degree;
+        d_args.ndom_pts[i]          = ndomp[i];
+        d_args.geom_nctrl_pts[i]    = geom_nctrl[i];
+        for (auto j = 0; j < pt_dim - dom_dim; j++)         // for all science variables
+        {
+            d_args.vars_p[j][i]         = vars_degree;
+            d_args.vars_nctrl_pts[j][i] = vars_nctrl[i];
+        }
+    }*/
+
   for (int i = 0; i < pt_dim - dom_dim; i++)
     d_args.f[i] = 1.0;
   for (int i = 0; i < dom_dim; i++)
@@ -497,11 +537,15 @@ inline void makeSignalModel(diy::Master* master, SignalGenerator signal, int nbi
       for( int m = 0; m < pt_dim - dom_dim; m++)
 	d_args.vars_p[m][i]         = vars_degree;  // assuming one science variable, vars_p[m]
       
-      d_args.geom_nctrl_pts[i]    = geom_nctrl;
-      for( int m = 0; m < pt_dim - dom_dim; m++)
-	d_args.vars_nctrl_pts[m][i] = vars_nctrl;  // assuming one science variable, vars_p[m]
+      d_args.geom_nctrl_pts[i]    = geom_nctrl[i];
+      for( int m = 0; m < pt_dim - dom_dim; m++){
+	std::cout << "vars_nctrl[" << i << "] = " << vars_nctrl[i] << std::endl;
+	std::cout << "vars_degree = " << vars_degree << std::endl;
+	d_args.vars_nctrl_pts[m][i] = vars_nctrl[i];  // assuming one science variable, vars_p[m]
+      }
     }
-  
+ 
+
   d_args.ndom_pts[1]          = 26;
   d_args.ndom_pts[0]          = 26;
   
@@ -857,22 +901,28 @@ namespace cppoptlib {
     diy::Master::ProxyWithLink const& cp;
     VectorXd           data;
     const MatrixX<T>   M;
-    
+    int                dim;
+  public:
+    using Superclass = BoundedProblem<T>;
+    using typename Superclass::TVector;
+    using TMatrix = typename Superclass::THessian; 
   public:
     //need mfa model, fake_data, and inverse covariance matrix
     LLR( Block<real_t>& b_,  
 	 diy::Master::ProxyWithLink const& cp_,
 	 VectorXd data_, 
-	 MatrixX<T> M_) : b(b_), 
+	 MatrixX<T> M_,
+	 int dim) : b(b_), 
 			  cp(cp_),	
 			  data(data_),	
-			  M(M_) 	
+			  M(M_),
+		          Superclass(dim)	       
     {}
     //TO DO: Figure out the correct way to pass the MFA 
-    using typename BoundedProblem<T>::TVector;
+    //using typename BoundedProblem<T>::TVector;
     T value(const TVector &x) {
       //to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
-
+      std::cout << "value: " << x[0] << ", " << x[1] << std::endl;
       // evaluate point
       TVector diff(data.size()); //data size == nvars
       VectorX<T> param(b.dom_dim);
@@ -893,56 +943,69 @@ namespace cppoptlib {
       int pt_dim  = b.pt_dim;
       for (size_t i = 0; i < (size_t)b.dom_dim; i++){
 	in_param(i) = param(i)/scale;
-        std::cout << in_param(i) << std::endl;
+	//if(in_param(i) < 0. ) in_param(i) = 0.;
+	//if(in_param(i) > 1. ) in_param(i) = 1.;
+        std::cout << "scale, inparam = " << scale << ", " << in_param(i) << std::endl;
       }
-      ///std::cout << "...decode point per block..." << p+2 << std::endl;
+      std::cout << "...decode point per block..." << std::endl;
       b.decode_point(cp, in_param, out_pt);
       for(int p=0; p<data.size(); p++){
 	diff[p] = data[p] - out_pt(p+2);
-	//std::cerr << "p, diff, data[p], out_pt(p+2) = " << p << ", " << diff[p] << ", " << data[p] << ", " << out_pt(p+2) << std::endl;
+	std::cerr << "p, diff, data[p], out_pt(p+2) = " << p << ", " << diff[p] << ", " << data[p] << ", " << out_pt(p+2) << std::endl;
       }
       std::cout << out_pt.transpose() << std::endl;
+      out_pt.resize(0);
+      in_param.resize(0);
+      param.resize(0);
       return (diff.transpose())*M*(diff);
     }
+   
+   void gradient(const TVector &x, TVector &grad) {
     
-    /*void gradient(const TVector &x, TVector &grad) {
-     
-      TVector left(data.size()); //data size == nvars
-      TVector right(data.size()); //data size == nvars
+     std::cout << "gradient" << std::endl;
+     TVector left(data.size()); //data size == nvars
+     TVector right(data.size()); //data size == nvars
 
-      VectorX<T> param(b.dom_dim);
-      for(int i=0; i<2; i++) param[i] = x(i);
+     VectorX<T> param(b.dom_dim);
+     for(int i=0; i<2; i++) param[i] = x(i);
 
-      //scale to 0.-1.
-      // normalize the science variable to the same extent as max of geometry
-      double extent[3];
-      extent[0] = b.bounds_maxs(0) - b.bounds_mins(0);
-      extent[1] = b.bounds_maxs(1) - b.bounds_mins(1);
-      extent[2] = b.bounds_maxs(2) - b.bounds_mins(2);
-      double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
-      int dom_dim = b.dom_dim;
-      int pt_dim  = b.pt_dim;
-      VectorX<real_t> out_pt(pt_dim);
-      VectorX<real_t> out_pt_deriv(pt_dim);
-      // parameters of input point to evaluate
-      VectorX<real_t> in_param(dom_dim);
-      for (auto i = 0; i < dom_dim; i++){
-	in_param(i) = param[i]/scale;
-      }
-      for (auto i = 0; i < dom_dim; i++){
-	b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
-      }
-      b.decode_point(cp, in_param, out_pt);
-      //grad
-      //scale the derivation u,v back to x,y
-      for(int p=0; p<data.size(); p++){
-	left[p] = 2.0*scale*out_pt_deriv(p+2);
-	right[p] = (out_pt(p+2)-data[p]);
-      }
+     //scale to 0.-1.
+     // normalize the science variable to the same extent as max of geometry
+     double extent[3];
+     extent[0] = b.bounds_maxs(0) - b.bounds_mins(0);
+     extent[1] = b.bounds_maxs(1) - b.bounds_mins(1);
+     extent[2] = b.bounds_maxs(2) - b.bounds_mins(2);
+     double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
+     int dom_dim = b.dom_dim;
+     int pt_dim  = b.pt_dim;
+     VectorX<real_t> out_pt(pt_dim);
+     VectorX<real_t> out_pt_deriv(pt_dim);
+     // parameters of input point to evaluate
+     VectorX<real_t> in_param(dom_dim);
+     for (auto i = 0; i < dom_dim; i++){
+       in_param(i) = fabs(param[i]/scale);
+	//if(in_param(i) < 0. ) in_param(i) = 0.;
+	//if(in_param(i) > 1. ) in_param(i) = 1.;
+     }
+     for (auto i = 0; i < dom_dim; i++){
+       b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
+     }
+     b.decode_point(cp, in_param, out_pt);
+     //grad
+     //scale the derivation u,v back to x,y
+     for(int p=0; p<data.size(); p++){
+       left[p] = 2.0*scale*out_pt_deriv(p+2);
+       right[p] = (out_pt(p+2)-data[p]);
+       std::cout << "scale, left, right = " << scale << ", " << left[p] << ", " << right[p] << std::endl;
+     }
+     out_pt.resize(0);
+     in_param.resize(0);
+     param.resize(0);
+     std::cout << "before calc grad " <<std::endl;
+     grad = (left.transpose())*M*(right);
+     std::cout << "grad " << grad <<std::endl;
+   }
 
-      grad = (left.transpose())*M*(right);
-
-    }*/
   };
 }
 
@@ -1022,44 +1085,26 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
   //implement optimizer
   const size_t DIM = 2;
   typedef double T;
+
+  //minimize the function
+  //Eigen::VectorXd x(2);
+  // //decode the grid point in 2d
+  int gridx_index = i_grid%26; 
+  int gridy_index = i_grid/26;
+  std::cout << "x, y = " << gridx_index << ", " << gridy_index << std::endl;
   //using typename cppoptlib::Problem<T>::TVector;
   //pass the mfa model here which is already encode in the block
   typedef LLR<T> llr;
   typedef typename llr::TVector TVector;
-  llr f(*b, cp, fake_data, INVCOV);
+  llr f(*b, cp, fake_data, INVCOV, DIM);
   f.setLowerBound(TVector::Ones(DIM) * 0);
   f.setUpperBound(TVector::Ones(DIM) * 25);
-  cppoptlib::LbfgsbSolver<llr> solver;
-  //minimize the function
-  Eigen::VectorXd x(2);
-  //decode the grid point in 2d
-  int gridx_index = i_grid%26; 
-  int gridy_index = i_grid/26;
-  std::cout << "x, y = " << gridx_index << ", " << gridy_index << std::endl;
+  TVector x(2);
   x(0) = gridx_index;
   x(1) = gridy_index;
+  cppoptlib::LbfgsbSolver<llr> solver;
   solver.minimize(f,x);
   
-  VectorX<T> param(b->dom_dim);
-  //parameters of values
-  VectorX<real_t> out_pt(b->pt_dim);
-  // parameters of input point to evaluate
-  VectorX<real_t> in_param(b->dom_dim);
-
-  //scale to 1
-  // normalize the science variable to the same extent as max of geometry
-  double extent[b->pt_dim];
-  extent[0] = b->bounds_maxs(0) - b->bounds_mins(0);
-  extent[1] = b->bounds_maxs(1) - b->bounds_mins(1);
-  double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
-  int dom_dim = b->dom_dim;
-  int pt_dim  = b->pt_dim;
-  for (size_t i = 0; i < (size_t)b->dom_dim; i++){
-    in_param(i) = x(i)/scale;
-  }
-  ///std::cout << "...decode point per block..." << p+2 << std::endl;
-  b->decode_point(cp, in_param, out_pt);
-  for( int i=0; i < out_pt.size()-2; i++ ) std::cout << "diff " << i << " = " << signal.predict2D(i_grid, true, gridx_index, gridy_index)[i]/out_pt(i+2) << std::endl; 
   //store the result here
   global_chi_min = f(x); //the global minimum chi2
   best_grid_point = x(0)+x(1); //point in grid which gives the minimum chi2
@@ -1194,14 +1239,14 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
 	  TMatrixD const & covmat, Eigen::MatrixXd const & ECOV, Eigen::MatrixXd const & INVCOVBG,
 	  SignalGenerator signal,
 	  HighFive::File* file, std::vector<int> const & rankwork, int nUniverses, 
-	  double tol, size_t iter, bool debug, bool noWrite=false, int msg_every=100)
+	  double tol, size_t iter, int degree, bool debug, bool noWrite=false, int msg_every=100 )
 {
-  std::cout << "*** doFC ***" << std::endl;
+  std::cout << "*** doFC, science degree " << degree << " ***" << std::endl;
   double starttime, endtime;
     std::vector<FitResult> results;
     std::vector<int> v_grid, v_univ, v_iter, v_best;
     std::vector<double> v_last, v_dchi;
-    std::vector<std::vector<double> > v_fakedataC, v_collspec;
+    std::vector<std::vector<double> > v_fakedataC, v_collspec, v_outpt;
     
     if (!noWrite) {
       results.reserve(rankwork.size()*nUniverses);
@@ -1213,13 +1258,14 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
       v_dchi.reserve(rankwork.size()*nUniverses);
       v_fakedataC.reserve(rankwork.size()*nUniverses);
       v_collspec.reserve(rankwork.size()*nUniverses);
-    }
-    
+      v_outpt.reserve(rankwork.size()*nUniverses);
+    } 
     
     //validation
     Eigen::MatrixXd specfull_e_mat(rankwork.size(),57); 
     Eigen::MatrixXd speccoll_mat(rankwork.size(),57); 
     Eigen::MatrixXd corecoll_mat(rankwork.size(),57);
+    Eigen::MatrixXd outpt_mat(rankwork.size(),57);
     
     system_clock::time_point t_init = system_clock::now();
     for (int i_grid : rankwork) {
@@ -1229,11 +1275,39 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
        auto const & speccoll = collapseVectorEigen(specfull_e, myconf);
        std::mt19937 rng(cp.gid()); // Mersenne twister
        Eigen::MatrixXd const & LMAT = cholD(ECOV, specfull_e);
-     
-         
+       typedef double T;
+       VectorX<T> param(b->dom_dim);
+       //parameters of values
+       VectorX<real_t> out_pt(b->pt_dim);
+       // parameters of input point to evaluate
+       VectorX<real_t> in_param(b->dom_dim);
+       Eigen::VectorXd x(2);
+       Eigen::VectorXd outpt_vec(57);
+       x(0) = i_grid%26;
+       x(1) = i_grid/26;
+       //scale to 1
+       // normalize the science variable to the same extent as max of geometry
+       double extent[b->pt_dim];
+       extent[0] = b->bounds_maxs(0) - b->bounds_mins(0);
+       extent[1] = b->bounds_maxs(1) - b->bounds_mins(1);
+       double scale = extent[0] >= extent[1] ? extent[0] : extent[1];
+       int dom_dim = b->dom_dim;
+       int pt_dim  = b->pt_dim;
+       for (size_t i = 0; i < (size_t)b->dom_dim; i++){
+         in_param(i) = x(i)/scale;
+       }
+       std::cout << "...decode point per block... " << std::endl;
+       std::cout << "cp " << std::endl;
+       //std::cout << "in_param " << in_param(0) << ", " << in_param(1) << std::endl;
+       //std::cout << "out_pt " << out_pt << std::endl;
+       b->decode_point(cp, in_param, out_pt);
+       for( int i=0; i < out_pt.size()-2; i++ ) std::cout << "diff " << i << " = " << speccoll[i]/out_pt(i+2) << std::endl;  
+       for( int i=0; i < out_pt.size()-2; i++ ) outpt_vec(i) = out_pt(i+2); 
+       out_pt.resize(0);
        //Eigen
-       specfull_e_mat.row(i_grid) = Eigen::VectorXd::Map(&specfull_e[i_grid], specfull_e_mat.size());
-       speccoll_mat.row(i_grid) = Eigen::VectorXd::Map(&speccoll[i_grid], speccoll.size());
+       specfull_e_mat.row(i_grid) = Eigen::VectorXd::Map(&specfull_e[0], specfull_e_mat.size());
+       speccoll_mat.row(i_grid) = Eigen::VectorXd::Map(&speccoll[0], speccoll.size());
+       outpt_mat.row(i_grid) = Eigen::VectorXd::Map(&outpt_vec[0], outpt_vec.size());
 
        //creates a linear chain of blocks like in https://github.com/diatomic/diy/blob/master/examples/simple/iexchange-particles.cpp?
        for (int uu=0; uu<nUniverses;++uu) {
@@ -1293,9 +1367,10 @@ void doFC(Block<real_t>* b, diy::Master::ProxyWithLink const& cp, int rank,
        d_collspec.select(         {d_bgn, 0}, {size_t(v_collspec.size()), 57}).write(v_collspec);
        endtime   = MPI_Wtime();
        if (cp.gid()==0) fmt::print(stderr, "[{}] Write out took {} seconds\n", cp.gid(), endtime-starttime);
-	H5Easy::File file1("/code/src/comparespectrum_mpi.h5", H5Easy::File::Overwrite);
+	H5Easy::File file1(Form("/code/src/comparespectrum_mpi_deg%d.h5",degree), H5Easy::File::Overwrite);
   	H5Easy::dump(file1, "specfull", specfull_e_mat);
   	H5Easy::dump(file1, "colspec", speccoll_mat);
+  	H5Easy::dump(file1, "outpt", outpt_mat);
     }
 }
 
@@ -1334,6 +1409,7 @@ int main(int argc, char* argv[]) {
     double ywidth(0.05);
     double tol(0.001);
     size_t iter(5);
+    int degree = 2;
     // get command line arguments
     using namespace opts;
     Options ops(argc, argv);
@@ -1354,6 +1430,7 @@ int main(int argc, char* argv[]) {
     ops >> Option("ymin",            ymin,       "ymin");
     ops >> Option("ymax",            ymax,       "ymax");
     ops >> Option("ywidth",          ywidth,     "ywidth");
+    ops >> Option("degree",          degree,     "science degree");
     ops >> Option("msg",             msg_every,  "Print a progress message every m gridpoints on rank 0 to stderr.");
     ops >> Option("mode",            mode, "Mode 0 is default --- dimension 2 is electron, mode 1 is muon");
     bool debug       = ops >> Present('d', "debug", "Operate on single gridpoint only");
@@ -1410,10 +1487,8 @@ int main(int argc, char* argv[]) {
     if (world.rank()==0) loadData(Form("%s/%s",d_in.c_str(),infile1.c_str()), "_SIN_",        v_buff,   nrows, ncols);
     std::cout << Form("%s/%s",d_in.c_str(),infile1.c_str()) << std::endl;
     Eigen::MatrixXd _sin = bcMatrixXd(world, v_buff, nrows, ncols);
-  
     if (world.rank()==0) loadData(Form("%s/%s",d_in.c_str(),infile2.c_str()), "_SINSQ_",        v_buff,   nrows, ncols);
     Eigen::MatrixXd _sinsq = bcMatrixXd(world, v_buff, nrows, ncols);
-   
     //std::cout << "_sinsq nrows, ncols = " << nrows << ", " << ncols << std::endl;
 
     double time0 = MPI_Wtime();
@@ -1433,6 +1508,8 @@ int main(int argc, char* argv[]) {
     // Central configuration object
     const char* xmldata = text.c_str();
     sbn::SBNconfig myconf(xmldata, false);
+    Eigen::MatrixXd collapse_sin = collapseVectorEigen(_sin, myconf);   
+    Eigen::MatrixXd collapse_sinsq = collapseVectorEigen(_sinsq, myconf);  
 
     // Pre-oscillated spectra
     std::vector<double> sinsqvec, sinvec;
@@ -1443,9 +1520,10 @@ int main(int argc, char* argv[]) {
        auto temp = mkHistoVecStd(d_in, tag, "_SINSQ_", myconf.fullnames, xmin, xmax);
        sinsqvec = asVector(std::get<0>(temp));
        msqsplittings = std::get<1>(temp);
-       
+       //temp.resize(0,0);
        auto temp2 = mkHistoVecStd(d_in, tag, "_SIN_", myconf.fullnames, xmin, xmax);
        sinvec   = asVector(std::get<0>(temp2));
+       //temp2.resize(0,0);
        if (sinsqvec.size() != sinvec.size()) {
           std::cerr << "Error, number of input files for _SINSQ_ (" << sinsqvec.size() << ") differs from _SIN_ (" << sinvec.size() << ") exiting.\n";
           exit(1);
@@ -1654,21 +1732,16 @@ int main(int argc, char* argv[]) {
     if ( world.rank() == 0 ){ 
 	    std::cout << "set up signal model" << std::endl;
 	    std::cout << "fc master = " << &fc_master << std::endl;
-   	    makeSignalModel(&fc_master,signal,57); //hardcoded for now depending on channels and detectors
+   	    makeSignalModel(&fc_master,signal,57,degree); //hardcoded for now depending on channels and detectors
 	    //std::cout << "code, finish setup signal model" << code << std::endl;
     }
-    std::cout << "fail here 1" << std::endl;
     std::vector<int> work(nPoints);
-    std::cout << "fail here 2" << std::endl;
     std::iota(std::begin(work), std::end(work), 0); //0 is the starting number
-    std::cout << "fail here 3" << std::endl;
     std::vector<int> rankwork = splitVector(work, world.size())[world.rank()];
-    std::cout << "fail here 4" << std::endl;
     work.clear();
-    std::cout << "fail here 5" << std::endl;
     work.shrink_to_fit();
-    std::cout << "fail here" << std::endl;
     double starttime = MPI_Wtime();
+    
     if (simplescan) {
        if (world.rank()==0) fmt::print(stderr, "Start simple scan\n");
        if ( !mfa ) { fc_master.foreach([world, ECOVMAT, INVCOVBG, ecore, myconf,  f_out, rankwork, tol, iter, debug, signal](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
@@ -1678,10 +1751,10 @@ int main(int argc, char* argv[]) {
     }
     else {
        if (world.rank()==0) fmt::print(stderr, "Start FC\n");
-       if( !mfa ){ fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite, msg_every](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite, msg_every); });}
-       else { fc_master.foreach([world, covmat, _covmat, xmldata, _invcovbg, myconf, nUniverses, f_out, rankwork, tol, iter, debug, signal, nowrite, msg_every](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
-                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, _covmat, _invcovbg, signal, f_out, rankwork, nUniverses, tol, iter, debug, nowrite, msg_every); });}
+       if( !mfa ){ fc_master.foreach([world, covmat, ECOVMAT, xmldata, INVCOVBG, myconf, nUniverses, f_out, rankwork, tol, iter, degree, debug, signal, nowrite, msg_every](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, ECOVMAT, INVCOVBG, signal, f_out, rankwork, nUniverses, tol, iter, degree, debug, nowrite, msg_every); });}
+       else { fc_master.foreach([world, covmat, _covmat, xmldata, _invcovbg, myconf, nUniverses, f_out, rankwork, tol, iter, degree, debug, signal, nowrite, msg_every](Block<real_t>* b, const diy::Master::ProxyWithLink& cp)
+                              { doFC(b, cp, world.rank(), xmldata, myconf, covmat, _covmat, _invcovbg, signal, f_out, rankwork, nUniverses, tol, iter, degree, debug, nowrite, msg_every); });}
     }
 
     double endtime   = MPI_Wtime();
@@ -1700,6 +1773,8 @@ int main(int argc, char* argv[]) {
   	H5Easy::dump(file, "_sin_", _sin_);
   	H5Easy::dump(file, "_sinsq", _sinsq);
   	H5Easy::dump(file, "_sin", _sin);
+  	H5Easy::dump(file, "collapsed_sinsq", collapse_sinsq);
+  	H5Easy::dump(file, "collapsed_sin", collapse_sin);
   	H5Easy::dump(file, "sinsqeig", sinsqeig); 
   	H5Easy::dump(file, "sineig", sineig); 
   	H5Easy::dump(file, "ECOVMAT", ECOVMAT); 
