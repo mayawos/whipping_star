@@ -17,6 +17,7 @@
 #include <limits>
 #include <filesystem> // Require C++17
 #include <regex>
+#include <cstdio>
 #include <chrono>
 #include <ctime>
 
@@ -902,6 +903,8 @@ namespace cppoptlib {
     VectorXd           data;
     const MatrixX<T>   M;
     int                dim;
+    int			iters;
+    int			itersgrad;
   public:
     using Superclass = BoundedProblem<T>;
     using typename Superclass::TVector;
@@ -912,21 +915,26 @@ namespace cppoptlib {
 	 diy::Master::ProxyWithLink const& cp_,
 	 VectorXd data_, 
 	 MatrixX<T> M_,
+	 int &iters_,
+	 int &itersgrad_,
 	 int dim) : b(b_), 
 			  cp(cp_),	
 			  data(data_),	
 			  M(M_),
+			  iters(iters_),
+			  itersgrad(itersgrad_),
 		          Superclass(dim)	       
     {}
     //TO DO: Figure out the correct way to pass the MFA 
     //using typename BoundedProblem<T>::TVector;
     T value(const TVector &x) {
+      iters++;
       //to calculate the chi2 we need the to calculate the difference between the fake data and MFA model in each bin of data/model (point at dom_dim == 0)
       std::cout << "value: " << x[0] << ", " << x[1] << std::endl;
       // evaluate point
       TVector diff(data.size()); //data size == nvars
       VectorX<T> param(b.dom_dim);
-      for(int i=0; i<2; i++) param(i) = x[i]/25.;
+      for(int i=0; i<2; i++) param(i) = x[i];
       //param.setZero();
       //parameters of values
       VectorX<real_t> out_pt(b.pt_dim);
@@ -943,8 +951,8 @@ namespace cppoptlib {
       int pt_dim  = b.pt_dim;
       for (size_t i = 0; i < (size_t)b.dom_dim; i++){
 	in_param(i) = param(i)/scale;
-	//if(in_param(i) < 0. ) in_param(i) = 0.;
-	//if(in_param(i) > 1. ) in_param(i) = 1.;
+	if(in_param(i) < 1e-8 ) in_param(i) = 0.;
+	if(in_param(i) > 1.00000001 ) in_param(i) = 1.;
         std::cout << "scale, inparam = " << scale << ", " << in_param(i) << std::endl;
       }
       std::cout << "...decode point per block..." << std::endl;
@@ -957,15 +965,16 @@ namespace cppoptlib {
       out_pt.resize(0);
       in_param.resize(0);
       param.resize(0);
+      std::cout << "iiters = " << iters << std::endl;
       return (diff.transpose())*M*(diff);
     }
    
    void gradient(const TVector &x, TVector &grad) {
-    
+     itersgrad++;
      std::cout << "gradient" << std::endl;
      TVector left(data.size()); //data size == nvars
      TVector right(data.size()); //data size == nvars
-
+     MatrixXd left_mat(2,57);
      VectorX<T> param(b.dom_dim);
      for(int i=0; i<2; i++) param[i] = x(i);
 
@@ -980,6 +989,7 @@ namespace cppoptlib {
      int pt_dim  = b.pt_dim;
      VectorX<real_t> out_pt(pt_dim);
      VectorX<real_t> out_pt_deriv(pt_dim);
+     MatrixX<real_t> out_pt_deriv_mat(dom_dim,pt_dim);
      // parameters of input point to evaluate
      VectorX<real_t> in_param(dom_dim);
      for (auto i = 0; i < dom_dim; i++){
@@ -989,21 +999,26 @@ namespace cppoptlib {
      }
      for (auto i = 0; i < dom_dim; i++){
        b.differentiate_point(cp, in_param, 1, i, -1, out_pt_deriv);
+       out_pt_deriv_mat.row(i) = out_pt_deriv;
+       std::cout << "i, out_pt_deriv = " << i << ", " << out_pt_deriv << std::endl;
      }
      b.decode_point(cp, in_param, out_pt);
      //grad
      //scale the derivation u,v back to x,y
      for(int p=0; p<data.size(); p++){
-       left[p] = 2.0*scale*out_pt_deriv(p+2);
+     for (auto q = 0; q < dom_dim; q++){
+       left_mat(q,p) = 2.0*scale*out_pt_deriv_mat(q,p+2);
+     }
        right[p] = (out_pt(p+2)-data[p]);
-       std::cout << "scale, left, right = " << scale << ", " << left[p] << ", " << right[p] << std::endl;
+       std::cout << "scale, out_pt_deriv, left, right = " << scale << ", " << out_pt_deriv(p) << ", " << left[p] << ", " << right[p] << std::endl;
      }
      out_pt.resize(0);
      in_param.resize(0);
      param.resize(0);
      std::cout << "before calc grad " <<std::endl;
-     grad = (left.transpose())*M*(right);
+     grad = (left_mat.transpose())*M*(right);
      std::cout << "grad " << grad <<std::endl;
+     std::cout << "iters grad = " << itersgrad << std::endl;
    }
 
   };
@@ -1096,20 +1111,26 @@ inline FitResult coreFC(Eigen::VectorXd const & fake_data, Eigen::VectorXd const
   //pass the mfa model here which is already encode in the block
   typedef LLR<T> llr;
   typedef typename llr::TVector TVector;
-  llr f(*b, cp, fake_data, INVCOV, DIM);
+  int iter = 0;
+  int itergrad = 0;
+  llr f(*b, cp, fake_data, INVCOV, iter, itergrad, DIM);
   f.setLowerBound(TVector::Ones(DIM) * 0);
   f.setUpperBound(TVector::Ones(DIM) * 25);
   TVector x(2);
   x(0) = gridx_index;
   x(1) = gridy_index;
   cppoptlib::LbfgsbSolver<llr> solver;
+  auto startcputime = clock(); auto wcts = std::chrono::system_clock::now();
   solver.minimize(f,x);
-  
+  auto endcputime = clock(); auto wcte = std::chrono::system_clock::now();
+  std::chrono::duration<double> wctduration = (wcte - wcts);
   //store the result here
   global_chi_min = f(x); //the global minimum chi2
   best_grid_point = x(0)+x(1); //point in grid which gives the minimum chi2
   std::cout << "best grid point = " << x(0) << ", " << x(1) << std::endl;
   std::cout << "global_chi_min = " << global_chi_min  << std::endl;
+  std::cout << "CPU time, wall clock time for grid point " << x(0) << ", " << x(1) << " = " << (endcputime - startcputime)/(double)CLOCKS_PER_SEC  << " seconds, " << wctduration.count() << " seconds" << std::endl;
+  std::cout << "Iteration, gradient iteration for grid point " << x(0) << ", " << x(1) << " = " << iter  << ", " << itergrad << std::endl;
   //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
   float this_chi = calcChi(fake_data, v_coll, invcov);
   //assert that fakedataC should have the same dimension as collspec
