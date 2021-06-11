@@ -247,6 +247,10 @@ int main(int argc, char* argv[])
     TFile * fdata;
     TH1D * h_fakedata_1eNp;
     TH1D * h_fakedata_1e0p;
+    TH1D * h_fakedata_1eNp_sig;
+    TH1D * h_fakedata_1e0p_sig;
+    TH1D * h_fakedata_1eNp_constr;
+    TH1D * h_fakedata_1e0p_constr;
     TH1D * h_fakedata_numu;
     
     if(fakedata_file != "EMPTY"){
@@ -255,14 +259,27 @@ int main(int argc, char* argv[])
       h_fakedata_1eNp = (TH1D*)fdata->Get("nu_uBooNE_1eNp_data");
       h_fakedata_1e0p = (TH1D*)fdata->Get("nu_uBooNE_1e0p_data");
       h_fakedata_numu = (TH1D*)fdata->Get("nu_uBooNE_numu_data");
+      h_fakedata_1eNp_sig = (TH1D*)fdata->Get("nu_uBooNE_1eNp_sig_data");
+      h_fakedata_1e0p_sig = (TH1D*)fdata->Get("nu_uBooNE_1e0p_sig_data");
+      h_fakedata_1eNp_constr = (TH1D*)fdata->Get("nu_uBooNE_1eNp_constr_data");
+      h_fakedata_1e0p_constr = (TH1D*)fdata->Get("nu_uBooNE_1e0p_constr_data");
+      std::cout << "h_fakedata_1eNp, h_fakedata_1e0p: " << h_fakedata_1eNp << ", " << h_fakedata_1e0p << std::endl;
+      std::cout << "h_fakedata_1eNp_sig, h_fakedata_1e0p_sig: " << h_fakedata_1eNp_sig << ", " << h_fakedata_1e0p_sig << std::endl;
+      std::cout << "h_fakedata_1eNp_constr, h_fakedata_1e0p_constr: " << h_fakedata_1eNp_constr << ", " << h_fakedata_1e0p_constr << std::endl;
     }
     std::cout << "create vector of fakedata" << std::endl; 
     //create vector of fakedata:
     std::vector<float> fakedata;
-    if( which_mode==2 && h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; }
-    if( which_mode==2 && h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; }
-    if( which_mode==2 && h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
-    if( which_mode==2 && h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1eNp->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1e0p->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1eNp_sig ){for( int k=1; k < h_fakedata_1eNp_sig->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1eNp_sig->GetBinContent k " << k << " = " <<  h_fakedata_1eNp_sig->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1eNp_sig->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1e0p_sig ){for( int k=1; k < h_fakedata_1e0p_sig->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1e0p_sig->GetBinContent k " << k << " = " <<  h_fakedata_1e0p_sig->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1e0p_sig->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1eNp_constr ){for( int k=1; k < h_fakedata_1eNp_constr->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1eNp_constr->GetBinContent k " << k << " = " <<  h_fakedata_1eNp_constr->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1eNp_constr->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1e0p_constr ){for( int k=1; k < h_fakedata_1e0p_constr->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1e0p_constr->GetBinContent k " << k << " = " <<  h_fakedata_1e0p_constr->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1e0p_constr->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1eNp_sig ){for( int k=1; k < h_fakedata_1eNp_sig->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp_sig->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1e0p_sig ){for( int k=1; k < h_fakedata_1e0p_sig->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p_sig->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1eNp_constr ){for( int k=1; k < h_fakedata_1eNp_constr->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp_constr->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1e0p_constr ){for( int k=1; k < h_fakedata_1e0p_constr->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p_constr->GetBinContent(k)); }
     //if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
     
     std::cout << "size of fakedata vector: " << fakedata.size() << std::endl;
