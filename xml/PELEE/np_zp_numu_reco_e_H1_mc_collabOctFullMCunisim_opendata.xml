@@ -60,7 +60,7 @@
     <subchannel name="ext" />
 </channel>
 
-<plotpot value=6.86e20/>
+<plotpot value=6.426e19/>
 
 <!-- ############################# BUILDING A COVARIANCE MATRIX  #####################################################-->
 <!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
@@ -267,7 +267,7 @@
  </MultisimFile>
 
  <!-- numu -->
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/numu/mc.root" scale = "1.59e-1" pot = "6.86e20" > 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/numu/mc.root" scale = "1.59e-1" pot = "6.426e19" > 
      <branch
          name="reco_e"
          type="double"
@@ -276,7 +276,7 @@
          />
  </MultisimFile>
 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/numu/dirt.root" scale = "6.49e-1" pot = "6.86e20"> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/numu/dirt.root" scale = "6.49e-1" pot = "6.426e19"> 
      <branch
          name="reco_e"
          type="double"
@@ -294,8 +294,8 @@
          />
  </MultisimFile>
 -->
- <!--MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/sbnfit_0928/numu/ext.root" scale = "2.57e-1" pot = "6.86e20"--> 
- <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/searchingfornues/v08_00_00_48/0928/SBNFit/numu0316/ext.root" scale = "2.57e-1" pot = "6.86e20"> 
+ <!--MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/sbnfit_0928/numu/ext.root" scale = "2.57e-1" pot = "6.426e19"--> 
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/searchingfornues/v08_00_00_48/0928/SBNFit/numu0316/ext.root" scale = "2.57e-1" pot = "6.426e19"> 
      <branch
          name="reco_e"
          type="double"
