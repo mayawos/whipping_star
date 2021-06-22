@@ -53,6 +53,7 @@ namespace sbn{
         std::vector<SBNchi*> m_sbnchi_grid;
 
         TMatrixT<double> * m_full_fractional_covariance_matrix;
+        TMatrixT<double> m_matrix_systematics_collapsed;
 
 
 
@@ -68,6 +69,7 @@ namespace sbn{
         bool m_bool_print_comparasons;
 
         bool m_use_CNP;
+        bool m_use_LLR;
         bool m_bool_simple_hypothesis; //added for pelee validation
 
         int m_max_number_iterations;
@@ -92,27 +94,31 @@ namespace sbn{
             m_random_seed = -1;
             m_max_number_iterations = 5;
             m_use_CNP = false;
+            m_use_LLR = false;
             m_bool_simple_hypothesis = false; //pelee validation
 
             global_scale = 1;//5.81731e19/6.6e20;
             //global_scale = 4.51931e+19/6.6e20;
 
-            m_chi_min_convergance_tolerance = 0.00001;
+            m_chi_min_convergance_tolerance = 0.00001; // was 0.001;
         }
 
 
         //Member Functions
         
          int UpdateInverseCovarianceMatrixCNP(size_t best_grid_point, const std::vector<float> &datavec, TMatrixT<double>& inverse_collapsed, SBNchi * helper);
+         int UpdateInverseCovarianceMatrixLLR(size_t best_grid_point, const std::vector<float> &datavec, TMatrixT<double>& inverse_collapsed, SBNchi * helper);
          int UpdateInverseCovarianceMatrix(size_t best_grid_point, TMatrixT<double>& inverse_collapsed, SBNchi * helper);
          std::vector<double> PerformIterativeGridFit(const std::vector<float> &datavec, const size_t grid_pt, const TMatrixT<double>& inverse_background_collapsed_covariance_matrix);
          std::vector<double> PerformIterativeGridFit(const std::vector<float> &datavec, const size_t grid_pt, const TMatrixT<double>& inverse_background_collapsed_covariance_matrix,bool);
 
 
         int UseCNP(){m_use_CNP = true;};
+        int UseLLR(){m_use_LLR = true;};
         int doSimpleHypothesis(){m_bool_simple_hypothesis = true;}; //pelee validation
         int FullFeldmanCousins();
-        int CompareToData(SBNspec *datain);
+        std::vector<double> CompareToData(SBNspec *datain);
+        std::vector< std::vector<double> > CompareDataToAllScaleFactors(SBNspec *datain);
         int PointFeldmanCousins(size_t);
         std::vector<double> GlobalScan();
         std::vector<double> GlobalScan(int);
@@ -162,6 +168,7 @@ namespace sbn{
 
         //This is a stopgap for better SBNchi integration.Hrump, need to fix that wierd float oddity. 
         float CalcChi(const std::vector<float>& data, const std::vector<double>& prediction, const TMatrixT<double> & inverse_covariance_matrix );
+        float CalcPoissonLogLiklihood(const std::vector<float>& data, const std::vector<double>& pred);
 
     };
 

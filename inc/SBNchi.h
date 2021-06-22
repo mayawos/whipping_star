@@ -147,7 +147,10 @@ namespace sbn{
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr, bool add_stats);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec,bool);
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<double>& datavec );
+            TMatrixT<double> CalcCovarianceMatrixCNP_FC(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<float>& datavec );
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, const std::vector<float>& datavec );
+
+            TMatrixT<double> CalcCovarianceMatrixLLR(TMatrixT<double>* M, std::vector<double>& spec, const std::vector<float>& datavec );
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec, bool add_stats );
 
 

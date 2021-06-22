@@ -74,6 +74,7 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string in
     matrix_fractional_covariance = m;
     matrix_systematics.Zero();
     max_sample_chi_val =150.0;
+
     m_tolerance = 1e-8;
     std::cout << "core spectrum 1: ";
     std::cout << "{ ";
@@ -718,7 +719,6 @@ void SBNchi::CollapseModes(TMatrixT <double> & M, TMatrixT <double> & Mc){
 }
 
 TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, bool add_stats){
-
     TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
 
     for(int i =0; i<M->GetNcols(); i++)
@@ -780,7 +780,6 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
 }
 //here spec is full vector of MC, spec_collapse is collapsed vector of MC, datavec is collapsed vector of data
 TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<double>& datavec ){
-
     if(M.GetNcols() != spec.size()){
         std::cout << "ERROR: your input vector does not have the right dimenstion  " << std::endl; 
         std::cout << "Fractional Matrix size :"<< M.GetNcols() << " || Input Full Vector size "<< spec.size() << std::endl;  
@@ -805,10 +804,47 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector
     }
 
     CollapseModes(M_temp, Mout);
-    //add stats part	
+    //add stats part
+    
     for(int i=0; i< spec_collapse.size(); i++){
         Mout(i,i) +=   ( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
         //Mout(i,i) +=   spec_collapse[i];//( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
+    }
+
+    return Mout;
+}
+
+TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP_FC(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<float>& datavec ){
+    
+    if(M.GetNcols() != spec.size()){
+        std::cout << "ERROR: your input vector does not have the right dimenstion  " << std::endl; 
+        std::cout << "Fractional Matrix size :"<< M.GetNcols() << " || Input Full Vector size "<< spec.size() << std::endl;  
+        exit(EXIT_FAILURE);
+    }
+
+    TMatrixT<double> M_temp(M.GetNcols(), M.GetNcols() );
+    TMatrixT<double> Mout(spec_collapse.size(), spec_collapse.size()); //collapsed covariance matrix
+
+    //systematic apart 
+    //std::cout << "CalcCovarianceMatrixCNP_FC: systematics + stats (Before Inversion)" << std::endl;
+    for(int i =0; i<M.GetNcols(); i++)
+    {
+        for(int j =0; j<M.GetNrows(); j++)
+        {
+            if(  std::isnan( M(i,j) )){
+                M_temp(i,j) = 0.0;
+            }else{
+                M_temp(i,j) = M(i,j)*spec[i]*spec[j];
+            }
+            //if(i == j) std::cout << "j, data[j], pred[j], inverse_collapsed(j,j) = " << j << ", " << datavec[j] << ", " << spec_collapse[j] << ", " << M_temp(j,j) << std::endl;
+        }
+    }
+    CollapseModes(M_temp, Mout);
+    //add stats part
+    
+    for(int i=0; i< spec_collapse.size(); i++){
+        //std::cout << "j, data[j], pred[j], collapsed matrix(j,j) = " << i << ", " << datavec[i] << ", " << spec_collapse[i] << ", " << Mout(i,i) << std::endl;
+        Mout(i,i) +=   ( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
     }
     return Mout;
 }
@@ -857,6 +893,30 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> *M, std::vecto
 TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double>*M, std::vector<double>& spec, const std::vector<float>& datavec ){
 
     TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
+    TMatrixT<double> Mout_alt(M->GetNcols(), M->GetNcols() );
+    for(int i =0; i<M->GetNcols(); i++)
+    {
+        for(int j =0; j<M->GetNrows(); j++)
+        {
+            if(std::isnan( (*M)(i,j) )){
+                Mout(i,j) = 0.0;
+                Mout_alt(i,j) = 0.0;
+            }else{
+                Mout(i,j) = (*M)(i,j)*spec[i]*spec[j];
+                Mout_alt(i,j) = (*M)(i,j)*spec[i]*spec[j];
+            }
+            if(i==j) Mout(i,i) +=   ( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec[i])  : spec[i]/2.0 );
+            if(i==j) std::cout << "j, data[j], pred[j], full matrix(j,j) = " << i << ", " << datavec[i] << ", " << spec[i] << ", " << Mout(i,i) << std::endl;
+            
+        }
+    }
+    std::cout << "END OF MATRIX PRINTOUT" << std::endl;
+    return Mout;
+}
+
+TMatrixT<double> SBNchi::CalcCovarianceMatrixLLR(TMatrixT<double>*M, std::vector<double>& spec, const std::vector<float>& datavec ){
+
+    TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
 
     for(int i =0; i<M->GetNcols(); i++)
     {
@@ -867,12 +927,17 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double>*M, std::vector
             }else{
                 Mout(i,j) = (*M)(i,j)*spec[i]*spec[j];
             }
-            if(i==j) Mout(i,i) +=   (datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec[i])  : spec[i]/2.0 );
+            if(i==j) {
+                Mout(i,i) +=  ( datavec[i] > 0.001 ? 1.0/(2.0*(spec[i] - datavec[i] + datavec[i]*log(datavec[i]/spec[i]))) : 2.0*spec[i]);
+                //if(std::isinf(Mout(i,i))) Mout(i,i) = 0;
+                //std::cout << "IVAN: (*M)(" << i  << "," << j << ")*spec[i]*spec[j] = " << (*M)(i,j)*spec[i]*spec[j] << ", (*M)(i,j) = " << (*M)(i,j) << ", spec[i] = " << spec[i] << ", spec[j] = " << spec[j] << std::endl;
+                //std::cout << "IVAN: Mout(" << i  << "," << j << ") = " << Mout(i,i) << ", (*M)(i,j) = " << (*M)(i,j) << ", spec[i] = " << spec[i] << ", spec[j] = " << spec[j] << std::endl;
+            }
+
         }
     }
     return Mout;
 }
-
 
 float SBNchi::CalcChi_Pearson(float * pred, float* data){
 
@@ -892,6 +957,7 @@ float SBNchi::CalcChi_Pearson(float * pred, float* data){
         }
     }
     return tchi;
+
 }
 
 
@@ -947,7 +1013,6 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<doubl
 
 
 TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec){
-
     TMatrixT<double> Mout( M->GetNcols(), M->GetNcols() );
     // systematics per scaled event
     for(int i =0; i<M->GetNcols(); i++)
@@ -969,7 +1034,6 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<doubl
 
 
 TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec,bool add_stats){
-
     TMatrixT<double> Mout( M->GetNcols(), M->GetNcols() );
     // systematics per scaled event
     for(int i =0; i<M->GetNcols(); i++)
@@ -1005,7 +1069,7 @@ TMatrixT<double> SBNchi::InvertMatrix(TMatrixT<double> &M){
 
         for(int i=0; i< M.GetNrows(); i++){
             for(int j=0; j< M.GetNrows(); j++){
-                std::cout<<i<<" "<<j<<" "<<M(i,j)<<std::endl;
+                std::cout<<"IVAN: " <<i<<" "<<j<<" "<<M(i,j)<<std::endl;
             }
         }
 
@@ -1549,8 +1613,10 @@ int SBNchi::PerformCholoskyDecomposition(SBNspec *specin){
     std::cout<<" Starting Cholosky Decomp, tolderance is "<<tol<<" and sample_collapse "<<pseudo_from_collapsed<<std::endl;
 
     TMatrixD U  = matrix_fractional_covariance;
+
     //std::cout << "PerformCholoskyDecomposition, matrix used for sampling toys: " << std::endl;
     //U.Print();
+
     for(int i =0; i<U.GetNcols(); i++)
     {
         for(int j =0; j<U.GetNrows(); j++)
@@ -1986,7 +2052,7 @@ int SBNchi::CollapseVectorStandAlone(double* full_vector, double *collapsed_vect
 std::vector<float> SBNchi::GeneratePseudoExperiment(){
 
     core_spectrum.CollapseVector();
-    if(!cholosky_performed || is_stat_only) PerformCholoskyDecomposition(&core_spectrum); 
+    if(!cholosky_performed || is_stat_only) PerformCholoskyDecomposition(&core_spectrum); //Comment out in statOnly mode
 
     int n_t =  (pseudo_from_collapsed ? num_bins_total_compressed : num_bins_total); 
     std::vector<float> sampled(n_t);
@@ -1999,9 +2065,10 @@ std::vector<float> SBNchi::GeneratePseudoExperiment(){
         v_gaus[i] = (*m_dist_normal)(*rangen_twister);
         //std::cout << "i, v_gaus = " << i << ", " << v_gaus[i] << std::endl; 
     }
-
+    
     for(int i=0; i< n_t; ++i){
         sampled[i] = (pseudo_from_collapsed ? core_spectrum.collapsed_vector[i] : core_spectrum.full_vector[i]);
+
         //std::cout << "i, sampled = " << i << ", " << sampled[i] << std::endl;
         if(!is_stat_only){
             for(int j=0; j<n_t; ++j){
@@ -2010,6 +2077,7 @@ std::vector<float> SBNchi::GeneratePseudoExperiment(){
             }
         }
     }
+
     //Now poisson fluctuate the sampled spectrum
     for(int j=0; j<n_t; ++j){
         std::poisson_distribution<int> dist_pois(sampled[j]);
