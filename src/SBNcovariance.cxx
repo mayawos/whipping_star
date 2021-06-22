@@ -586,9 +586,23 @@ for(int j=0; j < num_files; j++){
     int nevents = std::min(montecarlo_maxevents[j], nentries[j]);
     std::cout << otag<<" Starting @ data file=" << files[j]->GetName() <<" which has "<<nevents<<" Events. "<<std::endl;
     size_t nbytes = 0;
+    Double_t reco_e;
+    Double_t nprotons;
+    Double_t protonangle;
+    Double_t thetasum;
+    Double_t protonenergy;
+    trees.at(j)->SetBranchAddress("reco_e", &reco_e);
+    trees.at(j)->SetBranchAddress("nprotons", &nprotons);
+    trees.at(j)->SetBranchAddress("thetasum", &thetasum);
+    trees.at(j)->SetBranchAddress("protonangle", &protonangle);
+    trees.at(j)->SetBranchAddress("protonenergy", &protonenergy);
     for(int i=0; i < nevents; i++) {
         if(i%100==0)std::cout<<otag<<" -- uni :"<<i<<" / "<<nevents<<std::endl;
         nbytes+= trees[j]->GetEntry(i);
+        //std::cout << "getting reco e" << std::endl;
+        //if( ( std::string(files[j]->GetName()).find("numu") == std::string::npos ) && reco_e < 0.65 ) continue; 
+        //if( ( std::string(files[j]->GetName()).find("numu") != std::string::npos ) && nprotons == 0 ) continue; 
+        //std::cout << "reco_e, nprotons, proton angle, proton energy = " << reco_e << ", " << nprotons << ", " << protonangle << ", " << protonenergy << std::endl; 
         ProcessEvent(*(f_weights[j]),j,i);
     } //end of entry loop
     std::cout << otag<<" nbytes read=" << nbytes << std::endl;
@@ -636,9 +650,10 @@ void SBNcovariance::ProcessEvent(
         ss << "SBNcovariance::ProcessEvent\t||\tERROR  error @ " << entryid
             << " in File " << montecarlo_file.at(fileid) 
             << " as its either inf/nan: " << global_weight << std::endl;
-        throw std::runtime_error(ss.str());
+        global_weight = 1.0;
+        //throw std::runtime_error(ss.str());
     }
-
+    if(global_weight < 0) std::cout<<"ERROR! the global weight is negative: " << global_weight <<  ", " << montecarlo_additional_weight_formulas[fileid]->GetNdata() << std::endl;
     if(!EventSelection(fileid)) return;
 
     // precompute the weight size
@@ -659,8 +674,10 @@ void SBNcovariance::ProcessEvent(
         m_variation_weight_formulas[fileid][vid]->GetNdata();
         double indiv_variation_weight = m_variation_weight_formulas[fileid][vid]->EvalInstance();
         if((indiv_variation_weight!= indiv_variation_weight || indiv_variation_weight <0 )&& !montecarlo_fake[fileid]){
-            std::cout<<"ERROR! the individual variation weight is nan or negative "<<indiv_variation_weight<<" Breakign!"<<std::endl;
-            exit(EXIT_FAILURE);
+            std::cout<<"ERROR! the individual variation ("<< var <<") weight is nan or negative "<<indiv_variation_weight<<" Breakign! weight is "<< m_variation_weight_formulas[fileid][vid]->GetNdata() <<  std::endl;
+            std::cout<<"Setting weight to 1.0! And I will not exit this code" << std::endl;
+            indiv_variation_weight=1.0; 
+            //exit(EXIT_FAILURE);
         }
         //std::cout<<var<<" "<<indiv_variation_weight<<" "<<fileid<<" "<<vid<<std::endl;
 
@@ -797,6 +814,54 @@ int SBNcovariance::FillHistograms(int file, int uni, double wei){
 
 int SBNcovariance::FormCovarianceMatrix(std::string tag){
 
+	//std::map<bool, std::string> map_shape_only{{true, "NCDeltaRadOverlaySM"}};
+	std::map<bool, std::string> map_shape_only{{false, "NCDeltaRadOverlayLEE"}};
+	//std::map<bool, std::string> map_shape_only{{false, "NCPi0NotCoh"}};
+	//std::map<bool, std::string> map_shape_only{{true, "NCPi0NotCoh"}};
+
+	for(auto const& imap : map_shape_only){
+		bool lshape_only = imap.first;
+		if(lshape_only == false) continue;
+		std::string lname_subchannel = imap.second;
+		if(is_verbose) std::cout << "SBNcovariance::FormCovariancematrix\t||\tSubchannel " << lname_subchannel << " will be constructed as shape-only matrix ? " << lshape_only << std::endl;	
+
+
+
+		//save the toal number of events of CV for specific subchannels, and their global bin indices.
+	        spec_central_value.CalcFullVector();
+		std::vector<double> CV_tot_count;
+		std::map<int, std::vector<double>> map_index_global_bin;
+		for(auto const& lh:spec_central_value.hist){
+			std::string lname = lh.GetName();
+			if(lname.find(lname_subchannel) != std::string::npos){
+				//store the max/min global bin index for histogram
+				std::vector<double> lglobal_bin{spec_central_value.GetGlobalBinNumber(1, lname), spec_central_value.GetGlobalBinNumber(lh.GetNbinsX(), lname)};
+				map_index_global_bin.insert( std::pair<int, std::vector<double>>( (int)CV_tot_count.size(), lglobal_bin)  );
+
+				CV_tot_count.push_back(lh.Integral());
+				
+			}
+		}
+			
+		//start modify 'multi_vecspec'
+		for(int l=0; l< universes_used; l++){
+		    //now, multi_vecspec[l] is a spectra vector of 1 universe
+			std::string var_l = map_universe_to_var.at(l);
+			if(var_l.find("UBGenie") == std::string::npos) continue;
+
+			// loop over each histogram that has certain names		    
+			for(auto const& lmap:map_index_global_bin){
+				std::vector<double> lglobal_bin = lmap.second;
+
+				// total # of events of a subchannel of this universe
+				double uni_temp_count = std::accumulate(multi_vecspec[l].begin()+ lglobal_bin[0], multi_vecspec[l].begin()+lglobal_bin[1]+1, 0.0);
+				for(int k=lglobal_bin[0]; k <= lglobal_bin[1]; k++)
+					multi_vecspec[l][k] *= CV_tot_count[lmap.first]/uni_temp_count;
+			}
+
+		}
+	}
+
     std::cout<<"SBNcovariance::FormCovariancematrix\t||\tStart" << std::endl;
     full_covariance.ResizeTo(num_bins_total, num_bins_total);
     frac_covariance.ResizeTo(num_bins_total, num_bins_total);
@@ -864,6 +929,7 @@ int SBNcovariance::FormCovarianceMatrix(std::string tag){
         double vec_bot = ((double)a_num_universes_per_variation[k]);
         //next bit probably breaks the acc
         int varmode = m_variation_modes[varid];
+        std::cout << "SBNcovariance::FormCovariancematrix\t||\tvarmode (" <<varmode<<" ) vecuni2var ("<<varid<<" )"<< std::endl;
 
         if(varmode==0){ //run as normal. 
 #pragma acc loop seq
@@ -878,11 +944,13 @@ int SBNcovariance::FormCovarianceMatrix(std::string tag){
         }else if(varmode==1){
             //Instead, assign the covariance to be identicall the difference between this and the next universe (they come in 2's)
             for(int i=0; i<num_bins_total; i++) {
-                a_vec_full_covariance[varid][i*num_bins_total+i] = fabs(a_multi_vecspec[k][i]-a_multi_vecspec[k+1][i]);
+                for(int j=0; j<num_bins_total; j++) {
+                    a_vec_full_covariance[varid][i*num_bins_total+j] = (a_multi_vecspec[k][i]-a_multi_vecspec[k+1][i])* (a_multi_vecspec[k][j]-a_multi_vecspec[k+1][j]);
+                }
+                //a_vec_full_covariance[varid][i*num_bins_total+i] = fabs(a_multi_vecspec[k][i]-a_multi_vecspec[k+1][i]);
             }
             //we will also need to jump th universe count ahead by 1, just to skip the variation on the other side too.
             k++;
-
         }
     }
     watch.Stop();
@@ -1027,6 +1095,7 @@ int SBNcovariance::FormCovarianceMatrix(std::string tag){
 
     fout->Close();
 
+    std::cout << "tag: " << std::endl;
     spec_central_value.WriteOut(tag);
 
     qualityTesting();
@@ -1129,7 +1198,7 @@ int SBNcovariance::PrintVariations(std::string tag){
             tmpc.push_back(new TCanvas((fullnames.at(i)+"||"+v).c_str()));
             tmpc.back()->cd();
             TH1D * temp_cv_spec = (TH1D*)spec_central_value.hist.at(i).Clone((std::to_string(i)+v).c_str());
-            temp_cv_spec->Scale(1,"width");
+            //temp_cv_spec->Scale( montecarlo_scale[i]);
 
             tmpc.back()->cd();
             double maxval = temp_cv_spec->GetMaximum();
@@ -1166,11 +1235,12 @@ int SBNcovariance::PrintVariations(std::string tag){
 
         for(int i=0; i< temp_spec.hist.size(); i++){
             vec_canvas.at(which_matrix).at(i)->cd();
-            temp_spec.hist.at(i).Scale(1,"width");
+            //temp_spec.hist.at(i).Scale( montecarlo_scale[i] );
             temp_spec.hist.at(i).SetLineColor((int)rangen->Uniform(300,1000));	
             temp_spec.hist.at(i).DrawCopy("same hist");
 
-        }	
+        }
+        //std::cout << "m+1, universes_used = " << m+1 << ", " << universes_used << std::endl;	
         //check to see if variation is over. if so
         if(m+1 != universes_used ) {
             if(var != map_universe_to_var[m+1]){
@@ -1181,7 +1251,7 @@ int SBNcovariance::PrintVariations(std::string tag){
                     vec_dir.at(which_matrix)->cd();
                     vec_canvas.at(which_matrix).at(i)->cd();
                     TH1D * temp_cv_spec = (TH1D*)spec_central_value.hist.at(i).Clone((std::to_string(i)+var+"tmp2").c_str());
-                    temp_cv_spec->Scale(1,"width");
+                    //temp_cv_spec->Scale(1,"width");
                     temp_cv_spec->SetLineColor(kBlack);
                     temp_cv_spec->SetMarkerStyle(34);
                     temp_cv_spec->SetLineWidth(2);
@@ -1191,6 +1261,7 @@ int SBNcovariance::PrintVariations(std::string tag){
                     vec_dir.at(which_matrix)->cd();
                     vec_canvas.at(which_matrix).at(i)->Write();
                     vec_canvas.at(which_matrix).at(i)->SaveAs(("variations/Variation_"+tag+"_"+var+"_"+fullnames[i]+"_1D.pdf").c_str(),"pdf");
+                    std::cout << "Print variations/Variation_" << tag << "_" << var << "_" << fullnames[i] << "_1D.pdf" << std::endl;
                     ;
                     delete temp_cv_spec;
                     delete vec_canvas.at(which_matrix).at(i);
@@ -1204,7 +1275,7 @@ int SBNcovariance::PrintVariations(std::string tag){
     }//end universe loop
 
     std::cout << "SBNcovariance::PrintVariations\t||\tFinished. Just tidying up and writing TCanvas. " << std::endl;
-    /*
+   /* 
        for(int v =0; v< variations.size(); v++){
        fout->cd();
        vec_dir.at(v)->cd();
@@ -1222,11 +1293,12 @@ int SBNcovariance::PrintVariations(std::string tag){
        delete temp_cv_spec;
        }
        }
-       */
-
+       
+    */
     fout->Close();
     return 0;
 }
+
 int SBNcovariance::PrintVariations_2D(std::string tag){
     TFile *fout = new TFile(("SBNfit_variation_plots_2D_"+tag+".root").c_str(),"recreate");
     fout->cd();
@@ -1498,6 +1570,7 @@ int SBNcovariance::PrintMatricies(std::string tag, bool print_indiv) {
     h2_coll_corr.SetTitle("Collapsed Correlation matrix");
     h2_coll_corr.GetXaxis()->SetTitle("Reco Bin i");
     h2_coll_corr.GetYaxis()->SetTitle("Reco Bin j");
+    h2_coll_corr.GetZaxis()->SetRangeUser(0.0,1);
     c_coll_corr->SetRightMargin(0.150);
 
     int use_coll_corr =0;

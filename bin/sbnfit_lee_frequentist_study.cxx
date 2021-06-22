@@ -60,8 +60,11 @@ int main(int argc, char* argv[])
     std::string background_file = "EMPTY";
     std::string covariance_file = "EMPTY";
     std::string fakedata_file = "EMPTY";
+    std::string ext_err_file = "EMPTY";
 
     bool bool_flat_det_sys = false;
+    bool bool_fill_det_sys = false; //PeLEE updates
+    bool bool_ext_err = false; //PeLEE updates
     double flat_det_sys_percent = 0.0;
 
     bool zero_off_diag = false;
@@ -77,6 +80,7 @@ int main(int argc, char* argv[])
         {"mode", 	    	required_argument,	0,'m'},
         {"background", 	required_argument,	0,'b'},
         {"fakedata", 	required_argument,	0,'d'},
+        {"exterr", 	required_argument,	0,'r'},
         {"tag", 	    required_argument,	0,'t'},
         {"epsilon", required_argument,0,'e'},
         {"cnp",no_argument,0,'a'},
@@ -84,13 +88,14 @@ int main(int argc, char* argv[])
         {"tester",no_argument,0,'k'},
         {"poisson", no_argument,0,'p'},
         {"flat", required_argument,0,'f'},
+        {"filldetsys", required_argument,0,'d'},
         {"help",no_argument,0,'h'},
         {0,			no_argument, 		0,  0},
     };
 
     while(iarg != -1)
     {
-        iarg = getopt_long(argc,argv, "m:a:x:n:s:e:b:d:c:f:t:pjkzh", longopts, &index);
+        iarg = getopt_long(argc,argv, "m:a:x:n:s:e:b:d:c:f:r:t:pjkzh", longopts, &index);
 
         switch(iarg)
         {
@@ -116,11 +121,18 @@ int main(int argc, char* argv[])
                 background_file = optarg;
                 break;
             case 'd':
+                which_mode = 2;         //PeLEE specific hacks for fakedata
                 fakedata_file = optarg;
+                break;
+            case 'r':
+                ext_err_file = optarg;
                 break;
             case 'f':
                 bool_flat_det_sys = true;
                 flat_det_sys_percent = (double)strtod(optarg,NULL);
+                break;
+            case 'y':
+                bool_fill_det_sys = true;
                 break;
             case 'e':
                 epsilon = (double)strtod(optarg,NULL);
@@ -155,6 +167,7 @@ int main(int argc, char* argv[])
                 std::cout<<"--- Optional arguments: ---"<<std::endl;
                 std::cout<<"\t-j\t--collapse\t\tSample from collapsed rather than full covariance matrix (default false, experimental!)"<<std::endl;
                 std::cout<<"\t-f\t--flat\t\tAdd a flat percent systematic to fractional covariance matrix (all channels) (default false, pass in percent, i.e 5.0 for 5\% experimental)"<<std::endl;
+                std::cout<<"\t-r\t--exterr\t\tAdd zero ext bin error to the stat errors (all channels) (default no additional errors)"<<std::endl;
                 std::cout<<"\t-z\t--zero\t\tZero out all off diagonal elements of the systematics covariance matrix (default false, experimental!)"<<std::endl;
                 std::cout<<"\t-e\t--epsilon\t\tEpsilon tolerance by which to add back to diagonal of covariance matrix if determinant is 0 (default 1e-12)"<<std::endl;
                 std::cout<<"\t-n\t--number\t\tNumber of MC events for frequentist studies (default 100k)"<<std::endl;
@@ -180,7 +193,11 @@ int main(int argc, char* argv[])
         stats_only = true;
         sample_from_covariance = false;
     }
-
+    if(ext_err_file =="EMPTY"){
+        std::cout<<"Note! No ext bnb error covariance matrix root file with the  `--exterr  XX.SBNcovar.root` or `-r XX.SBNcovar.root`. was passed, running without stats error. "<<std::endl;
+        bool_ext_err = false;
+    }
+    else bool_ext_err = true;
 
     std::cout<<"Loading signal file : "<<signal_file<<" with xml "<<xml<<std::endl;
     SBNspec sig(signal_file,xml);
@@ -192,7 +209,8 @@ int main(int argc, char* argv[])
     std::cout << "loading frac cov matrix" << std::endl;
     TFile * fsys;
     TMatrixD * cov;
-
+    TFile * fexterr;
+    TMatrixD * exterr;
     
     if(!stats_only){
         fsys = new TFile(covariance_file.c_str(),"read");
@@ -200,80 +218,87 @@ int main(int argc, char* argv[])
     }
     std::cout << "found frac cov matrix: " << cov << std::endl;
 
+    //ext error
+    std::vector<double> coll_ext_err_vec, frac_coll_ext_err_vec;
+    std::vector<double> ext_err_vec, frac_ext_err_vec;
+    coll_ext_err_vec.resize(bkg.num_bins_total_compressed);
+    frac_coll_ext_err_vec.resize(bkg.num_bins_total_compressed);
+    ext_err_vec.resize(bkg.num_bins_total);
+    frac_ext_err_vec.resize(bkg.num_bins_total);
+    std::fill(ext_err_vec.begin(), ext_err_vec.end(), 0.0);
+
+    bkg.CalcFullVector();
+    if(bool_ext_err){
+       fexterr = new TFile(ext_err_file.c_str(),"read");
+       exterr = (TMatrixD*)fexterr->Get("full_covariance");
+       //create SBNchi object for the ext error so that it will be consistent when collapsed
+       TMatrixD collext;
+       collext.ResizeTo(bkg.num_bins_total_compressed, bkg.num_bins_total_compressed);
+       SBNchi chiext(bkg,exterr);
+       chiext.CollapseModes(*exterr, collext);
+       for( int i=0; i < bkg.num_bins_total; i++ ){ ext_err_vec[i] = sqrt((*exterr)(i,i)); frac_ext_err_vec[i] = sqrt((*exterr)(i,i))/bkg.full_vector[i]; std::cout << "err: " << ext_err_vec[i] << std::endl; }
+       bkg.CollapseVector();
+       for( int i=0; i< collext.GetNcols(); i++ ){ coll_ext_err_vec[i] = sqrt(collext(i,i)); frac_coll_ext_err_vec[i] = sqrt(collext(i,i)/bkg.collapsed_vector[i]); std::cout << "err coll: " << coll_ext_err_vec[i] << std::endl; }
+       std::cout << "found ext error matrix: " << exterr << std::endl;
+    }
+
 
     //PeLEE hacks for incorporating fake data
     TFile * fdata;
     TH1D * h_fakedata_1eNp;
     TH1D * h_fakedata_1e0p;
+    TH1D * h_fakedata_1eNp_sig;
+    TH1D * h_fakedata_1e0p_sig;
+    TH1D * h_fakedata_1eNp_constr;
+    TH1D * h_fakedata_1e0p_constr;
     TH1D * h_fakedata_numu;
     
     if(fakedata_file != "EMPTY"){
       std::cout << "Loading fakedata file: " << fakedata_file << std::endl;
       fdata = new TFile(fakedata_file.c_str(),"read");
-      h_fakedata_1eNp = (TH1D*)fdata->Get("nu_uBooNE_nue_data");
+      h_fakedata_1eNp = (TH1D*)fdata->Get("nu_uBooNE_1eNp_data");
       h_fakedata_1e0p = (TH1D*)fdata->Get("nu_uBooNE_1e0p_data");
       h_fakedata_numu = (TH1D*)fdata->Get("nu_uBooNE_numu_data");
+      h_fakedata_1eNp_sig = (TH1D*)fdata->Get("nu_uBooNE_1eNp_sig_data");
+      h_fakedata_1e0p_sig = (TH1D*)fdata->Get("nu_uBooNE_1e0p_sig_data");
+      h_fakedata_1eNp_constr = (TH1D*)fdata->Get("nu_uBooNE_1eNp_constr_data");
+      h_fakedata_1e0p_constr = (TH1D*)fdata->Get("nu_uBooNE_1e0p_constr_data");
+      std::cout << "h_fakedata_1eNp, h_fakedata_1e0p: " << h_fakedata_1eNp << ", " << h_fakedata_1e0p << std::endl;
+      std::cout << "h_fakedata_1eNp_sig, h_fakedata_1e0p_sig: " << h_fakedata_1eNp_sig << ", " << h_fakedata_1e0p_sig << std::endl;
+      std::cout << "h_fakedata_1eNp_constr, h_fakedata_1e0p_constr: " << h_fakedata_1eNp_constr << ", " << h_fakedata_1e0p_constr << std::endl;
     }
-    
+    std::cout << "create vector of fakedata" << std::endl; 
     //create vector of fakedata:
     std::vector<float> fakedata;
-    if( h_fakedata_1eNp ){ for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp->GetBinContent(k)); }
-    if( h_fakedata_1e0p ){ for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p->GetBinContent(k)); }
-    if( h_fakedata_numu ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
-    if( h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; }
-    if( h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; }
-    if( h_fakedata_numu ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) std::cout << "h_fakedata_numu->GetBinContent k " << k << " = " <<  h_fakedata_numu->GetBinContent(k) << std::endl; }
+    if( which_mode==2 && h_fakedata_1eNp ){for( int k=1; k < h_fakedata_1eNp->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1eNp->GetBinContent k " << k << " = " <<  h_fakedata_1eNp->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1eNp->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1e0p ){for( int k=1; k < h_fakedata_1e0p->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1e0p->GetBinContent k " << k << " = " <<  h_fakedata_1e0p->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1e0p->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1eNp_sig ){for( int k=1; k < h_fakedata_1eNp_sig->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1eNp_sig->GetBinContent k " << k << " = " <<  h_fakedata_1eNp_sig->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1eNp_sig->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1e0p_sig ){for( int k=1; k < h_fakedata_1e0p_sig->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1e0p_sig->GetBinContent k " << k << " = " <<  h_fakedata_1e0p_sig->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1e0p_sig->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1eNp_constr ){for( int k=1; k < h_fakedata_1eNp_constr->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1eNp_constr->GetBinContent k " << k << " = " <<  h_fakedata_1eNp_constr->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1eNp_constr->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1e0p_constr ){for( int k=1; k < h_fakedata_1e0p_constr->GetNbinsX()+1; k++ ){ std::cout << "h_fakedata_1e0p_constr->GetBinContent k " << k << " = " <<  h_fakedata_1e0p_constr->GetBinContent(k) << std::endl; fakedata.push_back(h_fakedata_1e0p_constr->GetBinContent(k));} }
+    if( which_mode==2 && h_fakedata_1eNp_sig ){for( int k=1; k < h_fakedata_1eNp_sig->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp_sig->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1e0p_sig ){for( int k=1; k < h_fakedata_1e0p_sig->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p_sig->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1eNp_constr ){for( int k=1; k < h_fakedata_1eNp_constr->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1eNp_constr->GetBinContent(k)); }
+    if( which_mode==2 && h_fakedata_1e0p_constr ){for( int k=1; k < h_fakedata_1e0p_constr->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_1e0p_constr->GetBinContent(k)); }
+    //if( which_mode==2 ){for( int k=1; k < h_fakedata_numu->GetNbinsX()+1; k++ ) fakedata.push_back(h_fakedata_numu->GetBinContent(k)); }
     
     std::cout << "size of fakedata vector: " << fakedata.size() << std::endl;
     //End of PeLEE hacks for incorporating fake data
     
-    
-    
     //PELEE hack -- use the actual PELEE diagonal errors for detsys instead of flat systematics
     TMatrixD frac_flat_matrix(bkg.num_bins_total, bkg.num_bins_total);
-    
-    //BDT
-    std::vector<double> sig_detsys = {0.203,0.163,0.257,0.092,0.122,0.128,0.186,0.110,0.126,0.186,0.226,0.260,0.166,0.325};
-    //numu
-    std::vector<double> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261};
-    
+     
     if(bool_flat_det_sys){
-      //std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
-      std::cout << "RUNNING with PELEE systematics!" << std::endl;
-      
-      frac_flat_matrix.ResizeTo(bkg.num_bins_total,bkg.num_bins_total);
-      frac_flat_matrix.Zero();//(bkg.num_bins_total,bkg.num_bins_total);
-      int j=0;     
-      
-      for(auto& h: bkg.hist){
-        std::string hname = h.GetName();
-        for( int i=1; i < h.GetNbinsX()+1; i++ ){
-          if( hname.find("nue_intrinsic") != std::string::npos ){
-            //std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j;
-            frac_flat_matrix(j,j) = sig_detsys[i-1]*sig_detsys[i-1];
-            //std::cout << ", " << sig_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << frac_flat_matrix(j,j) << std::endl;
-          }
-          else if( hname.find("numu_bnb") != std::string::npos ){
-            //std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
-            frac_flat_matrix(j,j) = numu_detsys[i-1]*numu_detsys[i-1];
-            //std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << frac_flat_matrix(j,j) << std::endl;
-          }
-	  else if( hname.find("extbnb") == std::string::npos && hname.find("lee") == std::string::npos ){
-            //std::cout << "Fill bg detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
-            frac_flat_matrix(j,j) = 0.2*0.2;
-            //std::cout << ", 0.2 , " << frac_flat_matrix(j,j) << std::endl;
-          }
-          j++; 
-        }
-      }
-      /*for(int i=0 ; i< bkg.num_bins_total; i++){
+      std::cout << "RUNNING with flat systematics: " << flat_det_sys_percent << "%!" << std::endl;
+      for(int i=0 ; i< bkg.num_bins_total; i++){
 	frac_flat_matrix(i,i)=flat_det_sys_percent*flat_det_sys_percent/10000.;
-	}*/
+      }
       std::cout<<"Just Before"<<std::endl;
       (*cov) = (*cov)+(frac_flat_matrix);
     }
+
     std::cout << "Done with systematics!" << std::endl;
-    
+
     if(remove_correlations){
       std::cout<<"WARNING! We are running in   `Remove All Off Diagional Covariances/Correlations Mode` make sure this is what you want. "<<std::endl;
       for(int i=0; i<bkg.num_bins_total;i++){ 
@@ -283,7 +308,6 @@ int main(int argc, char* argv[])
 	}
       }
     }
-    
     
     if(!stats_only){
         SBNcls cls_factory(&bkg, &sig, fakedata, *cov);

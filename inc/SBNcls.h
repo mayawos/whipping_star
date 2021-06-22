@@ -55,7 +55,7 @@ class SBNcls{
         which_mode = 1; //default delta chi
         use_CNP = false;
         maxchival = 210;
-		rangen= new TRandom3(0);
+	rangen= new TRandom3(0);
         draw_pseudo_from_collapsed = false;
         m_tolerance = 1e-12;
 	}
@@ -97,7 +97,8 @@ class SBNcls{
     int DrawSampleCovariance(std::string);
 
     int setMode(int);
-    int makePlots(CLSresult &h0_result, CLSresult & h1_result, float chi2data, float pval_data, std::string tag,  int which_mode=0);
+    int makePlots(CLSresult &h0_result, CLSresult & h1_result, std::string tag,  int which_mode=0);
+    int makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float chi2data, float pval_data, std::string tag,  int which_mode=0);
     int runConstraintTest();
 
 

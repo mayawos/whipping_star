@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <cstring>
+#include <algorithm>
 
 #include "TFile.h"
 #include "TTree.h"
@@ -40,6 +41,25 @@
 #define optional_argument 2
 
 using namespace sbn;
+
+
+double Median(const TH1D * h1) { 
+
+       int n = h1->GetXaxis()->GetNbins();  
+          std::vector<double>  x(n);
+             h1->GetXaxis()->GetCenter( &x[0] );
+                const double * y = h1->GetArray(); 
+                   // exclude underflow/overflows from bin content array yG
+                       return TMath::Median(n, &x[0], &y[1]); 
+                       }
+                   
+
+double quick_median(std::vector<double> &v)
+{
+        size_t n = v.size() / 2;
+        std::nth_element(v.begin(), v.begin()+n, v.end());
+                return v[n];
+}
 
 double lin_interp(double x0, double x1, double y0, double y1, double x){
     return (y0*(x1-x)+y1*(x-x0))/(x1-x0);
@@ -216,9 +236,10 @@ int main(int argc, char* argv[])
     }
     
     NGrid mygrid;
+
     if( do_simple_hypothesis ) mygrid.AddDimension(input_scale_subchannel.c_str(),grid_string);
     else mygrid.AddDimension(input_scale_subchannel.c_str(),grid_string);
-
+  
     mygrid.Print();
 
     SBNfeld myfeld(mygrid,tag,xml);
@@ -328,6 +349,8 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
         }
         myfeld.m_subchannel_to_scale = input_scale_subchannel;
 
+        if(use_cnp) myfeld.UseCNP();
+
         myfeld.SetCoreSpectrum(tag+"_CV.SBNspec.root");
 
         myfeld.SetBackgroundSpectrum(tag+"_CV.SBNspec.root",input_scale_subchannel,1.0);
@@ -384,9 +407,11 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
         //Some Manual Color Changing and such
         int plotting_true_gridpoint = 5;
         //std::vector<double> plotting_pvals = {0.68, 0.90, 0.95, 0.99};
+
         //std::vector<double> plotting_pvals = {0.68, 0.95};
         //std::vector<std::string> plotting_strs = {"68%","90%","95%","99%"};
         //std::vector<std::string> plotting_strs = {"68%","95%"};
+
         //std::vector<int> gcols = {kGreen+3,kGreen+2,kGreen-3,kGreen-9};
         //std::vector<int> gcols = {kRed-9,kBlue-9,kGreen-9};
 
@@ -403,6 +428,7 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
 
         std::cout<<"MPrinting stuff"<<std::endl;
         TH2D * f_FC = new TH2D("f_FC","f_FC",vec_grid.size(),vec_grid.front()[0],vec_grid.back()[0],vec_grid.size(),vec_grid.front()[0],vec_grid.back()[0]);
+
         double bfval_v[vec_grid.size()];
 
         for(int i=0; i< vec_grid.size(); i++){
@@ -412,7 +438,9 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
             //Whats the critical value?
             TTree *t =  (TTree*)fin->Get(("ttree_"+std::to_string(i)).c_str());
             TH1D * cumul = (TH1D*)fin->Get(("delta_chi2_"+std::to_string(i)+"_cumulative").c_str());
+
             TH1D * h_bfval = (TH1D*)fin->Get(("bf_gridvalue_"+std::to_string(i)).c_str());//Added by Ivan
+
 
             for(int p =0; p< plotting_pvals.size(); ++p){
                 double plotting_pval = plotting_pvals[p];
@@ -449,9 +477,9 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
             std::vector<double> bf_val_quantiles(pvalues.size());
             h_bfval->GetQuantiles(pvalues.size(),&bf_val_quantiles[0], &pvalues[0]);
             double bfval = bf_val_quantiles[0];
+
             //double bfval = h_bfval->GetMean(); //Added by Ivan
             bfval_v[i] = bfval;
-
             delete cumul;
         }
 
@@ -468,7 +496,7 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
         std::vector<TGraph*> gmins;
         std::vector<TGraph*> grshades;
 
-        TLegend * l_probs = new TLegend(0.11,0.59,0.89,0.89);//69 was 29
+        TLegend * l_probs = new TLegend(0.11,0.52,0.89,0.89);//69 was 29
 
         TMultiGraph *mg = new TMultiGraph();
         mg->SetTitle("Feldman Cousins Confidence Belt [ " + SampleName + " - " + TestStatName + " ]");
@@ -541,18 +569,30 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
         bf_vals_g->Draw("same *");
         
         TLine lcross(v_true.front(),v_true.front(),npoints, npoints);
+
         lcross.SetLineStyle(9);
         lcross.SetLineWidth(1);
         lcross.SetLineColor(kBlack);
         lcross.Draw("same");
 
 
+        TLine lv1(1.0,0.0,1.0,maxpt);
+        lv1.SetLineStyle(2);
+        lv1.SetLineWidth(1);
+        lv1.SetLineColor(kBlack);
+        //lv1.Draw("same");
+
+        TLine lh3(0.0,3.1, 1.0,3.1);
+        lh3.SetLineStyle(2);
+        lh3.SetLineWidth(1);
+        lh3.SetLineColor(kBlack);
+        //lh3.Draw("same");
+
         pad->Update();
         pad->RedrawAxis();
         // TLine l;
         //  l.DrawLine(gPad->GetUxmin(), gPad->GetUymax(), gPad->GetUxmax(), gPad->GetUymax());
         //   l.DrawLine(gPad->GetUxmax(), gPad->GetUymin(), gPad->GetUxmax(), gPad->GetUymax());
-
         c3->cd();
         TPad *padl = new TPad("padl", "padl", 0.8, 0, 1, 1);
         padl->SetBottomMargin(0.2);
@@ -564,12 +604,12 @@ if(tag.find("constrained") != std::string::npos ) use_constraint = true;
         l_probs->SetLineWidth(0);
        
 
-
         c3->SaveAs(("FC_confidence_belt_"+tag+".pdf").c_str(),"pdf");
 
         std::cout<<"**************** Feldman Cousins 1D Confidence Intervals  **********************"<<std::endl;
         for(int i=0; i<v_true.size(); i++){
             std::cout<<"Grid Pt: "<<i<<", ScaleFactor: "<<vec_grid[i][0]<<std::endl;
+            std::cout<<"- Median: "<<bfval_v[i]<<std::endl;
             for(int p=0; p< plotting_pvals.size();++p){
                 double measured_val = vec_grid[i][0];
                 std::vector<double> reg = myfeld.getConfidenceRegion(gmins[plotting_pvals.size()-p-1],gmaxs[plotting_pvals.size()-p-1],measured_val);

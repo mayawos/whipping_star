@@ -1,0 +1,60 @@
+<?xml version="1.0" ?>
+
+<!-- For this simple example we have one mode: Neutrino mode (nu) and one detector (uBooNE) -->
+<mode name="nu" />
+<detector name="uBooNE"  />
+
+<!-- We have three channels. Each "Channel" referes to a physically observable selelection. In this case nue-like and numu-like. -->
+<channel name="1eNp" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="data" />
+</channel>
+
+<channel name="1e0p" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="data" />
+</channel>
+
+<channel name="numu" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="data" />
+</channel>
+
+<plotpot value=9e20/>
+
+<!-- ############################# BUILDING A COVARIANCE MATRIX  #####################################################-->
+<!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
+
+ <!-- 1eNp -->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_1eNp_fakedata5.root" scale= "1.0" pot = "9e20" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_data"
+      />
+ </MultisimFile>
+
+ <!-- 1e0p -->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_1e0p_fakedata5.root" scale= "1.0" pot = "9e20" > 
+     <branch
+         name="reco_e_d"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_data"
+      />
+ </MultisimFile>
+
+<!-- NuMu selection -->
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/SBNFit/SpectrumAndCovariance/rootfiles/data_numu_fakedata5.root" scale = "1.0" pot = "9e20" > 
+     <branch
+         name="neutrinoenergy"
+         type="double"
+         associated_subchannel="nu_uBooNE_numu_data"
+      />
+ </MultisimFile>

@@ -77,6 +77,7 @@ namespace sbn{
             //This is the core spectra that you are comparing too. This is used to calculate covariance matrix and in a way is on the 'bottom' of the chi^2.
             SBNspec core_spectrum;
             bool is_stat_only;
+            bool _add_stats_err;
 
             //always contains the last chi^2 value calculated
             double last_calculated_chi;
@@ -91,6 +92,7 @@ namespace sbn{
 
             //Used in cholosky decompositions
             double m_tolerance;
+            std::vector<double> m_add_stats_err;
             bool cholosky_performed;
             TMatrixT<float> matrix_lower_triangular;
             std::vector<std::vector<float>> vec_matrix_lower_triangular;
@@ -113,8 +115,9 @@ namespace sbn{
 
             /*********************************** Member Functions ********************************/	
 
+            double m_cmin;
+            double m_cmax;
             int plot_one(TMatrixD matrix, std::string tag, TFile *fin,bool,bool,bool);
-
 
 
             int ReloadCoreSpectrum(SBNspec *bkgin);
@@ -125,6 +128,7 @@ namespace sbn{
             TMatrixT<double> FillSystematicsFromXML();
 
             void FakeFillMatrix(TMatrixT <double>&  M);
+            //void FillStatsMatrix(TMatrixT <double>&  M, std::vector<double> diag, std::vector<double> add_stats_err);
             void FillStatsMatrix(TMatrixT <double>&  M, std::vector<double> diag);
 
             // These are the powerhouse of of the SBNchi, the ability to collapse any number of modes,detectors,channels and subchannels down to a physically observable subSet
@@ -137,13 +141,17 @@ namespace sbn{
 
             TMatrixT<double> InvertMatrix(TMatrixT<double> &M);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec);
-            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, bool);
+            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec,bool);
+            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, TVectorT<double> &err);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec);
+            TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr, bool add_stats);
             TMatrixT<double> CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec,bool);
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<double>& datavec );
             TMatrixT<double> CalcCovarianceMatrixCNP_FC(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<float>& datavec );
             TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, const std::vector<float>& datavec );
+
             TMatrixT<double> CalcCovarianceMatrixLLR(TMatrixT<double>* M, std::vector<double>& spec, const std::vector<float>& datavec );
+            TMatrixT<double> CalcCovarianceMatrixCNP(TMatrixT<double>* M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec, bool add_stats );
 
 
 
@@ -178,6 +186,7 @@ namespace sbn{
 
             float PoissonLogLiklihood(float * h0_corein, float *collapsed);
             float CalcChi_CNP(float * pred, float* data);
+            float CalcChi_Pearson(float * pred, float* data);
             double CalcChi(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& data);
 
             std::vector<std::vector<double >> TMatrixDToVector(TMatrixT <double> McI);
@@ -204,7 +213,11 @@ namespace sbn{
             TH1D SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, std::vector<double> *chival,int which_sample);
             TH1D SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, double,int which_sample);
 
-
+            int SetFracPlotBounds(double cmin,double cmax){
+                     m_cmin=cmin;
+                     m_cmax=cmax;
+                     return 0;
+            }
 
             double max_sample_chi_val;
 
@@ -230,7 +243,8 @@ namespace sbn{
 
             //pelee fakedata and detsys specific function
             std::vector<CLSresult> Mike_NP_fakedata(SBNspec *specin, std::vector<float> fakedata, std::vector<float> &chidata, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id);
-            void FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool useBDT = true );
+            void FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool useBDT, std::string tag );
+            std::vector<double> GetDetsys(std::string channel, std::string tag, std::string signal_region, int bin );
     };
 
 

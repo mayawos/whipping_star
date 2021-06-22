@@ -47,10 +47,8 @@ std::vector<TMatrixT<double>> splitNormShape(TMatrixT<double> & Min,std::vector<
  *		Constructors
  * ********************************************/
 
-
-
 SBNchi::SBNchi(std::string xml) : SBNconfig(xml,false){};
-SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNchi(in,matrix_systematicsin,false){}
+SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin) : SBNchi(in,matrix_systematicsin,true){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, bool is_verbose) : SBNchi(in,matrix_systematicsin,in.xmlname, is_verbose){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose) : SBNchi(in, matrix_systematicsin, inxml,  is_verbose,-1){}
 SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string inxml, bool is_verbose, double random_seed) : SBNconfig(inxml, is_verbose), core_spectrum(in){
@@ -67,13 +65,21 @@ SBNchi::SBNchi(SBNspec in, TMatrixT<double> matrix_systematicsin, std::string in
     TMatrixD m = matrix_systematicsin;
     for (int i = 0; i < used_bins.size(); i++){
         TMatrixDColumn(m,i) = TMatrixDColumn(m,used_bins.at(i));
-        m.ResizeTo(used_bins.size(),matrix_systematicsin.GetNcols());
+        m.ResizeTo(used_bins.size(),used_bins.size());
     }
+
+    m_cmin = -999;
+    m_cmax = -999;
 
     matrix_fractional_covariance = m;
     matrix_systematics.Zero();
     max_sample_chi_val =150.0;
-    m_tolerance = 1.e-8;
+
+    m_tolerance = 1e-8;
+    std::cout << "core spectrum 1: ";
+    std::cout << "{ ";
+    for(int i=0; i < core_spectrum.full_vector.size(); i++) std::cout << core_spectrum.full_vector[i] << " ";
+    std::cout << "} " << std::endl;
 
     this->InitRandomNumberSeeds(random_seed);
     this->ReloadCoreSpectrum(&core_spectrum);
@@ -97,8 +103,11 @@ SBNchi::SBNchi(SBNspec in, std::string newxmlname) : SBNconfig(newxmlname), core
             }
         }
     }
+    m_cmin = -999;
+    m_cmax = -999;
 
-    m_tolerance = 1e-12;
+
+    m_tolerance = 1e-7;
     pseudo_from_collapsed = false;
     max_sample_chi_val =150.0;
     matrix_fractional_covariance = FillSystematicsFromXML();
@@ -117,13 +126,17 @@ SBNchi::SBNchi(SBNspec in) : SBNchi(in,true){}
 
 
 SBNchi::SBNchi(SBNspec in, bool is_is_stat_only): SBNconfig(in.xmlname), core_spectrum(in), is_stat_only(is_is_stat_only){
+
     last_calculated_chi = -9999999;
 
     matrix_collapsed.ResizeTo(num_bins_total_compressed, num_bins_total_compressed);
     matrix_systematics.ResizeTo(num_bins_total, num_bins_total);
     matrix_fractional_covariance.ResizeTo(num_bins_total, num_bins_total);
+    m_cmin = -999;
+    m_cmax = -999;
 
     m_tolerance = 1e-12;
+
     max_sample_chi_val =150.0;
     this->InitRandomNumberSeeds();
 
@@ -164,13 +177,10 @@ void SBNchi::InitRandomNumberSeeds(double seed){
         rangen = new TRandom3(seed);
     }
 
-
     m_dist_normal=new std::normal_distribution<float>;
     std::normal_distribution<float> dtemp(0.0,1.0);
     m_dist_normal->param(dtemp.param());
-
 }
-
 
 int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
     otag = "SBNchi::ReloadCoreSpectrum\t|| ";
@@ -204,10 +214,12 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
         for(int j =0; j<matrix_systematics.GetNrows(); j++)
         {
             if(is_fractional){
-                if(std::isnan(matrix_systematics(i,j)))
+                if(std::isnan(matrix_systematics(i,j)) ){
                     matrix_systematics(i,j) = 0;
-                else
+                }else{
                     matrix_systematics(i,j) = matrix_systematics(i,j)*core_spectrum.full_vector.at(i)*core_spectrum.full_vector.at(j);
+                }
+                //if(i==j) matrix_systematics(i,j) += pow(core_spectrum.full_error[i],2);
             }
         }
     }
@@ -215,8 +227,8 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
     if(is_verbose)std::cout<<otag<<"Filling stats into cov matrix"<<std::endl;
     // Fill stats from the back ground vector
     TMatrixT <double> Mstat(num_bins_total, num_bins_total);
+    Mstat.Zero();
     FillStatsMatrix(Mstat, core_spectrum.full_vector);
-    //FillStatsMatrix(Mstat, core_spectrum.full_error);
 
     if(Mstat.IsSymmetric()){
         if(is_verbose)std::cout<<otag<<"Stat matrix is symmetric (it is just diagonal core)"<<std::endl;
@@ -225,9 +237,8 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
         exit(EXIT_FAILURE);
     }
 
-
     /*
-       TMatrixD Mcorr = matrix_systematics;
+    TMatrixD Mcorr = matrix_systematics;
     //TEMP
     TFile *f = new TFile("gloop.root","recreate");
     f->cd();
@@ -244,8 +255,6 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
     Hsys.Write("total");
     f->Close();
     */
-
-
 
     //And then define the total covariance matrix in all its glory
     TMatrixT <double> Mtotal(num_bins_total,num_bins_total);
@@ -267,9 +276,9 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
     CollapseModes(matrix_systematics, m_matrix_systematics_collapsed);
 
 
-    if(is_verbose)std::cout<<otag<<"Mstat: "<<Mstat.GetNrows()<<" x "<<Mstat.GetNcols()<<std::endl;
-    if(is_verbose)std::cout<<otag<<"matrix_systematics: "<<matrix_systematics.GetNrows()<<" x "<<matrix_systematics.GetNcols()<<std::endl;
-    if(is_verbose)std::cout<<otag<<"Mtotal: "<<Mtotal.GetNrows()<<" x "<<Mtotal.GetNcols()<<std::endl;
+    if(is_verbose) std::cout<<otag<<"Mstat: "<<Mstat.GetNrows()<<" x "<<Mstat.GetNcols()<<std::endl;
+    if(is_verbose) std::cout<<otag<<"matrix_systematics: "<<matrix_systematics.GetNrows()<<" x "<<matrix_systematics.GetNcols()<<std::endl;
+    if(is_verbose) std::cout<<otag<<"Mtotal: "<<Mtotal.GetNrows()<<" x "<<Mtotal.GetNcols()<<std::endl;
 
     if(Mtotal.IsSymmetric() ){
         if(is_verbose)	std::cout<<otag<<"Total Mstat +matrix_systematics is symmetric"<<std::endl;
@@ -302,7 +311,7 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
 
         if(biggest_deviation >tol){
 
-            std::cout<<"ERROR: Thats too unsymettric, killing process. Better check your inputs."<<std::endl;
+            std::cout<<"ERROR: Thats too unsymettric, killing process. Better check your inputs. Tolerance is "<< tol << "and the deviation is: " << biggest_deviation << std::endl;
 
             exit(EXIT_FAILURE);
         }else{
@@ -354,14 +363,12 @@ int SBNchi::ReloadCoreSpectrum(SBNspec *bkgin){
 
     vec_matrix_inverted = TMatrixDToVector(McI);
 
-
     // test for validity
     bool is_small_negative_eigenvalue = false;
     double tolerence_positivesemi = m_tolerance;
 
 
     //if a matrix is (a) real and (b) symmetric (checked above) then to prove positive semi-definite, we just need to check eigenvalues and >=0;
-
     TMatrixDEigen eigen (Mctotal);
     TVectorD eigen_values = eigen.GetEigenValuesRe();
 
@@ -417,6 +424,7 @@ double SBNchi::CalcChi(SBNspec *sigSpec){
             }
             vec_last_calculated_chi.at(i).at(j) =(core_spectrum.collapsed_vector.at(i)-sigSpec->collapsed_vector.at(i))*vec_matrix_inverted.at(i).at(j)*(core_spectrum.collapsed_vector.at(j)-sigSpec->collapsed_vector.at(j) );
             tchi += vec_last_calculated_chi.at(i).at(j);
+            //if(i==j)std::cout << "cv: "<<i<<" invert_matrix: " << vec_matrix_inverted.at(i).at(j) << ", " << core_spectrum.collapsed_vector.at(i) << ", " << sigSpec->collapsed_vector.at(i) << ", " << core_spectrum.collapsed_vector.at(j) << ", " << sigSpec->collapsed_vector.at(j) << ", " << tchi << std::endl;
         }
     }
 
@@ -448,6 +456,7 @@ float SBNchi::CalcChi(std::vector<float> * sigVec){
 
 
 double SBNchi::CalcChi(std::vector<double> * sigVec){
+
     double tchi = 0;
 
 #ifndef _OPENACC
@@ -486,12 +495,13 @@ float SBNchi::CalcChi(float **invert_matrix, float* core, float *sig){
 
     for(int i =0; i<num_bins_total_compressed; i++){
         for(int j =0; j<num_bins_total_compressed; j++){
-
             tchi += (core[i]-sig[i])*invert_matrix[i][j]*(core[j]-sig[j] );
+            //if(i==j)std::cout << "1. invert_matrix: " << invert_matrix[i][j] << ", " << core[i] << ", " << sig[i] << ", " << core[j] << ", " << sig[j] << ", " << tchi << std::endl;
         }
     }
+    //std::cout << "tchi = " << tchi << std::endl;
 
-    return tchi;
+   return tchi;
 }
 
 float SBNchi::PoissonLogLiklihood(float * pred, float *data){
@@ -507,9 +517,11 @@ float SBNchi::PoissonLogLiklihood(float * pred, float *data){
 
 double SBNchi::CalcChi(double **invert_matrix, double* core, double *sig){
     double tchi = 0;
+    std::cout << invert_matrix[2][2] << ", " << core[2] << ", " << sig[2] << std::endl;
 
     for(int i =0; i<num_bins_total_compressed; i++){
         for(int j =0; j<num_bins_total_compressed; j++){
+            if(i==j)std::cout << "2.invert_matrix: " << invert_matrix[i][j] << std::endl;
             tchi += (core[i]-sig[i])*invert_matrix[i][j]*(core[j]-sig[j]);
         }
     }
@@ -522,6 +534,7 @@ double SBNchi::CalcChi(TMatrixT<double> M_invert, std::vector<double>& spec, std
     double tchi = 0;
     for(int i=0; i< num_bins_total_compressed; i++){
         for(int j=0; j< num_bins_total_compressed ;j++){
+            if(i==j)std::cout << "invert_matrix: " << M_invert[i][j] << std::endl;
             tchi += M_invert(i,j)*(spec[i]- data[i])*(spec[j]-data[j]);
         }
     }
@@ -723,6 +736,29 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
     }
     return Mout;
 }
+
+TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec, std::vector<double> &mcerr, bool add_stats){
+
+    TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
+
+    for(int i =0; i<M->GetNcols(); i++)
+    {
+        for(int j =0; j<M->GetNrows(); j++)
+        {
+            if(  std::isnan( (*M)(i,j) )){
+                Mout(i,j) = 0.0;
+            }else{
+
+                Mout(i,j) = (*M)(i,j)*spec[i]*spec[j];
+                if(i==j) Mout(i,j) += mcerr[i]*mcerr[i]; 
+            }
+	    if(add_stats) {
+               if(i==j) Mout(i,i) += spec[i];   //stats part
+            }
+        }
+    }
+    return Mout;
+}
 TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<double>& spec){
 
     TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
@@ -742,8 +778,6 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, std::vector<do
     }
     return Mout;
 }
-
-
 //here spec is full vector of MC, spec_collapse is collapsed vector of MC, datavec is collapsed vector of data
 TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& spec_collapse, const std::vector<double>& datavec ){
     if(M.GetNcols() != spec.size()){
@@ -816,6 +850,46 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP_FC(TMatrixT<double> M, std::vec
 }
 
 
+//here spec is full vector of MC, spec_collapse is collapsed vector of MC, datavec is collapsed vector of data
+TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double> *M, std::vector<double>& spec, std::vector<double>& spec_collapse, std::vector<double>& spec_mcerr, const std::vector<float>& datavec, bool add_stats ){
+
+    std::cout << "am using covariance matrix with mc err" << std::endl;
+    if(M->GetNcols() != spec.size()){
+        std::cout << "ERROR: your input vector does not have the right dimenstion  " << std::endl; 
+        std::cout << "Fractional Matrix size :"<< M->GetNcols() << " || Input Full Vector size "<< spec.size() << std::endl;  
+        exit(EXIT_FAILURE);
+    }
+
+    TMatrixT<double> M_temp(M->GetNcols(), M->GetNcols() );
+    TMatrixT<double> Mout(spec_collapse.size(), spec_collapse.size()); //collapsed covariance matrix
+
+    //systematic apart 
+    for(int i =0; i<M->GetNcols(); i++)
+    {
+        for(int j =0; j<M->GetNrows(); j++)
+        {
+            if(  std::isnan( (*M)(i,j) )){
+                M_temp(i,j) = 0.0;
+            }else{
+
+                M_temp(i,j) = (*M)(i,j)*spec[i]*spec[j];
+                if(i==j) M_temp(i,j) += spec_mcerr[i]*spec_mcerr[i];
+            }
+        }
+    }
+
+    CollapseModes(M_temp, Mout);
+    //add stats part
+    if(add_stats){	
+    for(int i=0; i< spec_collapse.size(); i++){
+        Mout(i,i) +=   ( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
+        //Mout(i,i) +=   spec_collapse[i];//( datavec[i] >0.001 ? 3.0/(1.0/datavec[i] +  2.0/spec_collapse[i])  : spec_collapse[i]/2.0 ); 
+    }
+    }
+    return Mout;
+}
+
+
 TMatrixT<double> SBNchi::CalcCovarianceMatrixCNP(TMatrixT<double>*M, std::vector<double>& spec, const std::vector<float>& datavec ){
 
     TMatrixT<double> Mout(M->GetNcols(), M->GetNcols() );
@@ -865,17 +939,15 @@ TMatrixT<double> SBNchi::CalcCovarianceMatrixLLR(TMatrixT<double>*M, std::vector
     return Mout;
 }
 
-
-float SBNchi::CalcChi_CNP(float * pred, float* data){
+float SBNchi::CalcChi_Pearson(float * pred, float* data){
 
     is_verbose = false;
     TMatrixT<double> inverse_collapsed = m_matrix_systematics_collapsed;
-    //Add on CNP terms proportional to data
+    //Add on Pearson Stats terms proportional to data
     for(int j =0; j<num_bins_total_compressed; j++)
     {
-        inverse_collapsed(j,j) +=  ( data[j] >0.001 ? 3.0/(1.0/data[j] +  2.0/pred[j])  : pred[j]/2.0 );
+        inverse_collapsed(j,j) +=  pred[j];
     }
-
     inverse_collapsed = this->InvertMatrix(inverse_collapsed);   
 
     float tchi = 0.0;
@@ -884,8 +956,59 @@ float SBNchi::CalcChi_CNP(float * pred, float* data){
             tchi += (pred[i]-data[i])*inverse_collapsed(i,j)*(pred[j]-data[j]);
         }
     }
-
     return tchi;
+
+}
+
+
+float SBNchi::CalcChi_CNP(float * pred, float* data){
+
+    is_verbose = false;
+    TMatrixT<double> inverse_collapsed = m_matrix_systematics_collapsed;
+    //inverse_collapsed.Zero();
+    TMatrixT<double> inverse_full = matrix_systematics;
+    //std::cout << "CalcChi_CNP, systematics only Matrix: " << std::endl;
+    //inverse_collapsed.Print();
+
+    //Add on CNP terms proportional to data
+    for(int j =0; j<num_bins_total_compressed; j++)
+    {
+        inverse_collapsed(j,j) +=  ( data[j] >0.001 ? 3.0/(1.0/data[j] +  2.0/pred[j])  : pred[j]/2.0 );
+        //std::cout << "j, data[j], pred[j], inverse_collapsed(j,j) = " << j << ", " << data[j] << ", " << pred[j] << ", " << inverse_collapsed(j,j) << std::endl;
+    }
+
+    //std::cout << "CalcChi_CNP, systematics+stats Matrix: " << std::endl;
+    //inverse_collapsed.Print();
+    //CollapseModes(inverse_full, inverse_collapsed);
+    inverse_collapsed = this->InvertMatrix(inverse_collapsed);   
+
+    float tchi = 0.0;
+    for(int i =0; i<num_bins_total_compressed; i++){
+        for(int j =0; j<num_bins_total_compressed; j++){
+            tchi += (pred[i]-data[i])*inverse_collapsed(i,j)*(pred[j]-data[j]);
+            //if(i==j) std::cout << "tchi bin " << i << " = " << tchi << std::endl;
+        }
+    }
+    return tchi;
+}
+
+TMatrixT<double> SBNchi::CalcCovarianceMatrix(TMatrixT<double>*M, TVectorT<double>& spec, TVectorT<double> &err){
+
+    TMatrixT<double> Mout( M->GetNcols(), M->GetNcols() );
+    // systematics per scaled event
+    for(int i =0; i<M->GetNcols(); i++)
+    {
+        //std::cout<<"KRAK: "<<core_spectrum.full_vector.at(i)<<std::endl;
+        for(int j =0; j<M->GetNrows(); j++)
+        {
+            if(  std::isnan( (*M)(i,j))){
+                Mout(i,j) = 0.0;
+            }else{
+                Mout(i,j) = (*M)(i,j)*spec(i)*spec(j);
+            }
+        }
+    }
+    return Mout;
 }
 
 
@@ -1095,9 +1218,10 @@ std::vector<std::vector<double >> SBNchi::TMatrixDToVector(TMatrixT <double > Mi
     return ans;
 }
 
-void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag){
+void SBNchi::FillStatsMatrix(TMatrixT <double> &M, std::vector<double> diag ){
     int matrix_size = M.GetNrows();
 
+    std::cout << "matrix size, diag size = " << matrix_size << ", " << diag.size() << std::endl;
     if(matrix_size != diag.size()){std::cout<<"#ERROR: FillStatsMatrix, matrix not equal to diagonal"<<std::endl;}
     if(M.GetNrows()!=M.GetNcols()){std::cout<<"#ERROR: not a square matrix!"<<std::endl;}
 
@@ -1191,9 +1315,11 @@ int SBNchi::PrintMatricies(std::string tag){
     this->FillCollapsedFractionalMatrix(&frac);
     this->FillCollapsedCorrelationMatrix(&corr);
 
-    corr.Write();
+    corr.Write("collapsed_correlation");
 
-    frac.Write();
+    gStyle->SetPalette(kLightTemperature);
+
+    frac.Write("collapsed_fractional_covariance");
     TH2D h2_frac(frac);
     //h2_frac.Write();
     h2_frac.SetName("frac");
@@ -1205,7 +1331,7 @@ int SBNchi::PrintMatricies(std::string tag){
     h2_frac.SetTitle("Collapsed fractional covariance matrix");
     h2_frac.GetXaxis()->SetTitle("Reco Bin i");
     h2_frac.GetYaxis()->SetTitle("Reco Bin j");
-    //    h2_frac.GetZaxis()->SetRangeUser(-0.25,0.25);
+    if(m_cmin !=-999 || m_cmax !=-999)   h2_frac.GetZaxis()->SetRangeUser(m_cmin,m_cmax);
 
     c_frac->SetRightMargin(0.150);
 
@@ -1236,7 +1362,9 @@ int SBNchi::PrintMatricies(std::string tag){
     }std::cout<<std::endl;
 
 
-    full.Write();
+    gStyle->SetPalette(kLightTemperature);
+
+    full.Write("collapsed_covariance");
     TH2D h2_full(full);
     h2_full.SetName("full");
     TCanvas *c_full = new TCanvas("collapsed covariance matrix");
@@ -1277,7 +1405,7 @@ int SBNchi::PrintMatricies(std::string tag){
     h2_corr.SetTitle("Collapsed correlation matrix");
     h2_corr.GetXaxis()->SetTitle("Reco Bin i");
     h2_corr.GetYaxis()->SetTitle("Reco Bin j");
-    h2_corr.GetZaxis()->SetRangeUser(-1,1);
+    h2_corr.GetZaxis()->SetRangeUser(0.0,1);
     c_corr->SetRightMargin(0.150);
 
     int use_corr =0;
@@ -1377,7 +1505,7 @@ int SBNchi::plot_one(TMatrixD matrix, std::string tag, TFile *fin, bool plot_pdf
     h2_full.GetYaxis()->SetLabelSize(0);
     //p_full->SetLogz();
     if(is_corr){
-        h2_full.GetZaxis()->SetRangeUser(-1,1);
+        h2_full.GetZaxis()->SetRangeUser(0.4,1);
     }
     else{
         h2_full.GetZaxis()->SetRangeUser(-0.25,0.25);
@@ -1485,17 +1613,23 @@ int SBNchi::PerformCholoskyDecomposition(SBNspec *specin){
     std::cout<<" Starting Cholosky Decomp, tolderance is "<<tol<<" and sample_collapse "<<pseudo_from_collapsed<<std::endl;
 
     TMatrixD U  = matrix_fractional_covariance;
+
+    //std::cout << "PerformCholoskyDecomposition, matrix used for sampling toys: " << std::endl;
+    //U.Print();
+
     for(int i =0; i<U.GetNcols(); i++)
     {
         for(int j =0; j<U.GetNrows(); j++)
         {
-            if(std::isnan(U(i,j)))
+            if(std::isnan(U(i,j))){
                 U(i,j) = 0;
-            else
-                U(i,j)=U(i,j)*specin->full_vector.at(i)*specin->full_vector.at(j);
-
-            //Comment this in if you want to sample from full gaussian
-            //if(i==j)U(i,i)+=specin->full_vector.at(i);
+            }else{
+                U(i,j)= U(i,j)*specin->full_vector.at(i)*specin->full_vector.at(j);
+            }
+            //if(i==j)
+            //{   
+              //  U(i,j) += pow(specin->full_error[i],2);
+            //}
         }
     }
 
@@ -1569,7 +1703,9 @@ int SBNchi::PerformCholoskyDecomposition(SBNspec *specin){
         for(int i=0; i< n_t; i++){
             for(int j=0; j< n_t; j++){
                 double mi = specin->full_vector.at(i)*specin->full_vector.at(j);
-                matrix_fractional_covariance(i,j) = (mi==0 ? 0 : U_use(i,j)/(mi));
+                double mcstat = 0;
+                //if(i==j) mcstat = pow(specin->full_error[i],2);
+                matrix_fractional_covariance(i,j) = ( mi==0   ?  0 :  (U_use(i,j) - mcstat  )/(mi)  );
             }
         }
         this->ReloadCoreSpectrum(specin);
@@ -1922,18 +2058,22 @@ std::vector<float> SBNchi::GeneratePseudoExperiment(){
     std::vector<float> sampled(n_t);
     is_verbose = false;
 
-    std::vector<double> v_gaus(n_t,0.0);
+    std::vector<double> v_gaus(n_t, 0.0);
     for(int i=0; i< n_t; ++i){
         //v_gaus[i] = rangen->Gaus(0,1);
         //v_gaus[i] = rangen->Uniform(-1,1); 
-        v_gaus[i] = (*m_dist_normal)(*rangen_twister); 
+        v_gaus[i] = (*m_dist_normal)(*rangen_twister);
+        //std::cout << "i, v_gaus = " << i << ", " << v_gaus[i] << std::endl; 
     }
     
     for(int i=0; i< n_t; ++i){
         sampled[i] = (pseudo_from_collapsed ? core_spectrum.collapsed_vector[i] : core_spectrum.full_vector[i]);
+
+        //std::cout << "i, sampled = " << i << ", " << sampled[i] << std::endl;
         if(!is_stat_only){
             for(int j=0; j<n_t; ++j){
                 sampled[i] += vec_matrix_lower_triangular[i][j]*v_gaus[j];
+                //std::cout << "vec_matrix_lower_triangular["<<i<<"]["<<j<<"] = " << vec_matrix_lower_triangular[i][j] << std::endl;
             }
         }
     }
@@ -1941,15 +2081,19 @@ std::vector<float> SBNchi::GeneratePseudoExperiment(){
     //Now poisson fluctuate the sampled spectrum
     for(int j=0; j<n_t; ++j){
         std::poisson_distribution<int> dist_pois(sampled[j]);
+        //std::cout << "j, sampled before poisson fluctuate = " << j << ", " << sampled[j] << std::endl;
         sampled[j] = float(dist_pois(*rangen_twister));
+        //std::cout << "j, sampled after poisson fluctuate = " << j << ", " << sampled[j] << std::endl;
     }
 
     std::vector<float> collapsed(num_bins_total_compressed,0.0);
+   
     if(pseudo_from_collapsed){
         collapsed = sampled;
     }else{
         this->CollapseVectorStandAlone(&sampled[0], &collapsed[0]);
     }
+    //for( int i=0; i < collapsed.size(); i++ ) std::cout << "i, collapsed = " << i << ", " << collapsed[i] << std::endl;
     return collapsed;
 }
 
@@ -2254,6 +2398,13 @@ TH1D SBNchi::SamplePoisson_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, 
 
 std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id){
 
+    //std::cout << "SBNchi::Mike_NP" << std::endl;
+
+    //std::cout << "core spectrum 2 : ";
+    //std::cout << "{ ";
+    //for(int i=0; i < core_spectrum.full_vector.size(); i++) std::cout << core_spectrum.full_vector[i] << " ";
+    //std::cout << "} " << std::endl;
+
     std::vector<CLSresult> v_results(5);
 
     float** h0_vec_matrix_inverted = new float*[num_bins_total_compressed];
@@ -2263,6 +2414,7 @@ std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi &
         h0_vec_matrix_inverted[i] = new float[num_bins_total_compressed];
         h1_vec_matrix_inverted[i] = new float[num_bins_total_compressed];
     }
+
     for(int i=0; i< num_bins_total_compressed; i++){
         for(int j=0; j< num_bins_total_compressed; j++){
             h0_vec_matrix_inverted[i][j] = chi_h0.vec_matrix_inverted[i][j]; 
@@ -2283,8 +2435,9 @@ std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi &
     for(int i=0; i< num_bins_total_compressed; i++) {
         h0_corein[i] = chi_h0.core_spectrum.collapsed_vector[i];
         h1_corein[i] = chi_h1.core_spectrum.collapsed_vector[i];
+        std::cout << "h0_corein, h1_corein = " << h0_corein[i] << ", " << h1_corein[i] << std::endl;
     }
-
+    
     std::vector<float> vec_chis (num_MC, 0.0);
     std::vector<float> vec_pois (num_MC, 0.0);
     std::vector<float> vec_cnp (num_MC, 0.0);
@@ -2305,8 +2458,6 @@ std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi &
     is_verbose = false;
     this->CollapseVectorStandAlone(a_specin, cv_collapsed);
 
-
-    std::cout<<otag<<" Starting to generate "<<num_MC<<" Pseduo-Experiments."<<std::endl;
     for(int i=0; i < num_MC;i++){
 
         //Generate our spectra
@@ -2316,18 +2467,20 @@ std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi &
                 collapsed[j] = float(dist_pois(*rangen_twister));
             }
         }else if(which_sample==1){//Covariance Sampling
-            auto exp =  this->GeneratePseudoExperiment();
+            auto exp = this->GeneratePseudoExperiment();
             for(int j=0; j < num_bins_total_compressed; j++){
                 collapsed[j] = exp[j];
             }
         }
 
         //Base Default Chi
-        float val_chi_h0  = chi_h0.CalcChi(h0_vec_matrix_inverted, h0_corein, collapsed);
-        float val_chi_h1  = chi_h1.CalcChi(h1_vec_matrix_inverted, h1_corein, collapsed);
+        float val_chi_h0  = chi_h0.CalcChi_Pearson(h0_corein, collapsed);
+        float val_chi_h1  = chi_h1.CalcChi_Pearson(h1_corein, collapsed);
+
 
         //Poisson Log Likli
         float val_pois_h0  = chi_h0.PoissonLogLiklihood(h0_corein, collapsed);
+
         float val_pois_h1  = chi_h1.PoissonLogLiklihood(h1_corein, collapsed);
 
         //CNP, going to need to recalculate and reinvert.
@@ -2407,7 +2560,12 @@ std::vector<CLSresult> SBNchi::Mike_NP(SBNspec *specin, SBNchi &chi_h0, SBNchi &
 }
 
 //Do the same as above function, but taking into account the fakedata
-std::vector<CLSresult> SBNchi::Mike_NP_fakedata(SBNspec *specin, std::vector<float> fakedata, std::vector<float> &chidata, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id){
+std::vector<CLSresult> SBNchi::Mike_NP_fakedata(SBNspec *specin, std::vector<float> fakedata, std::vector<float> &chidata, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id ){
+
+    //std::cout << "core spectrum 3: ";
+    //std::cout << "{ ";
+    //for(int i=0; i < core_spectrum.full_vector.size(); i++) std::cout << core_spectrum.full_vector[i] << " ";
+    //std::cout << "} " << std::endl;
 
     std::vector<CLSresult> v_results(9);
 
@@ -2421,8 +2579,7 @@ std::vector<CLSresult> SBNchi::Mike_NP_fakedata(SBNspec *specin, std::vector<flo
     for(int i=0; i< num_bins_total_compressed; i++){
         for(int j=0; j< num_bins_total_compressed; j++){
             h0_vec_matrix_inverted[i][j] = chi_h0.vec_matrix_inverted[i][j]; 
-            h1_vec_matrix_inverted[i][j] = chi_h1.vec_matrix_inverted[i][j]; 
-            //if(i==j)std::cout << "h0, h1 = " << h0_vec_matrix_inverted[i][j] << ",  "<< h1_vec_matrix_inverted[i][j] << std::endl;
+            h1_vec_matrix_inverted[i][j] = chi_h1.vec_matrix_inverted[i][j];
         }
     }
 
@@ -2545,8 +2702,11 @@ std::vector<CLSresult> SBNchi::Mike_NP_fakedata(SBNspec *specin, std::vector<flo
     float val_chi_h1fakedata  = chi_h1.CalcChi(h1_vec_matrix_inverted, h1_corein, a_fakedata);
     float val_pois_h0fakedata  = chi_h0.PoissonLogLiklihood(h0_corein, a_fakedata);
     float val_pois_h1fakedata  = chi_h1.PoissonLogLiklihood(h1_corein, a_fakedata);
+    std::cout << "chi2 fakedata H0: " << std::endl;
     float val_cnp_h0fakedata  = chi_h0.CalcChi_CNP(h0_corein, a_fakedata);
+    std::cout << "chi2 fakedata H1: " << std::endl;
     float val_cnp_h1fakedata  = chi_h1.CalcChi_CNP(h1_corein, a_fakedata);
+
 
     float deltachi_fakedata = val_chi_h0fakedata - val_chi_h1fakedata;
     float deltapoischi_fakedata = val_pois_h0fakedata - val_pois_h1fakedata;
@@ -2765,9 +2925,8 @@ TH1D SBNchi::SamplePoissonVaryCore(SBNspec *specin, int num_MC){
 }
 
 //Pelee specific detsys
+void SBNchi::FillDetSysMatrix(TMatrixT<double> &M, SBNspec core_spectrum, bool frac, std::string tag){
 
-void SBNchi::FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool useBDT ){
-    
     int matrix_size = M.GetNrows();
 
     if(matrix_size != (core_spectrum.full_vector).size()){std::cout<<"#ERROR: FillStatsMatrix, matrix not equal to diagonal"<<std::endl;}
@@ -2775,48 +2934,429 @@ void SBNchi::FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool 
 
     M.Zero();
 
-
     int j=0;
-    //signal detsys
-    std::vector<float> sig_detsys;
-    sig_detsys.resize(14);
-    
-    //boxcut
-    std::vector<float> sig_detsys_boxcut = {0.323,0.196,0.206,0.095,0.129,0.130,0.148,0.114,0.199,0.172,0.380,0.277,0.163,0.426};
-    //BDT
-    std::vector<float> sig_detsys_BDT = {0.203,0.163,0.257,0.092,0.122,0.128,0.186,0.110,0.126,0.186,0.226,0.260,0.166,0.325,0.2,0.2,0.2,0.2,0.2};
-    //numu
-    std::vector<float> numu_detsys = {0.096,0.097,0.066,0.051,0.065,0.093,0.081,0.07,0.109,0.122,0.142,0.158,0.18,0.261,0.2,0.2,0.2,0.2,0.2};
-    
-    if(useBDT) sig_detsys = sig_detsys_BDT;
-    else sig_detsys = sig_detsys_boxcut;
 
+    std::cout << "tag = " << tag << std::endl;
+    std::string tagstr;
+    if(tag.find("np_zp_numu") != std::string::npos ) tagstr = "combined";
+    else if(tag.find("np_numu") != std::string::npos ) tagstr = "np";
+    else if(tag.find("zp_numu") != std::string::npos ) tagstr = "zp";
+
+    std::string signal_region = "all";
+    if(tag.find("_farSB_nueonly") != std::string::npos ) signal_region = "near";
+    if(tag.find("_nearSB_numu") != std::string::npos ) signal_region = "near";
+    if(tag.find("_farSB_numu") != std::string::npos ) signal_region = "near";
+    if(tag.find("_nearfar") != std::string::npos ) signal_region = "nearfar";
+    if(tag.find("signal") != std::string::npos ) signal_region = "signal";
+    std::cout << "tagstr, signal_region: " << tagstr << ", " << signal_region << std::endl;
+    //number of bins
+    int bin_np=0, bin_zp=0, bin_numu=0;
+    int bin_np_constr=0, bin_zp_constr=0;
+    for(auto& h: core_spectrum.hist){
+      std::string hname = h.GetName();
+      if( hname.find("1eNp_bg_intrinsic") != std::string::npos ) bin_np = h.GetNbinsX();
+      else if( hname.find("1e0p_bg_intrinsic") != std::string::npos ) bin_zp = h.GetNbinsX();
+      else if( hname.find("numu_intrinsic") != std::string::npos ) bin_numu = h.GetNbinsX();
+      else if( hname.find("numu_bnb") != std::string::npos ) bin_numu = h.GetNbinsX();
+      else if( hname.find("1eNp_constr_intrinsic") != std::string::npos ) bin_np_constr = h.GetNbinsX();
+      else if( hname.find("1e0p_constr_intrinsic") != std::string::npos ) bin_zp_constr = h.GetNbinsX();
+    }
+
+    //1eNp
+    std::cout << "bin_np, bin_zp, bin_numu = " << bin_np << ", " << bin_zp << ", " << bin_numu << std::endl;
+    std::vector<double> np_detsys = GetDetsys("np", tagstr, signal_region, bin_np ); 
+    //1e0p
+    std::vector<double> zp_detsys = GetDetsys("zp", tagstr, signal_region, bin_zp );
+    //1eNp sb
+    std::cout << "bin_np_constr, bin_zp_constr = " << bin_np_constr << ", " << bin_zp_constr << ", " << bin_numu << std::endl;
+    std::vector<double> np_detsys_constr = GetDetsys("np_constr", tagstr, signal_region, bin_np_constr ); 
+    //1e0p sb
+    std::vector<double> zp_detsys_constr = GetDetsys("zp_constr", tagstr, signal_region, bin_zp_constr );
+    //numu
+    std::vector<double> numu_detsys = GetDetsys("numu", tagstr, signal_region, bin_numu );
+    for(int i=0; i < np_detsys.size(); i++) std::cout << "np detsys " << i << " : " << np_detsys[i] << std::endl;
+    for(int i=0; i < zp_detsys.size(); i++) std::cout << "zp detsys " << i << " : " << zp_detsys[i] << std::endl;
+    for(int i=0; i < np_detsys_constr.size(); i++) std::cout << "np detsys constr " << i << " : " << np_detsys_constr[i] << std::endl;
+    for(int i=0; i < zp_detsys_constr.size(); i++) std::cout << "zp detsys constr " << i << " : " << zp_detsys_constr[i] << std::endl;
+    for(int i=0; i < numu_detsys.size(); i++) std::cout << "constr detsys " << i << " : " << numu_detsys[i] << std::endl;
+
+    //initialize vectors to store index of lee and intrinsic to make the correlation
+    std::vector<int> col_intrinsic_np, col_lee_np, col_intrinsic_zp, col_lee_zp;
     for(auto& h: core_spectrum.hist){
         std::string hname = h.GetName();
         for( int i=1; i < h.GetNbinsX()+1; i++ ){
-          if( hname.find("nue_intrinsic") != std::string::npos || hname.find("lee") != std::string::npos ){
-            //std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j;
-            M(j,j) = sig_detsys[i-1]*sig_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
-            //std::cout << ", " << sig_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
+          if( hname.find("1eNp_bg_intrinsic") != std::string::npos ){
+            std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j <<std::endl;
+            if(!frac) M(j,j) = np_detsys[i-1]*np_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = np_detsys[i-1]*np_detsys[i-1];
+            std::cout << ", " << np_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
+            col_intrinsic_np.push_back(j);
+          }
+          else if( hname.find("1eNp_sig_lee") != std::string::npos ){
+            std::cout << "Fill 1eNp signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            if(!frac) M(j,j) = np_detsys[i-1]*np_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = np_detsys[i-1]*np_detsys[i-1];
+            std::cout << ", " << np_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
+            col_lee_np.push_back(j);
+          }
+          else if( hname.find("1e0p_bg_intrinsic") != std::string::npos ){
+            std::cout << "Fill 1e0p signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            if(!frac) M(j,j) = zp_detsys[i-1]*zp_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = zp_detsys[i-1]*zp_detsys[i-1];
+            std::cout << ", " << zp_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
+            col_intrinsic_zp.push_back(j);
+          }
+          else if( hname.find("1e0p_sig_lee") != std::string::npos){
+            std::cout << "Fill 1e0p signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            if(!frac) M(j,j) = zp_detsys[i-1]*zp_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = zp_detsys[i-1]*zp_detsys[i-1];
+            std::cout << ", " << zp_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
+            col_lee_zp.push_back(j);
+          }
+          else if( hname.find("1eNp_constr_intrinsic") != std::string::npos ){
+            std::cout << "Fill 1eNp constr detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j <<std::endl;
+            std::cout << "i, np_detsys_constr = " << i << ", " << np_detsys_constr[i-1] << std::endl;
+            if(!frac) M(j,j) = np_detsys_constr[i-1]*np_detsys_constr[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = np_detsys_constr[i-1]*np_detsys_constr[i-1];
+            std::cout << ", " << np_detsys_constr[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
+          }
+          else if( hname.find("1e0p_constr_intrinsic") != std::string::npos ){
+            std::cout << "Fill 1e0p constr detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j <<std::endl;
+            if(!frac) M(j,j) = zp_detsys_constr[i-1]*zp_detsys_constr[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = zp_detsys_constr[i-1]*zp_detsys_constr[i-1];
+            std::cout << ", " << zp_detsys_constr[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
           }
           else if( hname.find("numu_bnb") != std::string::npos ){
-           // std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
-            M(j,j) = numu_detsys[i-1]*numu_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            std::cout << "numu signal detsys vector size = " << numu_detsys.size() << std::endl;
+            if(!frac) M(j,j) = numu_detsys[i-1]*numu_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = numu_detsys[i-1]*numu_detsys[i-1];
             std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
           }
-	  else{
-            if( hname.find("extbnb") == std::string::npos ){
-            //std::cout << "Fill bg detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
-            M(j,j) = 0.2*0.2*h.GetBinContent(i)*h.GetBinContent(i);
-            std::cout << ", 0.2 , " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
-            }
+          else if( hname.find("numu_intrinsic") != std::string::npos ){
+            std::cout << "Fill numu signal detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            if(!frac) M(j,j) = numu_detsys[i-1]*numu_detsys[i-1]*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = numu_detsys[i-1]*numu_detsys[i-1];
+            std::cout << ", " << numu_detsys[i-1] << ", " << h.GetBinContent(i) << ", " << M(j,j) << std::endl;
           }
+	  else if( hname.find("ext") == std::string::npos && hname.find("data") == std::string::npos ){
+            std::cout << "Fill bg detsys error, histo, bin number, matrix column = " << h.GetName() << ", " << i << ", " << j << std::endl;
+            if(!frac)M(j,j) = 0.2*0.2*h.GetBinContent(i)*h.GetBinContent(i);
+            else M(j,j) = 0.2*0.2;
+            std::cout << ", 0.2 , " << h.GetBinContent(i) << ", " << M(j,j)*h.GetBinContent(i)*h.GetBinContent(i) << std::endl;
+          }
+	  else if( hname.find("ext") != std::string::npos ){ std::cout << "@@@@@@@@ histo name, bin, number of event: " << h.GetName() << ", " << i << ", " << h.GetBinContent(i) << std::endl;}
           j++; 
         }
     }
+    //fill correlation between nue and lee
+    core_spectrum.CalcFullVector();
+    //1eNp
+    std::cout << "col_intrinsic_np.size() = " << col_intrinsic_np.size() << std::endl;
+    for(int i=0; i<col_intrinsic_np.size(); i++){
+      //std::cout << "i, col_lee_np[i] = " << i << ", " << col_lee_np[i] << std::endl;
+      M(col_intrinsic_np[i],col_lee_np[i]) = sqrt(M(col_intrinsic_np[i],col_intrinsic_np[i])*M(col_lee_np[i],col_lee_np[i])); 
+      M(col_lee_np[i],col_intrinsic_np[i]) = sqrt(M(col_lee_np[i],col_lee_np[i])*M(col_intrinsic_np[i],col_intrinsic_np[i])); 
+    }
+    //1eNp
+    std::cout << "col_intrinsic_zp.size() = " << col_intrinsic_zp.size() << std::endl;
+    for(int i=0; i<col_intrinsic_zp.size(); i++){
+      M(col_intrinsic_zp[i],col_lee_zp[i]) = sqrt(M(col_intrinsic_zp[i],col_intrinsic_zp[i])*M(col_lee_zp[i],col_lee_zp[i])); 
+      M(col_lee_zp[i],col_intrinsic_zp[i]) = sqrt(M(col_lee_zp[i],col_lee_zp[i])*M(col_intrinsic_zp[i],col_intrinsic_zp[i])); 
+    }
+
     //Print Detsys error
-    //std::cout << "========DETSYS ERROR MATRIX========" << std::endl;
-    //M.Print();
+    std::cout << "========DETSYS ERROR MATRIX========" << std::endl;
+    M.Print();
 
     return ;
+}
+
+std::vector<double> SBNchi::GetDetsys(std::string channel, std::string tag, std::string signal_region, int bin ){
+
+  std::vector<double> detsys;
+
+  //1eNp
+  if(channel=="np" && tag=="np"){
+    if(signal_region=="all"){
+      //14 bins
+      if(bin==14) detsys = {0.245, 0.152, 0.155, 0.090, 0.150, 0.061, 0.153, 0.078, 0.112, 0.115, 0.200, 0.124, 0.187, 0.111}; //new number
+      // 10 bin
+      if(bin==10) detsys = {0.15,0.16,0.08,0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 2 bin
+      if(bin==2) detsys = {0.08,0.11};
+      // 1 bin
+      if(bin==1) detsys = {0.117};
+    }
+    if(signal_region=="signal"){ 
+      // 1 bin signal
+      if(bin==1) detsys = {0.13}; //signal region 
+      // 4 bins
+      if(bin==4) detsys = {0.15,0.16,0.08,0.08};
+    }
+    if(signal_region=="nearfar"){ 
+      // 10 bin
+      if(bin==10) detsys = {0.15,0.16,0.08,0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 7 bin
+      if(bin==7) detsys = {0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 2 bin near+far SB
+      if(bin==2) detsys = {0.089,0.046};
+      // 1 bin near+far SB
+      if(bin==1) detsys = {0.048};
+    }
+    if(signal_region=="near"){ 
+      // 2 bins
+      if(bin==2) detsys = {0.15,0.16};
+      // 1 bin
+      if(bin==1) detsys = {0.089};
+    }
+    if(signal_region=="far"){ 
+      // 1 bin near SB
+      if(bin==1) detsys = {0.048};
+      // 2 bins far SB
+      if(bin==2) detsys = {0.08,0.11}; 
+      // 5 bins far SB
+      if(bin==1) detsys = {0.10,0.09,0.18,0.11,0.11};
+    }
+  }
+
+  //1eNp combined
+  if(channel=="np" && tag=="combined"){
+    if(signal_region=="all"){
+      //14 bins
+      if(bin==14) detsys = {0.245, 0.152, 0.155, 0.090, 0.150, 0.061, 0.153, 0.078, 0.112, 0.115, 0.200, 0.124, 0.187, 0.111}; //new number
+      // 10 bin
+      if(bin==10) detsys = {0.15,0.16,0.08,0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 2 bin
+      if(bin==2) detsys = {0.08,0.11};
+      // 1 bin
+      if(bin==1) detsys = {0.117};
+    }
+    if(signal_region=="signal"){ 
+      // 1 bin signal
+      if(bin==1) detsys = {0.13}; //signal region 
+      // 4 bins
+      if(bin==4) detsys = {0.15,0.16,0.08,0.08};
+    }
+    if(signal_region=="nearfar"){ 
+      // 10 bin
+      if(bin==10) detsys = {0.15,0.16,0.08,0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 7 bin
+      if(bin==7) detsys = {0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 2 bin near+far SB
+      if(bin==2) detsys = {0.089,0.046};
+      // 1 bin near+far SB
+      if(bin==1) detsys = {0.048};
+    }
+    if(signal_region=="near"){ 
+      // 2 bins
+      if(bin==2) detsys = {0.15,0.16};
+      // 1 bin
+      if(bin==1) detsys = {0.089};
+    }
+    if(signal_region=="far"){ 
+      // 1 bin near SB
+      if(bin==1) detsys = {0.048};
+      // 2 bins far SB
+      if(bin==2) detsys = {0.08,0.11}; 
+      // 5 bins far SB
+      if(bin==5) detsys = {0.10,0.09,0.18,0.11,0.11};
+    }
+  }
+  
+  
+  //1e0p
+  if(channel=="zp" && tag=="zp"){
+    if(signal_region=="all"){
+      //14 bins
+      if(bin==14) detsys = {0.152, 0.152, 0.975, 0.975, 0.194, 0.194, 0.404, 0.404, 0.325, 0.325, 0.182, 0.182, 0.182, 0.182}; //new number
+      // 10-bin
+      if(bin==10) detsys = {0.140,0.064,0.123,0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 3 bin
+      if(bin==3) detsys = {0.128,0.170,0.269};
+      // 1 bin
+      if(bin==1) detsys = {0.192};//{0.134};
+    }
+    if(signal_region=="signal"){
+      // 1-bin near SB
+      if(bin==1) detsys = {0.109}; //signal region // take average of first 3 bins
+      // 4 bins
+      if(bin==4) detsys = {0.140,0.064,0.123,0.128};
+    }
+    if(signal_region=="nearfar"){ 
+      // 10-bin near sideband
+      if(bin==10) detsys = {0.140,0.064,0.123,0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 7-bin near sideband
+      if(bin==7) detsys = {0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 1-bin near+far SB
+      if(bin==1) detsys = {0.192};//{0.134};
+    }
+    if(signal_region=="near"){ 
+      // 3-bin near SB
+      if(bin==3) detsys = {0.128,0.170,0.170};
+      // 2-bin near SB
+      if(bin==2) detsys = {0.128,0.170};
+      // 1-bin near SB
+      if(bin==1) detsys = {0.123};
+    }
+    if(signal_region=="far"){ 
+      // 1-bin far SB
+      if(bin==1) detsys = {0.163};
+    }
+  }
+ 
+  //1e0p
+  if(channel=="zp" && tag=="combined"){
+    std::cout << "am here " << std::endl;
+    if(signal_region=="all"){
+      //14 bins
+      if(bin==14) detsys = {0.152, 0.152, 0.975, 0.975, 0.194, 0.194, 0.404, 0.404, 0.325, 0.325, 0.182, 0.182, 0.182, 0.182}; //new number
+      // 10-bin
+      if(bin==10) detsys = {0.140,0.064,0.123,0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 3 bin
+      if(bin==3) detsys = {0.128,0.170,0.269};
+      // 1 bin
+      if(bin==1) detsys = {0.134};
+    }
+    if(signal_region=="signal"){
+      // 1-bin near SB
+      if(bin==1) detsys = {0.109}; //signal region // take average of first 3 bins
+      // 4 bins
+      if(bin==4) detsys = {0.140,0.064,0.123,0.128};
+    }
+    if(signal_region=="nearfar"){ 
+      // 10-bin near sideband
+      if(bin==10) detsys = {0.140,0.064,0.123,0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 7-bin near sideband
+      if(bin==7) detsys = {0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 1-bin near+far SB
+      if(bin==1) detsys = {0.134};
+    }
+    if(signal_region=="near"){ 
+      // 3-bin near SB
+      if(bin==3) detsys = {0.128,0.170,0.170};
+      // 2-bin near SB
+      if(bin==2) detsys = {0.128,0.170};
+      // 1-bin near SB
+      if(bin==1) detsys = {0.123};
+    }
+    if(signal_region=="far"){ 
+      // 1-bin far SB
+      if(bin==1) detsys = {0.163};
+    }
+  }
+  //constraint
+  if(channel=="numu"){
+    //14 bins
+    if(tag=="np" || tag=="zp" || tag=="combined"){ 
+    if(signal_region=="signal" || signal_region=="all" || signal_region=="nearfar" || signal_region=="near"){ 
+      if(bin==14) detsys = {0.119, 0.139, 0.106, 0.063, 0.050, 0.071, 0.052, 0.099, 0.054, 0.115, 0.087, 0.183, 0.132, 0.175}; //new number
+      if(bin==1) detsys = {0.103}; //I take the average instead
+    }
+    }
+    if(signal_region=="signal" && tag=="np"){
+      // 7-bin near+far sideband
+      if(bin==7) detsys = {0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 2-bin near+far SB
+      if(bin==2) detsys = {0.089,0.046};
+      // 1-bin near+far SB
+      if(bin==1) detsys = {0.048};
+    }
+    if(signal_region=="signal" && tag=="zp"){
+      // 7-bin near sideband
+      if(bin==7) detsys = {0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 2-bin near+far SB
+      if(bin==3) detsys = {0.123,0.163};
+      // 2-bin near+far SB
+      if(bin==2) detsys = {0.123,0.163};
+      // 1-bin near+far SB
+      if(bin==1) detsys = {0.134};
+    }
+    if(signal_region=="signal" && tag=="combined"){
+      // 7-bin near sideband
+      if(bin==7) detsys = {0.08,0.11,0.10,0.09,0.18,0.11,0.11,0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 2-bin near+far SB
+      if(bin==2) detsys = {0.089,0.046,0.123,0.163};
+      // 1-bin near+far SB
+      if(bin==1) detsys = {0.048,0.134};
+    }
+    if(signal_region=="near" && tag=="np"){ 
+      // 1 bin far SB
+      if(bin==1) detsys = {0.046};
+      // 2 bins far SB
+      if(bin==2) detsys = {0.12,0.11}; 
+      // 5 bins far SB
+      if(bin==5) detsys = {0.10,0.09,0.18,0.11,0.11};
+    }
+    if(signal_region=="near" && tag=="zp"){ 
+      // 1 bin far SB
+      if(bin==1) detsys = {0.163};
+      // 2 bins far SB
+      if(bin==2) detsys = {0.220,0.317}; 
+      // 5 bins far SB
+      if(bin==5) detsys = {0.269,0.204,0.188,0.337,0.297};
+    }
+    if(signal_region=="near" && tag=="combined"){ 
+      // 1 bin far SB
+      if(bin==1) detsys = {0.046,0.163};
+      // 2 bins far SB
+      if(bin==2) detsys = {0.12,0.11,0.220,0.317}; 
+      // 5 bins far SB
+      if(bin==5) detsys = {0.10,0.09,0.18,0.11,0.11,0.269,0.204,0.188,0.337,0.297};
+    }
+  }
+  
+  //constraint
+  if(tag=="combined" || tag=="np"){
+    if(signal_region=="signal" && channel=="np_constr"){
+      // 7-bin near+far sideband
+      if(bin==7) detsys = {0.08,0.11,0.10,0.09,0.18,0.11,0.11};
+      // 2-bin near+far SB
+      if(bin==2) detsys = {0.089,0.046};
+      // 1-bin near+far SB
+      if(bin==1) detsys = {0.048};
+    }
+    if(signal_region=="all" && channel=="np_constr"){
+      // 7-bin near+far sideband
+      if(bin==5) detsys = {0.10,0.09,0.18,0.11,0.11};
+      // 1-bin far SB
+      if(bin==1) detsys = {0.046};
+    }
+    if(signal_region=="near" && channel=="np_constr"){ 
+      // 1 bin far SB
+      if(bin==1) detsys = {0.046};
+      // 2 bins far SB
+      if(bin==2) detsys = {0.12,0.11}; 
+      // 5 bins far SB
+      if(bin==5) detsys = {0.10,0.09,0.18,0.11,0.11};
+    }
+  }
+  
+   
+  if(tag=="combined" || tag=="zp"){
+    if(signal_region=="signal" && channel=="zp_constr"){
+      // 7-bin near sideband
+      if(bin==7) detsys = {0.128,0.170,0.269,0.204,0.188,0.337,0.297};
+      // 2-bin near+far SB
+      if(bin==3) detsys = {0.123,0.163};
+      // 1-bin near+far SB
+      if(bin==1) detsys = {0.134};
+    }
+    if(signal_region=="all" && channel=="zp_constr"){
+      // 7-bin near+far sideband
+      if(bin==5) detsys = {0.269,0.204,0.188,0.337,0.297};
+      // 1-bin far SB
+      if(bin==1) detsys = {0.163};
+    }
+    if(signal_region=="near" && channel=="zp_constr"){ 
+      // 1 bin far SB
+      if(bin==1) detsys = {0.163};
+      // 2 bins far SB
+      if(bin==2) detsys = {0.220,0.317}; 
+      // 5 bins far SB
+      if(bin==5) detsys = {0.269,0.204,0.188,0.337,0.297};
+    }
+  }
+  return detsys;
+
 }

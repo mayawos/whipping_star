@@ -72,10 +72,14 @@ namespace sbn{
 
 			//This is the full concatanated vector (in xml order)	
 			std::vector<double > full_vector;
+			std::vector<double > full_err_vector;
+			std::vector<double > full_ext_err_vector;
 			//This is the compessed vector, collapsing all subchannels down to a single channel
 			std::vector<double > collapsed_vector;
+			std::vector<double > collapsed_err_vector;
 			std::vector<float > f_collapsed_vector;
 
+			std::vector<double > full_error;
 
 
 			//need to store a history of the scales for oscillation purposes.  FIX THIS
@@ -118,10 +122,12 @@ namespace sbn{
 			//Recaculates the full_vector and collapsed_vector's
 			int CalcFullVector();
 			int CollapseVector();
+			int CalcErrorVector();
 
 			double GetTotalEvents();
 
 			int GetGlobalBinNumber(double invar, int which_hist);
+			int GetGlobalBinNumber(int local_bin, std::string histname);
 			int GetLocalBinNumber(double invar, int which_hist);
 
 			int GetHistNumber(int f);

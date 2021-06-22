@@ -1,5 +1,6 @@
 #include "SBNspec.h"
 #include <cassert>
+#include <fstream>
 using namespace sbn;
 
 SBNspec::SBNspec(std::string whichxml, int which_universe, bool isverbose, bool useuniverse) : SBNconfig(whichxml,isverbose, useuniverse){
@@ -49,16 +50,14 @@ SBNspec::SBNspec(std::string rootfile, std::string whichxml, bool isverbose) : S
 	int n=0;
 	for(auto fn: fullnames){
 		hist.push_back(*((TH1D*)f->Get(fn.c_str())));
+                //for(int b=0; b < hist.back().GetNbinsX(); b++ ) std::cout << n << ", " << fn << " = " << hist.back().GetBinContent(b) << std::endl;
 		map_hist[fn] = n;
 		n++;
 	}
 
 	has_been_scaled=false;
-
-
+        this->CalcFullVector();
 	f->Close();
-
-
 }
 
 SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml) : SBNspec(input_full_vec, whichxml, false){ };
@@ -74,15 +73,11 @@ SBNspec::SBNspec(std::vector<double> input_full_vec, std::string whichxml, int u
 			exact_bin -= hist.at(b).GetNbinsX();
 		}
 		hist.at(which_hist).SetBinContent(exact_bin+1, input_full_vec.at(i));
-
-	}
-
+	
+    }
 
 	this->CalcFullVector();
 }
-
-
-
 
 
 
@@ -114,9 +109,6 @@ int SBNspec::Add(std::string which_hist, TH1 * histin){
 	this->CollapseVector();
 	return 0;
 }
-
-
-
 
 
 
@@ -265,37 +257,64 @@ int SBNspec::Norm(std::string name, double val){
 
 
 int SBNspec::CalcFullVector(){
+  //std::cout << "SBNspec::CalcFullVector()" << std::endl;
+
+  std::ofstream mcstatsfile;
+  mcstatsfile.open("mc_stats_err.tex");
+
+
   full_vector.clear();
+  full_error.clear();
   
   full_vector.resize(num_bins_total);
+  full_error.resize(num_bins_total);
 
   int hoffset = 0;
   for(size_t hid=0; hid<hist.size(); ++hid) {
     const auto& h =  hist[hid];
+  mcstatsfile << "\\begin{table}[H]" << std::endl; 
+  mcstatsfile << "\\centering" << std::endl; 
+  mcstatsfile << "\\begin{tabular}{| c | c | c | c |} " << std::endl;
+  mcstatsfile << "\\hline" << std::endl; 
+  mcstatsfile << "Sample & Bin number & N Event & MC Stats Error \\\\" << std::endl; 
+  mcstatsfile << "\\hline" << std::endl; 
+  mcstatsfile << "\\hline" << std::endl; 
     for(int i = 1; i < (h.GetSize()-1); ++i){
       full_vector[hoffset + i - 1] = h.GetBinContent(i);
+      full_error[hoffset + i - 1] = h.GetBinError(i);
+      if(i==1)  mcstatsfile << "\\multirow{"<<h.GetSize()-2<<"}{*}{"<< h.GetName() << "} & " << i << " & " <<  full_vector[hoffset + i - 1] << " & " << full_error[hoffset + i - 1] << " \\\\ " << std::endl;
+      else  mcstatsfile << "{} & " << i << " & " <<  full_vector[hoffset + i - 1] << " & " << full_error[hoffset + i - 1] << " \\\\ " << std::endl;
+      //std::cout << h.GetName() << "  bin content: " << h.GetBinContent(i) << ", full vector, full error: " << full_vector[hoffset + i - 1] << ", " << full_error[hoffset + i - 1] << std::endl;
     }
+    mcstatsfile << "\\hline" << std::endl; 
+  mcstatsfile << "\\hline" << std::endl;
+  mcstatsfile << "\\end{tabular}" << std::endl;
+  mcstatsfile << "\\label{tab:mc\_stats}" << std::endl;
+  mcstatsfile << "\\end{table}" << std::endl;
+  mcstatsfile << "" << std::endl;
+  mcstatsfile << "\\newpage" << std::endl;
     hoffset += (h.GetSize()-2);
   }
     
   assert (hoffset == num_bins_total);
-
+  mcstatsfile.close();
   return 0;
 }
 
 int SBNspec::CollapseVector(){
+  //std::cout << "SBNspec::CollapseVector()" << std::endl;
 
 	collapsed_vector.clear();
 	f_collapsed_vector.clear();
 	CalcFullVector();
 
+        //std::cout << "num_modes, num_detectors, num channels, num_bins: " << num_modes << ", " << num_detectors << ", " << num_channels << ", "; //<< num_bins << std::endl; 
 	for(int im = 0; im < num_modes; im++){
 		for(int id =0; id < num_detectors; id++){
 			int edge = id*num_bins_detector_block + num_bins_mode_block*im; // This is the starting index for this detector
-
 			for(int ic = 0; ic < num_channels; ic++){
 				int corner=edge;
-
+                                //std::cout << num_bins.at(ic) << "; corner = " << corner << std::endl;
 				for(int j=0; j< num_bins.at(ic); j++){
 
 					double tempval=0;
@@ -305,6 +324,7 @@ int SBNspec::CollapseVector(){
 						//std::cout<<im<<"/"<<num_modes<<" "<<id<<"/"<<num_detectors<<" "<<ic<<"/"<<num_channels<<" "<<j<<"/"<<num_bins[ic]<<" "<<sc<<"/"<<num_subchannels[ic]<<std::endl;
 						tempval += full_vector.at(j+sc*num_bins.at(ic)+corner);
 						edge +=1;	//when your done with a channel, add on every bin you just summed
+					        //std::cout << "num channels, sc, tempval = " << ic << ", " << sc << ", " << tempval << std::endl;
 					}
 					//we can size this vector beforehand and get rid of all push_back()
 					collapsed_vector.push_back(tempval);
@@ -315,6 +335,61 @@ int SBNspec::CollapseVector(){
 	}
 	return 0;
 }
+
+int SBNspec::CalcErrorVector(){
+
+	full_ext_err_vector.clear();
+
+	int index=0;
+	for(int im=0; im < num_modes ; im++){
+	    for(int id = 0; id< num_detectors; id++){
+		for(int ic= 0; ic< num_channels; ic++){
+		    TH1D* hsum= nullptr;   //holds the summed histogram for one CHANNEL
+
+		    for(int is=0; is< num_subchannels[ic]; is++){
+			TH1D& h = hist[index];
+                        std::string name = h.GetName();
+                        std::cout << "name: " << name << std::endl;
+                        if(name.find("ext") != std::string::npos){ 
+				std::cout << "found ext histogram!" << std::endl;
+				for(int ibin=0; ibin < h.GetNbinsX(); ibin++){
+					double ext_err = 0.0;
+					if( h.GetBinError(ibin+1) == 0.0 ) ext_err = 1.4*0.371;
+                                        std::cout << "ext = " << ext_err << std::endl;
+					full_err_vector.push_back(0.0);
+					full_ext_err_vector.push_back(ext_err);
+				}
+			}
+			else{
+				std::cout << "found other histograms, filling as normal!" << std::endl;
+				for(int ibin=0; ibin < h.GetNbinsX(); ibin++){ 
+					full_err_vector.push_back(h.GetBinError(ibin+1));
+					full_ext_err_vector.push_back(0.0);
+				}
+			}
+			if(hsum == nullptr){
+				hsum = (TH1D*)h.Clone();
+				hsum->Reset();
+			}	
+			hsum->Add(&h);
+                        std::cout << "index: " << std::endl;
+			index++;
+		    }
+                    std::cout << "outside loop of subchannel" << std::endl;
+
+		   for(int ibin=0; ibin < hsum->GetNbinsX(); ibin++)
+			collapsed_err_vector.push_back(hsum->GetBinError(ibin+1));
+
+		}
+                std::cout << "outside loop of channel" << std::endl;
+
+	    }
+            std::cout << "outside loop of detector" << std::endl;
+	}	
+
+	return 0;
+}
+
 
 double SBNspec::GetTotalEvents(){
 	double ans =0;
@@ -499,7 +574,7 @@ int SBNspec::CompareSBNspecs(TMatrixT<double> collapse_covar, SBNspec * compsec,
     }
 
 
-    bool gLEE_plot = false;  //control the style of the stacked histograms
+    bool gLEE_plot = true;  //control the style of the stacked histograms
     if(gLEE_plot){
         mycol.clear();
 
@@ -1119,6 +1194,7 @@ int SBNspec::GetHistNumber(int f){
 
 std::vector<int> SBNspec::GetIndiciesFromSubchannel(std::string const & subchannel){
     std::vector<int> ans;
+    //for (auto const& pair: map_hist) std::cout << pair.first << ", " << pair.second << std::endl;
     if(map_hist.count(subchannel)!=1){
         std::cout<<"Error! You asked for a subchannel that doesnt exist in xml: "<<subchannel<<std::endl;
         exit(EXIT_FAILURE);
@@ -1153,5 +1229,16 @@ int SBNspec::GetGlobalBinNumber(double invar, int which_hist)
 	}
 
 	if(localbin==0 || localbin > hist.at(which_hist).GetNbinsX() ){bin = -99;}
+	return bin;
+}
+int SBNspec::GetGlobalBinNumber(int local_bin, std::string histname){
+	
+	int which_hist = map_hist[histname];
+	int bin = local_bin -1;
+
+	for(int i=0; i<which_hist; i++){
+                bin += hist.at(i).GetNbinsX();
+        }
+
 	return bin;
 }
