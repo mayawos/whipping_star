@@ -59,7 +59,6 @@ int main(int argc, char* argv[])
   std::string xml = "example.xml";
   std::string tag = "example";
   std::string fakedata = "example";
-  int constr_mode = 1;
   double width = 1.0;
   std::string var = "var";
   int iarg = 0;
@@ -80,7 +79,6 @@ int main(int argc, char* argv[])
       {"tag", 		required_argument, 	0, 't'},
       {"fakedata", 	required_argument, 	0, 'f'},
       {"var", 		required_argument, 	0, 'v'},
-      {"constr_mode",	required_argument, 	0, 'l'},
       {"sys",	        no_argument, 		0, 's'},
       {"detsys",	no_argument, 		0, 'd'},
       {"combined",	no_argument, 		0, 'c'},
@@ -94,7 +92,7 @@ int main(int argc, char* argv[])
   
   while(iarg != -1)
     {
-      iarg = getopt_long(argc,argv, "x:t:f:l:v:sdcnzmay", longopts, &index);
+      iarg = getopt_long(argc,argv, "x:t:f:v:sdcnzmay", longopts, &index);
       
       switch(iarg)
 	{
@@ -109,9 +107,6 @@ int main(int argc, char* argv[])
 	  break;
 	case 'v':
 	  var = optarg;
-	  break;
-	case 'l':
-	  constr_mode = atoi(optarg);
 	  break;
 	case 's':
 	  sys = true;
@@ -145,25 +140,20 @@ int main(int argc, char* argv[])
 	}
     }
   
-  bool doFakedata = false;
+  bool doFakedata = true;
   std::string detsyslabel = "";
   std::string mcerrlabel = "";
   std::string zerobinlabel = "";
-  std::string var_label = "";
   if( mcerr ) mcerrlabel = "_with_mc_err"; 
   if( addext ) zerobinlabel = "_with_zerobin_err"; 
   if( detsys ) detsyslabel = "_with_detsys"; 
   if( tag.find("fakedata") != std::string::npos ) doFakedata = true; 
-  if( tag.find("nearfarSB") != std::string::npos ) doFakedata = true; 
-  if( tag.find("nearSB") != std::string::npos ) doFakedata = true; 
-  if( tag.find("farSB") != std::string::npos ) doFakedata = true; 
-  if( tag.find("leptonangle") != std::string::npos ) var_label = "Lepton Angle [rad.]"; 
-  std::cout << "******** do GoF study " << doFakedata << " ************ " << std::endl;
+
   gStyle->SetPalette(kLightTemperature);
   
   //set up text files to write the systematics table
   //ONLY WRITE TABLES FOR THE COMBINED CHANNEL
-  std::vector<std::ofstream> outfiles(11);//, outfile2, outfile3, outfile4, outfile5, outfile6, outfile7, outfile8, outfile9;
+  std::vector<std::ofstream> outfiles(9);//, outfile2, outfile3, outfile4, outfile5, outfile6, outfile7, outfile8, outfile9;
   if(combined){
     outfiles[0].open(Form("full_1eNp_lee_systematicstable_beforeconstraint_%s%s%s%s.txt",tag.c_str(),mcerrlabel.c_str(),zerobinlabel.c_str(),detsyslabel.c_str())); 
     outfiles[1].open(Form("full_1eNp_lee_systematicstable_afterconstraint_%s%s%s%s.txt",tag.c_str(),mcerrlabel.c_str(),zerobinlabel.c_str(),detsyslabel.c_str())); 
@@ -174,8 +164,6 @@ int main(int argc, char* argv[])
     outfiles[6].open(Form("full_1e0p_systematicstable_beforeconstraint_%s%s%s%s.txt",tag.c_str(),mcerrlabel.c_str(),zerobinlabel.c_str(),detsyslabel.c_str())); 
     outfiles[7].open(Form("full_1e0p_systematicstable_afterconstraint_%s%s%s%s.txt",tag.c_str(),mcerrlabel.c_str(),zerobinlabel.c_str(),detsyslabel.c_str())); 
     outfiles[8].open(Form("full_numu_systematicstable_beforeconstraint_%s%s%s%s.txt",tag.c_str(),mcerrlabel.c_str(),zerobinlabel.c_str(),detsyslabel.c_str())); 
-    outfiles[9].open(Form("full_numu2_systematicstable_beforeconstraint_%s%s%s%s.txt",tag.c_str(),mcerrlabel.c_str(),zerobinlabel.c_str(),detsyslabel.c_str())); 
-    outfiles[10].open(Form("full_numu3_systematicstable_beforeconstraint_%s%s%s%s.txt",tag.c_str(),mcerrlabel.c_str(),zerobinlabel.c_str(),detsyslabel.c_str())); 
   }
   
   std::vector<double> sig_fullvec, bkg_fullvec, sig_collvec, bkg_collvec, sig_errfullvec, bkg_errfullvec, sig_exterrfullvec, bkg_exterrfullvec, numu_data_vec, numu_vec, delta_numu; 
@@ -193,7 +181,6 @@ int main(int argc, char* argv[])
   SBNspec bkg_spectra("../bin/"+tag+".SBNspec.root",xml);
   bkg_spectra.Scale("lee", 0.0); // Scale() will scale all that match so bkg_spectra.Scale("leesignal",0.0); would work too 
   bkg_fullvec = bkg_spectra.full_vector;
-
   //collapse vector
   bkg_spectra.CollapseVector();
   bkg_collvec = bkg_spectra.collapsed_vector;
@@ -203,6 +190,7 @@ int main(int argc, char* argv[])
   //and at least a 1e0p channel or 1eNp channel 
   int num_bins = sig_spectra.num_bins_total;
   int num_bins_coll = sig_spectra.num_bins_total_compressed;
+  std::cout << "num_bins_coll: " << num_bins_coll << std::endl;
   int np_bins = 0, zp_bins = 0, numu_bins = 0, np_constr_bins = 0, zp_constr_bins = 0;
   //create vector of channels names
   //assume there is a nue and numu channels
@@ -256,30 +244,31 @@ int main(int argc, char* argv[])
     if(name.find("1e0p_sig") != std::string::npos ) zp_bins = channel_hists[ic]->GetNbinsX();
     if(name.find("1eNp_constr") != std::string::npos ) np_constr_bins = channel_hists[ic]->GetNbinsX();
     if(name.find("1e0p_constr") != std::string::npos ) zp_constr_bins = channel_hists[ic]->GetNbinsX();
-    if(name.find("numu")     != std::string::npos ) numu_bins = channel_hists[ic]->GetNbinsX();
+    if(name.find("numu_constr")     != std::string::npos ) numu_bins = channel_hists[ic]->GetNbinsX();
     if(name.find("1eNp_sig") != std::string::npos ) channel_names_coll.push_back("1eNp LEE");
+    //=============================================================================================================
     if(name.find("1eNp_sig") != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());
     if(name.find("1eNp_bg")  != std::string::npos ) channel_names_coll.push_back("1eNp nue + bkg");
-    if(name.find("1eNp_bg") != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());
+    if(name.find("1eNp_bg")  != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());
+    if(name.find("1eNp_constr")  != std::string::npos ) channel_names_coll.push_back("1eNp sidebands");
     if(name.find("1eNp_constr")  != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());
-    if(name.find("1eNp_constr")  != std::string::npos ) channel_names_coll.push_back("1eNp nue sideband");
     if(name.find("1e0p_sig") != std::string::npos ) channel_names_coll.push_back("1e0p LEE");
+    //==============================================================================================================
     if(name.find("1e0p_sig") != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());
     if(name.find("1e0p_bg")  != std::string::npos ) channel_names_coll.push_back("1e0p nue + bkg");
     if(name.find("1e0p_bg")  != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());
-    if(name.find("1e0p_constr")  != std::string::npos ) channel_names_coll.push_back("1e0p nue sideband");
+    if(name.find("1e0p_constr")  != std::string::npos ) channel_names_coll.push_back("1e0p sidebands");
     if(name.find("1e0p_constr")  != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());
-    if(name.find("numu")     != std::string::npos ) channel_names_coll.push_back("numu");
-    if(name.find("numu")     != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());;
+    if(name.find("numu_constr")     != std::string::npos ) channel_names_coll.push_back("numu");
+    if(name.find("numu_constr")     != std::string::npos ) num_bins_coll_vec.push_back(channel_hists[ic]->GetNbinsX());;
   }
-  std::cout << "num_bins_coll, numu_bins, np_constr_bins, zp_constr_bins = " << num_bins_coll << ", " << numu_bins << ", " << np_constr_bins << ", " << zp_constr_bins << std::endl;
-  int nue_bins = num_bins_coll-numu_bins-np_constr_bins-zp_constr_bins;
-  
+  int constr_bins = numu_bins +  zp_constr_bins +  np_constr_bins; 
+  int nue_bins = num_bins_coll - constr_bins;
+  std::cout << "nue_bins = num_bins_coll - constr_bins : " << nue_bins << " = " << num_bins_coll << " - " << constr_bins << std::endl;
   //create vector of subchanels/histos names
   std::vector<std::string> subchannel_names;
   std::vector<int> num_bins_full;
   for(auto& h: sig_spectra.hist){
-    std::cout << h.GetName() << std::endl;
     subchannel_names.push_back(h.GetName());
     num_bins_full.push_back(h.GetNbinsX());
   }
@@ -291,6 +280,7 @@ int main(int argc, char* argv[])
   bkg_errfullvec = bkg_spectra.full_error;
   bkg_exterrfullvec = bkg_spectra.full_ext_err_vector;
 
+  std::cout << "A" << std::endl;
   //get extbnb to create vector of spectra with no bnb
   //this will be used to calculate the systematics for the table
   std::vector<double> sig_collvec_noext;
@@ -299,34 +289,35 @@ int main(int argc, char* argv[])
   TH1D *h_1eNp_bg_nue, *h_1e0p_bg_nue, *h_numu_bnb;
   TH1D *h_1eNp_constr_ext, *h_1e0p_constr_ext;
   TH1D *h_1eNp_constr_nue, *h_1e0p_constr_nue;
+
+  std::cout << "B" << std::endl;
   for(auto& h: sig_spectra.hist){
     TString hname = h.GetName();
     if(np || combined ){ if(hname=="nu_uBooNE_1eNp_bg_ext") h_1eNp_bg_ext = (TH1D*)h.Clone("nu_uBooNE_1eNp_bg_ext");}
     if(zp || combined ){ if(hname=="nu_uBooNE_1e0p_bg_ext") h_1e0p_bg_ext = (TH1D*)h.Clone("nu_uBooNE_1e0p_bg_ext");}
-    if(np || combined ){ if(hname=="nu_uBooNE_1eNp_constr_ext") h_1eNp_constr_ext = (TH1D*)h.Clone("nu_uBooNE_1eNp_constr_ext");}
-    if(np || combined ){ if(hname=="nu_uBooNE_1e0p_constr_ext") h_1e0p_constr_ext = (TH1D*)h.Clone("nu_uBooNE_1e0p_constr_ext");}
-    if(hname=="nu_uBooNE_numu_ext"){ h_numu_ext = (TH1D*)h.Clone("nu_uBooNE_numu_bg_ext");}
+    if(np || combined ){ if(hname=="nu_uBooNE_1eNp_const_ext") h_1eNp_constr_ext = (TH1D*)h.Clone("nu_uBooNE_1eNp_bg_ext");}
+    if(zp || combined ){ if(hname=="nu_uBooNE_1e0p_const_ext") h_1e0p_constr_ext = (TH1D*)h.Clone("nu_uBooNE_1e0p_bg_ext");}
+    if(hname=="nu_uBooNE_numu_ext") h_numu_ext = (TH1D*)h.Clone("nu_uBooNE_1eNp_bg_ext");
   }
+
   if( !doFakedata && ( np || combined ) ){ for(int bin=1; bin < np_bins+1; bin++) collapsed_ext.push_back(0.0);}
   if( !doFakedata && ( np || combined ) ){ for(int bin=1; bin < np_bins+1; bin++) collapsed_ext.push_back(h_1eNp_bg_ext->GetBinContent(bin));}
   if( !doFakedata && ( zp || combined ) ){ for(int bin=1; bin < zp_bins+1; bin++) collapsed_ext.push_back(0.0);}
   if( !doFakedata && ( zp || combined ) ){ for(int bin=1; bin < zp_bins+1; bin++) collapsed_ext.push_back(h_1e0p_bg_ext->GetBinContent(bin));}
- 
-  if( constr_mode != 1 && ( np || combined )){
-    for(int bin=1; bin < h_1eNp_bg_ext->GetNbinsX()+1; bin++) collapsed_ext.push_back(h_1eNp_bg_ext->GetBinContent(bin));
-  }
-  if( constr_mode != 1 && ( zp || combined )){
-    for(int bin=1; bin < h_1e0p_bg_ext->GetNbinsX()+1; bin++) collapsed_ext.push_back(h_1e0p_bg_ext->GetBinContent(bin));
-  }
-  if( constr_mode != 2 ){
-    for(int bin=1; bin < h_numu_ext->GetNbinsX()+1; bin++){ std::cout << h_numu_ext->GetBinContent(bin) << ", " << std::endl; collapsed_ext.push_back(h_numu_ext->GetBinContent(bin));}
+  if( !doFakedata && ( np || combined ) ){ for(int bin=1; bin < np_bins+1; bin++) collapsed_ext.push_back(0.0);}
+  if( !doFakedata && ( np || combined ) ){ for(int bin=1; bin < np_bins+1; bin++) collapsed_ext.push_back(h_1eNp_constr_ext->GetBinContent(bin));}
+  if( !doFakedata && ( zp || combined ) ){ for(int bin=1; bin < zp_bins+1; bin++) collapsed_ext.push_back(0.0);}
+  if( !doFakedata && ( zp || combined ) ){ for(int bin=1; bin < zp_bins+1; bin++) collapsed_ext.push_back(h_1e0p_constr_ext->GetBinContent(bin));}
+  
+  if(!doFakedata){
+    for(int bin=1; bin < h_numu_ext->GetNbinsX()+1; bin++) collapsed_ext.push_back(h_numu_ext->GetBinContent(bin));
   }
 
+  std::cout << "C" << std::endl;
   //spectra without the ext bins   
   for(int i=0; i < num_bins_coll; i++){
     if(!doFakedata) sig_collvec_noext.push_back( sig_collvec[i] - collapsed_ext[i] );
     else sig_collvec_noext.push_back( sig_collvec[i] );
-    if(verbose) std::cout << "sig_collvec, sig_collvec_noext, collapsed_ext : " << sig_collvec[i] << ", " << sig_collvec_noext[i] << ", " << collapsed_ext[i] << std::endl;
   }
 
   //prepare matrices for the detector systematics 
@@ -336,7 +327,7 @@ int main(int argc, char* argv[])
   TMatrixD Mdetsys0(num_bins,num_bins);
   Mdetsys.Zero();
   Mdetsys0.Zero();
-  SBNchi chi_h1(sig_spectra);	
+  SBNchi chi_h1(sig_spectra);
   SBNchi chi_h0(bkg_spectra);	
   
   //fill in the full covariance detsys based on the values stored in SBNchi::FillDetSysMatrix
@@ -387,9 +378,8 @@ int main(int argc, char* argv[])
       fracdetsyscoll(i,j) = 0.0;
       if(sig_collvec[i] !=0 && sig_collvec[j] !=0 ) fracdetsyscoll(i,j) = detsyscoll(i,j)/(sig_collvec[i]*sig_collvec[j]);
       fracdetsyscoll_noext(i,j) = 0.0;
-      if(sig_collvec_noext[i] !=0 && sig_collvec_noext[j] !=0 ) fracdetsyscoll_noext(i,j) = detsyscoll(i,j)/(sig_collvec_noext[i]*sig_collvec_noext[j]);
+      if(sig_collvec_noext[i] !=0 && sig_collvec_noext[j] !=0 ) fracdetsyscoll(i,j) = detsyscoll(i,j)/(sig_collvec_noext[i]*sig_collvec_noext[j]);
       corrdetsyscoll(i,j) = 0.0;
-      if(i==j){ if(verbose) std::cout << "sig_collvec, sig_collvec_noext, fraccoll, fraccoll_noext: " << sig_collvec[i] << ", " << sig_collvec_noext[i] << ", " << fracdetsyscoll(i,j) << ", " << fracdetsyscoll_noext(i,j) << std::endl;}
       if(detsyscoll(i,j) != 0 ) corrdetsyscoll(i,j) = detsyscoll(i,j)/sqrt(detsyscoll(i,i)*detsyscoll(j,j));
     }
   }
@@ -408,12 +398,8 @@ int main(int argc, char* argv[])
   //print the collapsed matrix plots
   plot_one(Mcorrdetsys, sig_fullvec, subchannel_names, num_bins_full, tag+"_correlation_matrix", false);
   plot_one(Mfracdetsys, sig_fullvec, subchannel_names, num_bins_full, tag+"_fractional_covariance_matrix", false);
-  //for(int i=0; i < num_bins_coll_vec.size(); i++) std::cout << "num_bins_full = " << num_bins_full[i] << std::endl;
-  //for(int i=0; i < num_bins_coll_vec.size(); i++) std::cout << "num_bins_coll_vec = " << num_bins_coll_vec[i] << std::endl;
   plot_one(corrdetsyscoll, sig_collvec, channel_names_coll, num_bins_coll_vec, tag+"_correlation_matrix", true);
-  //for(int i=0; i < num_bins_coll_vec.size(); i++) std::cout << "num_bins_coll_vec = " << num_bins_coll_vec[i] << std::endl;
   plot_one(fracdetsyscoll, sig_collvec, channel_names_coll, num_bins_coll_vec, tag+"_fractional_covariance_matrix", true);
-  //for(int i=0; i < num_bins_coll_vec.size(); i++) std::cout << "num_bins_coll_vec = " << num_bins_coll_vec[i] << std::endl;
   
   //Load up our covariance matricies we calculated in example1 (we could also load up single variation ones)
   TFile * fsys = new TFile(Form("../bin/%s.SBNcovar.root",tag.c_str()),"read");
@@ -464,7 +450,6 @@ int main(int argc, char* argv[])
   }
 
   //add the detsys error
-  std::cout << detsyscoll.GetNrows() << std::endl;
   if(detsys){
     for(int i=0; i < detsyscoll.GetNrows(); i++){
       if(verbose) std::cout << tag << " adding detsys Matrix diag: " << sqrt(((*cov))(i,i)) << " + " << sqrt(detsyscoll(i,i)) << " = ";   
@@ -490,10 +475,11 @@ int main(int argc, char* argv[])
       if(verbose){ if(i==j) std::cout << tag << "  Matrix diag: " << sqrt((*cov)(i,i)) << ", " << sqrt(fraccov(i,j)) << std::endl;} 
     }
   }
-
+  
   //zero out these if the flags are not turned on
   if(!addext) collext.Zero();
   if(!mcerr) collapsed.Zero();
+   
   //calculate frac cov matrix and correlation matrix before constraint
   for(int i=0; i < (*cov).GetNrows(); i++){
     for(int j=0; j < (*cov).GetNcols(); j++){
@@ -503,19 +489,17 @@ int main(int argc, char* argv[])
       if(sig_collvec_noext[i] != 0 && sig_collvec_noext[j] != 0) fraccoll_noext(i,j) = (*cov)(i,j)/(sig_collvec_noext[i]*sig_collvec_noext[j]);
       corrcoll(i,j) = 0.0;
       if((*cov)(i,j) != 0 ) corrcoll(i,j) = (*cov)(i,j)/sqrt((*cov)(i,i)*(*cov)(j,j));
-      if(verbose){ if(i==j) std::cout << "sig_collvec, sig_collvec_noext, fraccoll, fraccoll_noext: " << sig_collvec[i] << ", " << sig_collvec_noext[i] << ", " << fraccoll(i,j) << ", " << fraccoll_noext(i,j) << std::endl;}
     }
   }
   
   //write out the diagonals of frac cov matrix before constraint only do this for the combined channels
-  if(combined && !doFakedata ){ 
+  if(combined && !doFakedata){ 
     for(int ic=0; ic<sig_spectra.num_channels; ic++){
       for( int i = 0; i < (*cov).GetNrows(); i++ ){
 	for( int j = 0; j < (*cov).GetNcols(); j++ ){
 	  if( i==j){
             int is = 2*ic; //0-->0, 1-->2, 2-->4, 3-->6
-            //std::cout << "is, ic = " << is << ", " <<ic<<std::endl;
-            if( i >= channel_edges[ic] && i < channel_edges[ic+1] ){ if(verbose) std::cout << "writing syst outfiles " << is  << " : " << sqrt(fraccoll(i,j)) << ", " << sqrt(fraccoll_noext(i,j)) << std::endl; outfiles[is]  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << " " << sig_collvec[i] << " " << sig_collvec_noext[i] << std::endl; }
+            if( i >= channel_edges[ic] && i < channel_edges[ic+1] ) outfiles[is]  << sqrt(fraccoll(i,j)) << " " << sqrt(fraccoll_noext(i,j)) << " " << sig_collvec[i] << " " << sig_collvec_noext[i] << std::endl;
 	  }// end if i==j 
 	}// end loop of matrix rows
       }// end loop of matrix cols
@@ -525,6 +509,7 @@ int main(int argc, char* argv[])
   //print the collapsed matrix plot
   plot_one(corrcoll, sig_collvec, channel_names_coll, num_bins_coll_vec, tag+"_correlation_matrix_xsecfluxdetsys", true);
   plot_one(fraccoll, sig_collvec, channel_names_coll, num_bins_coll_vec, tag+"_fractional_covariance_matrix_xsecfluxdetsys", true);
+  
   //loop over all channels
   for(int ic=0; ic<sig_spectra.num_channels; ic++){
     channel_hists[ic]->Reset();
@@ -532,7 +517,8 @@ int main(int argc, char* argv[])
     for(int bin=0; bin < channel_bins[ic]; bin++) channel_hists[ic]->SetBinContent(bin+1,sig_collvec[bin+channel_edges[ic]]);
     //set bin error
     for(int bin=0; bin < channel_bins[ic]; bin++) channel_hists[ic]->SetBinError(bin+1,sqrt((*cov)[bin+channel_edges[ic]][bin+channel_edges[ic]]));
-  } 
+  }
+  
 
   //prepare the tags to identify plots 
   if(fc) tag += "_fc"; 
@@ -547,90 +533,94 @@ int main(int argc, char* argv[])
   //and to use the numu data spectrum in the constraint
   TFile *f_data = new TFile(fakedata.c_str(),"read");
   //1eNp data
-  TH1D *h_nue_np_fake_data;
-  std::cout << "doFakedata, np, constr_mode = " << doFakedata << ", " << np << ", " << constr_mode << std::endl;
-
-  if( doFakedata && (np || combined) && constr_mode != 1 ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_sig_data");
-  if( doFakedata && (np || combined) && constr_mode == 1 ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_data");
+  TH1D *h_nue_np_fake_data, *h_nue_np_farSB_data;
+  if( doFakedata && (np || combined) ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_sig_data");
+  if( doFakedata && (np || combined) ) h_nue_np_farSB_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_constr_data");
   //1e0p data
-  TH1D *h_nue_0p_fake_data;
-  if( doFakedata && (zp || combined) && constr_mode != 1 ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_sig_data");
-  if( doFakedata && (zp || combined) && constr_mode == 1 ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_data");
-  //1eNp SB data
-  TH1D *h_1eNp_constr_data;
-  if( constr_mode != 1 && (np || combined) ) h_1eNp_constr_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_constr_data");
-  //1e0p SB data
-  TH1D *h_1e0p_constr_data;
-  if( constr_mode != 1 && (zp || combined) ) h_1e0p_constr_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_constr_data");
+  TH1D *h_nue_0p_fake_data, *h_nue_0p_farSB_data;
+  if( doFakedata && (zp || combined) ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_sig_data");
+  if( doFakedata && (zp || combined) ) h_nue_0p_farSB_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_constr_data");
   //numu data 
-  TH1D *h_numu_data = (TH1D*)f_data->Get("nu_uBooNE_numu_data");
-  std::cout << "h_nue_np_fake_data, h_nue_0p_fake_data, h_numu_data = " << h_nue_np_fake_data << ", " << h_nue_0p_fake_data << ", " << h_numu_data << std::endl;
-  std::cout << "h_1eNp_constr_data, h_1e0p_constr_data = " << h_1eNp_constr_data << ", " << h_1e0p_constr_data << std::endl;
+  TH1D *h_numu_data = (TH1D*)f_data->Get("nu_uBooNE_numu_constr_data");
+  //std::cout << "h_nue_np_fake_data = " << h_nue_np_fake_data->Integral() << std::endl;
   //prepare the sum histograms (LEE+BG)
   TH1D* h_1eNp_sum_before, *h_1eNp_bg_before; 
   TH1D* h_1e0p_sum_before, *h_1e0p_bg_before; 
   TH1D* h_1eNp_dummy, *h_1e0p_dummy; 
-  TH1D* h_numu_before; 
   TH1D* h_1eNp_constr_before, *h_1e0p_constr_before; 
+  TH1D* h_numu_before; 
+  //if(np || combined){
     for(int ic=0; ic<sig_spectra.num_channels; ic++){
       std::cout << channel_hists[ic]->GetName() << std::endl;
       std::string name = channel_hists[ic]->GetName();
+      std::cout << name << std::endl;
       if(name.find("1eNp_sig") != std::string::npos){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1eNp_sum_before = (TH1D*)channel_hists[ic]->Clone("Np_sum_lee");}
       if(name.find("1eNp_bg") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1eNp_bg_before  = (TH1D*)channel_hists[ic]->Clone("Np_bg");}
       if(name.find("1eNp_bg") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1eNp_dummy = (TH1D*)channel_hists[ic]->Clone("Np_dummy"); h_1eNp_dummy->Reset();}
       if(name.find("1e0p_sig") != std::string::npos){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_sum_before = (TH1D*)channel_hists[ic]->Clone("Zp_sum_lee");}
       if(name.find("1e0p_bg") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_bg_before  = (TH1D*)channel_hists[ic]->Clone("Zp_bg");}
       if(name.find("1e0p_bg") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_dummy = (TH1D*)channel_hists[ic]->Clone("Zp_dummy"); h_1e0p_dummy->Reset();}
-      if(name.find("1eNp_constr") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1eNp_constr_before  = (TH1D*)channel_hists[ic]->Clone("Np_constr");}
-      if(name.find("1e0p_constr") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_constr_before  = (TH1D*)channel_hists[ic]->Clone("Zp_constr");}
-      if(name.find("numu") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_numu_before = (TH1D*)channel_hists[ic]->Clone("numu_before"); }
+      if(name.find("1e0p_constr") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1e0p_constr_before = (TH1D*)channel_hists[ic]->Clone("1e0p_constr_before"); }
+      if(name.find("1eNp_constr") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_1eNp_constr_before = (TH1D*)channel_hists[ic]->Clone("1eNp_constr_before"); }
+      if(name.find("numu_constr") != std::string::npos ){ std::cout << "found: " << channel_hists[ic]->GetName() << std::endl; h_numu_before = (TH1D*)channel_hists[ic]->Clone("numu_before"); }
     }
     
+    std::cout << "1a" << std::endl;
     //1eNp before constraint
     if( np || combined ) h_1eNp_sum_before->Add(h_1eNp_bg_before);
     //1e0p before constraint
     if( zp || combined ) h_1e0p_sum_before->Add(h_1e0p_bg_before);
+    std::cout << "1b" << std::endl;
+    
     //Draw the before constraint plots
+    std::cout << "1c" << std::endl;
     if( np || combined ){
       cname = tag + "_before_constraint_1eNp";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_nue_np_fake_data, var_label, "#nu_{e} 1eNp0#pi Selection");	
-      else DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_1eNp_dummy, var_label, "#nu_{e} 1eNp0#pi Selection");
+      if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_nue_np_fake_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1eNp0#pi Selection");	
+      else DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_1eNp_dummy, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1eNp0#pi Selection");
     }	
+    std::cout << "1d" << std::endl;
     if( zp || combined ){
       cname = tag + "_before_constraint_1e0p";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_nue_0p_fake_data, var_label, "#nu_{e} 1e0p0#pi Selection");	
-      else DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_1e0p_dummy, var_label, "#nu_{e} 1e0p0#pi Selection");
+      if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_nue_0p_fake_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1e0p0#pi Selection");	
+      else DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_1e0p_dummy, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1e0p0#pi Selection");
     }	
+    std::cout << "1" << std::endl;
+    if( np || combined ){
+      cname = tag + "_before_constraint_1eNp_constr";
+      if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_constr_before, h_1eNp_constr_before, h_nue_np_farSB_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1eNp0#pi Far SB Selection");	
+    }	
+    if( zp || combined ){
+      cname = tag + "_before_constraint_1e0p_constr";
+      if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_constr_before, h_1e0p_constr_before, h_nue_0p_farSB_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1e0p0#pi Far SB Selection");	
+    }	
+    std::cout << "2" << std::endl;
+  //}
  
   //======================================================
   // THIS IS THE START OF THE CONSTRAINT PROCEDURE
   //======================================================
  
   //calculate the difference betweeen numu data and mc 
-  //to be used in the constraint procedure
-  int np_constr_bin=0, zp_constr_bin=0,numu_data_bin=0;
-
-  if(h_1eNp_constr_data) np_constr_bin = h_1eNp_constr_data->GetNbinsX();
-  if(h_1e0p_constr_data) zp_constr_bin = h_1e0p_constr_data->GetNbinsX();
-  if(h_numu_data) numu_data_bin = h_numu_data->GetNbinsX();
-  //std::cout << "np_constr_bin, zp_constr_bin, numu_data_bin = " << np_constr_bin << ", " << zp_constr_bin << ", " << numu_data_bin << std::endl;
-  for(int bin=0; bin < np_constr_bin; bin++) numu_data_vec.push_back(h_1eNp_constr_data->GetBinContent(bin+1)); 
-  for(int bin=0; bin < zp_constr_bin; bin++) numu_data_vec.push_back(h_1e0p_constr_data->GetBinContent(bin+1)); 
-  for(int bin=0; bin < numu_data_bin; bin++) numu_data_vec.push_back(h_numu_data->GetBinContent(bin+1));
-  numu_bins = numu_data_vec.size();
-  //std::cout << "nue_bins, numu_bins = " << nue_bins << ", " << numu_bins << std::endl;
-  for(int bin=0; bin < numu_bins; bin++) numu_vec.push_back(sig_collvec[nue_bins+bin]);
-  for(int bin=0; bin < numu_bins; bin++) delta_numu.push_back(numu_data_vec[bin]-numu_vec[bin]);
+  //to be used in the constraint procedure 
+  for(int bin=0; bin < constr_bins; bin++) numu_data_vec.push_back(h_nue_np_farSB_data->GetBinContent(bin+1)); 
+    std::cout << "3" << std::endl;
+  for(int bin=0; bin < constr_bins; bin++) numu_data_vec.push_back(h_numu_data->GetBinContent(bin+1)); 
+    std::cout << "4" << std::endl;
+  for(int bin=0; bin < constr_bins; bin++ ) numu_vec.push_back(sig_collvec[nue_bins+bin]);
+    std::cout << "5" << std::endl;
+  for(int bin=0; bin < constr_bins; bin++ ) delta_numu.push_back(numu_data_vec[bin]-numu_vec[bin]);
+    std::cout << "6" << std::endl;
 
   if(verbose){
-    for(int bin=0; bin < numu_bins; bin++ ) std::cout << "bin, numu data, numu mc, delta_numu = " << bin << ", " << numu_data_vec[bin] << ", " << numu_vec[bin] << ", " << delta_numu[bin] << std::endl; 
+    for(int bin=0; bin < constr_bins; bin++ ) std::cout << "numu data, numu mc, delta_numu = " << numu_data_vec[bin] << ", " << numu_vec[bin] << ", " << delta_numu[bin] << std::endl; 
   }
 
   //Block Matrices
-  TMatrixD numumatrix(numu_bins,numu_bins);
-  TMatrixD InvertNumu(numu_bins,numu_bins);
-  TMatrixD nuenumumatrix(nue_bins,numu_bins);
-  TMatrixD numunuematrix(numu_bins,nue_bins);
+  TMatrixD numumatrix(constr_bins,constr_bins);
+  TMatrixD InvertNumu(constr_bins,constr_bins);
+  TMatrixD nuenumumatrix(nue_bins,constr_bins);
+  TMatrixD numunuematrix(constr_bins,nue_bins);
   TMatrixD nuematrix(nue_bins,nue_bins);
   
   for( int i = 0; i < cov->GetNcols(); i++ ){
@@ -642,36 +632,35 @@ int main(int argc, char* argv[])
     }
   }
 
+  //if( np || combined){
     TMatrixT<double> invertnumumatrix = chi_h0.InvertMatrix(numumatrix);
     std::cout << "invert matrix: " << std::endl;
     invertnumumatrix.Print();
-    float** invmatrix = new float*[numu_bins];
-    for(int i=0; i < numu_bins; i++){
-      invmatrix[i] = new float[numu_bins];
+    float** invmatrix = new float*[constr_bins];
+    for(int i=0; i < constr_bins; i++){
+      invmatrix[i] = new float[constr_bins];
     }
-    for(int i=0; i < numu_bins; i++){
-      for(int j=0; j < numu_bins; j++){
+    for(int i=0; i < constr_bins; i++){
+      for(int j=0; j < constr_bins; j++){
         invmatrix[i][j] = invertnumumatrix[i][j];
       }
     }
-    float* mc = new float[numu_bins];
-    float* data = new float[numu_bins];
+    float* mc = new float[constr_bins];
+    float* data = new float[constr_bins];
     std::vector<double> datavec;
-    datavec.resize(numu_bins);
-    for(int i=0; i < numu_bins; i++){
-      mc[i] = numu_vec[i];
-      data[i] = numu_data_vec[i];
-      datavec[i] = numu_data_vec[i];
+    datavec.resize(constr_bins);
+    for(int i=0; i < constr_bins; i++){
+      mc[i] = h_numu_data->GetBinContent(i+1);
+      data[i] = h_numu_data->GetBinContent(i+1);
+      datavec[i] = h_numu_data->GetBinContent(i+1);
     }
-    float chi2 = CalcChi(invmatrix,mc,data,numu_bins);
+    //std::cout << "9  " << invmatrix[2][2] << ", " << mc[2] << ", " << data[1] << std::endl;
+    float chi2 = CalcChi(invmatrix,mc,data,h_numu_before->GetNbinsX());
     //double chi2 = chi_h0.CalcChi(datavec);
+    std::cout << "chi2 = " << chi2 << std::endl;
     cname = tag + "_before_constraint_numu";
-    if( h_numu_data ) DrawDataMCAndSyst(cname, h_numu_before, h_numu_before, h_numu_data, var_label, "#nu_{#mu} Selection", chi2);	
-    cname = tag + "_before_constraint_1eNp_SB";
-    if( (np || combined ) && doFakedata && constr_mode != 1 ) DrawDataMCAndSyst(cname, h_1eNp_constr_before, h_1eNp_constr_before, h_1eNp_constr_data, var_label, "1eNp0#pi #nu_{e} Far Sideband Selection", chi2);	
-    cname = tag + "_before_constraint_1e0p_SB";
-    if( (zp || combined ) && doFakedata && constr_mode != 1 ) DrawDataMCAndSyst(cname, h_1e0p_constr_before, h_1e0p_constr_before, h_1e0p_constr_data, var_label, "1e0p0#pi #nu_{e} Far Sideband Selection", chi2);	
-
+    DrawDataMCAndSyst(cname, h_numu_before, h_numu_before, h_numu_data, "Reconstructed Visible Energy [GeV]", "#nu_{#mu} Selection", chi2);	
+  //}
   //add the stats error to the cov matrix
   for( int i = 0; i < numumatrix.GetNcols(); i++ ){ 
     numumatrix(i,i) += numu_vec[i];
@@ -685,25 +674,19 @@ int main(int argc, char* argv[])
     std::cout << "Decomposition failed, matrix singular ?" << std::endl;
   }else{
     InvertNumu = numumatrix.Invert();
+    if(verbose) InvertNumu.Print();
   }
   
   //multiply the block matrices to get the matrices used to
   //constraint the systematics: Matrix B
   //constraint the spectrum: Matrix C
-  std::cout << "numunuematrix.GetNrows(), nuematrix.GetNrows(),nuenumumatrix.GetNrows() = " << numunuematrix.GetNrows() << ", " << nuematrix.GetNrows() << ", " << nuenumumatrix.GetNrows() << std::endl; 
-  std::cout << "numunuematrix.GetNcols(), nuematrix.GetNcols(),nuenumumatrix.GetNcols() = " << numunuematrix.GetNcols() << ", " << nuematrix.GetNcols() << ", " << nuenumumatrix.GetNcols() << std::endl; 
+  std::cout << "nuenumumatrix.GetNrows(), nuematrix.GetNrows(),nuenumumatrix.GetNrows() = " << nuenumumatrix.GetNrows() << ", " << nuematrix.GetNrows() << ", " << nuenumumatrix.GetNrows() << std::endl; 
   TMatrixD A(nuenumumatrix.GetNrows(),nuenumumatrix.GetNcols());
   TMatrixD B(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD C(nuenumumatrix.GetNrows(),nuenumumatrix.GetNcols()); 
   A.Mult(nuenumumatrix,InvertNumu);
   B.Mult(A,numunuematrix);
   C.Mult(nuenumumatrix,InvertNumu);
-  if(verbose) std::cout << "InvertNumu: " << std::endl;
-  if(verbose) InvertNumu.Print();
-  if(verbose) std::cout << "nuenumumatrix: " << std::endl;
-  if(verbose) nuenumumatrix.Print();
-  if(verbose) std::cout << "C: " << std::endl;
-  if(verbose) C.Print();
   
   //constrained spectrum 
   std::vector<double> input_nue_constrained;
@@ -713,24 +696,18 @@ int main(int argc, char* argv[])
     double scaled = 0.;
     for( int biny = 0; biny < delta_numu.size(); biny++ ){
       scaled += C(binx,biny) * delta_numu[biny];
-      if(verbose) std::cout << "binx, biny, delta_numu, C(binx,biny), scaled = " << binx << ", " << biny << ", " << delta_numu[biny] << ", " << C(binx,biny) << ", " << scaled << std::endl;
+      if(verbose) std::cout << "binx, biny, delta_numu = " << binx << ", " << biny << ", " << delta_numu[biny] << ", " << C(binx,biny) << ", " << scaled << std::endl;
     }
     double constnue =  sig_collvec[binx] + scaled;
     double constnue_noext;
     if(!doFakedata) constnue_noext =  sig_collvec[binx] + scaled - collapsed_ext[binx];
     else constnue_noext =  sig_collvec[binx] + scaled;
-    if(verbose) std::cout << "check that constrained results make sense: binx, sig_collvec[binx], scaled,constnue = " << binx << ", " << sig_collvec[binx] << ", " << scaled << ", " << constnue << std::endl;
+    if(verbose) std::cout << "check that constrained results make sense: binx, scaled = " << binx << ", " << scaled << std::endl;
     input_nue_constrained.push_back(constnue);
-    //std::cout << "constnue_noext: " << std::endl;
     if(!doFakedata) input_nue_constrained_noext.push_back(constnue_noext);
     else input_nue_constrained_noext.push_back(constnue);
   }
-  for( int binx = 0; binx < nue_bins; binx++ ) std::cout << "check constnue! " << input_nue_constrained[binx] << std::endl;
  
-  //======================================================
-  // THIS IS THE END OF THE CONSTRAINT PROCEDURE
-  //======================================================
-
   //constrained systematics 
   TMatrixD constnuematrix(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD fracnuematrix(nuematrix.GetNrows(),nuematrix.GetNcols());
@@ -740,6 +717,7 @@ int main(int argc, char* argv[])
   TMatrixD fracnue_signal(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD fracnue_noext_signal(nuematrix.GetNrows(),nuematrix.GetNcols());
   TMatrixD corrnue_signal(nuematrix.GetNrows(),nuematrix.GetNcols());
+  std::cout << "nue rows, cols: " << nuematrix.GetNrows() << ", " << nuematrix.GetNcols() << std::endl;
   for( int i = 0; i < nuematrix.GetNrows(); i++ ){
     for( int j = 0; j < nuematrix.GetNcols(); j++ ){
       constnuematrix(i,j) = nuematrix(i,j) - B(i,j);
@@ -760,7 +738,12 @@ int main(int argc, char* argv[])
       if(channel_bins.size() == 7 && (i >= channel_signalbins[3] && i < channel_bins[3]) || (i >= channel_signalbins[4] && i < channel_bins[4]) || (j >= channel_signalbins[3] && j < channel_bins[3]) || (j >= channel_signalbins[4] && j < channel_bins[4]) ){ fracnue_signal(i,j) = 0.0; covnue_signal(i,j) = 0.0; corrnue_signal = 0.0; fracnue_noext_signal = 0.0;}
     }
   }
-  for( int binx = 0; binx < nue_bins; binx++ ) std::cout << "check constnue! " << input_nue_constrained[binx] << std::endl;
+  std::cout << "end of constraint" << std::endl;
+  //======================================================
+  // THIS IS THE END OF THE CONSTRAINT PROCEDURE
+  //======================================================
+
+
   //write out the diagonals of the frac covariance matrix to the tex format
   if(combined && !doFakedata){ 
     for(int ic=0; ic<sig_spectra.num_channels; ic++){
@@ -769,36 +752,21 @@ int main(int argc, char* argv[])
 	for( int j = 0; j < nuematrix.GetNcols(); j++ ){
 	  if( i==j){
 	    int is = 2*ic+1;//0-->1,1-->3,2-->5,3-->7
-	    if( i >= channel_edges[ic] && i < channel_edges[ic+1] ){  if(verbose) std::cout << "writing syst: " << std::endl; outfiles[is]  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << " " << input_nue_constrained[i] << " " << input_nue_constrained_noext[i] << std::endl; }
+	    if( i >= channel_edges[ic] && i < channel_edges[ic+1] ) outfiles[is]  << sqrt(fracnuematrix(i,j)) << " " << sqrt(fracnuematrix_noext(i,j)) << " " << input_nue_constrained[i] << " " << input_nue_constrained_noext[i] << std::endl;
 	  }// end if i==j 
 	}// end loop of matrix rows
       }// end loop of matrix cols
     }// end loop of channels 
   }// end if we are computing combined channels and not fakedata
-
+  
+  std::cout << "A" << std::endl;
   //loop over all channels
-  int constraint_channels = 0;
-  int constraint_bins = 0;
-  if(constr_mode == 1) constraint_channels = 1;
-  else if(constr_mode == 2 && np) constraint_channels = 1;
-  else if(constr_mode == 2 && zp) constraint_channels = 1;
-  else if(constr_mode == 2 && combined) constraint_channels = 2;
-  else if(constr_mode == 3 && np) constraint_channels = 2;
-  else if(constr_mode == 3 && zp) constraint_channels = 2;
-  else if(constr_mode == 3 && combined) constraint_channels = 3;
-  if(constr_mode == 1) constraint_bins = numu_bins;
-  else if(constr_mode == 2) constraint_bins = np_constr_bins+zp_constr_bins;
-  else if(constr_mode == 3) constraint_bins = np_constr_bins+zp_constr_bins+numu_bins;
-
-  //std::cout << "constraint_channels, bins = " << constraint_channels << ", " << constraint_bins << std::endl;
-  for( int binx = 0; binx < nue_bins; binx++ ) std::cout << "check constnue! " << input_nue_constrained[binx] << std::endl;
-  for(int ic=0; ic<sig_spectra.num_channels-constraint_channels; ic++){
+  for(int ic=0; ic<sig_spectra.num_channels-1; ic++){
     //set bin content
-    for(int bin=0; bin < channel_bins[ic]; bin++){
+    for(int bin=0; bin < channel_bins[ic]; bin++){ 
       channel_hists_after[ic]->SetBinContent(bin+1,input_nue_constrained[bin+channel_edges[ic]]);
       channel_hists_after[ic]->SetBinError(bin+1,sqrt((constnuematrix)[bin+channel_edges[ic]][bin+channel_edges[ic]]));
       if(channel_hists_after[ic]->GetBinContent(bin+1) < 0 ) channel_hists_after[ic]->SetBinContent(bin+1,0.);
-      //std::cout << "bin, channel_edges, ic, " << channel_hists_after[ic]->GetName() << " : " << bin << ", " << channel_edges[ic] << ", " << ic << ", " << input_nue_constrained[bin+channel_edges[ic]] << std::endl; 
     }
     //set bin content
     for(int bin=0; bin < channel_signalbins[0]; bin++){ 
@@ -809,16 +777,10 @@ int main(int argc, char* argv[])
     //set bin error -- note that the new FC code adds the mc stats separately
     //in our case the MC stats is already added to the resulting covariance matrix
     //the fc flag is still in testing mode and need further validation
-    //std::cout << "ic, nue_bins, channel_bins: " << ic << ", " << nue_bins << ", " << channel_bins.size() << "  constnuematrix = " << constnuematrix.GetNrows() << ", " <<  constnuematrix.GetNcols() << std::endl;
-    //for( int i=0; i< channel_bins[ic].size(); i++ ) channel_edges[i] = 0;
-    if(fc){  for(int bin=0; bin < nue_bins; bin++) channel_hists_after[ic]->SetBinError(bin+1,sqrt(mc_stats_collapsed[bin+channel_edges[ic]][bin+channel_edges[ic]])); }
-    else{ 
-      for(int bin=0; bin < nue_bins; bin++){ 
-	//std::cout << "nue_bins, bin, ic, channel_edges, bin+channel_edges[ic], constnuematrix[bin+channel_edges[ic]][bin+channel_edges[ic]] = " <<  nue_bins << ", " << bin << ", " << ic << ", " << channel_edges[ic] << ", " << bin+channel_edges[ic] << ", " << constnuematrix[bin+channel_edges[ic]][bin+channel_edges[ic]] << std::endl;
-	channel_hists_after[ic]->SetBinError(bin+1,sqrt(constnuematrix[bin+channel_edges[ic]][bin+channel_edges[ic]])); 
-      }
-    }
+    if(fc){  for(int bin=0; bin < channel_bins[ic]; bin++) channel_hists_after[ic]->SetBinError(bin+1,sqrt(mc_stats_collapsed[bin+channel_edges[ic]][bin+channel_edges[ic]])); }
+    else{ for(int bin=0; bin < channel_bins[ic]; bin++) channel_hists_after[ic]->SetBinError(bin+1,sqrt(constnuematrix[bin+channel_edges[ic]][bin+channel_edges[ic]])); }
   }
+  std::cout << "B" << std::endl;
 
   TH1D *h_1eNp_data_signal, *h_1e0p_data_signal;
   //1eNp data
@@ -831,22 +793,23 @@ int main(int argc, char* argv[])
   h_1e0p_data_signal->Reset();
   for(int bin=0; bin < h_1e0p_data_signal->FindBin(0.85)-1; bin++) h_1e0p_data_signal->SetBinContent(bin+1,h_nue_0p_fake_data->GetBinContent(bin+1));
   for(int bin=0; bin < h_1e0p_data_signal->FindBin(0.85)-1; bin++) h_1e0p_data_signal->SetBinError(bin+1,h_nue_0p_fake_data->GetBinError(bin+1)); }
+  
+  std::cout << "C" << std::endl;
 
   //Draw the after constraint
   TH1D* h_1eNp_sum, *h_1eNp_bg; 
   TH1D* h_1e0p_sum, *h_1e0p_bg; 
   //if(np || combined){
     for(int ic=0; ic<sig_spectra.num_channels; ic++){
-      //std::cout << channel_hists_after[ic]->GetName() << std::endl;
+      std::cout << channel_hists_after[ic]->GetName() << std::endl;
       std::string name = channel_hists_after[ic]->GetName();
       if(name.find("1eNp_sig_after") != std::string::npos ){ std::cout << "found: " << channel_hists_after[ic]->GetName() << std::endl; h_1eNp_sum = (TH1D*)channel_hists_after[ic]->Clone("Np_sum_lee_after");}
-      if(name.find("1eNp_bg_after") != std::string::npos  ){ std::cout << "found: " << channel_hists_after[ic]->GetName() << " " << channel_hists_after[ic]->Integral() << std::endl; h_1eNp_bg  = (TH1D*)channel_hists_after[ic]->Clone("Np_bg_after");}
+      if(name.find("1eNp_bg_after") != std::string::npos  ){ std::cout << "found: " << channel_hists_after[ic]->GetName() << std::endl; h_1eNp_bg  = (TH1D*)channel_hists_after[ic]->Clone("Np_bg_after");}
       if(name.find("1e0p_sig_after") != std::string::npos ){ std::cout << "found: " << channel_hists_after[ic]->GetName() << std::endl; h_1e0p_sum = (TH1D*)channel_hists_after[ic]->Clone("Zp_sum_lee_after");}
       if(name.find("1e0p_bg_after") != std::string::npos  ){ std::cout << "found: " << channel_hists_after[ic]->GetName() << std::endl; h_1e0p_bg  = (TH1D*)channel_hists_after[ic]->Clone("Zp_bg_after");}
     }
     
     //1eNp after constraint
-    //std::cout << "h_1eNp_bg->Integral(),  h_1eNp_sum->Integral(): " << h_1eNp_bg->Integral() << ", " << h_1eNp_sum->Integral() << std::endl;
     if( np || combined ) h_1eNp_sum->Add(h_1eNp_bg);
     //1e0p after constraint
     if( zp || combined ) h_1e0p_sum->Add(h_1e0p_bg);
@@ -854,16 +817,17 @@ int main(int argc, char* argv[])
     //Draw the before constraint plots
     if( np || combined ){
       cname = tag + "after_constraint_1eNp";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_sum, h_1eNp_bg, h_nue_np_fake_data, var_label, "#nu_{e} 1eNp0#pi Selection");	
-      else DrawDataMCAndSyst(cname, h_1eNp_sum, h_1eNp_bg, h_1eNp_dummy, var_label, "#nu_{e} 1eNp0#pi Selection");
+      if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_sum, h_1eNp_bg, h_nue_np_fake_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1eNp0#pi Selection");	
+      else DrawDataMCAndSyst(cname, h_1eNp_sum, h_1eNp_bg, h_1eNp_dummy, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1eNp0#pi Selection");
     }	
     if( zp || combined ){
       cname = tag + "after_constraint_1e0p";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_sum, h_1e0p_bg, h_nue_0p_fake_data, var_label, "#nu_{e} 1e0p0#pi Selection");	
-      else DrawDataMCAndSyst(cname, h_1e0p_sum, h_1e0p_bg, h_1e0p_dummy, var_label, "#nu_{e} 1e0p0#pi Selection");
+      if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_sum, h_1e0p_bg, h_nue_0p_fake_data, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1e0p0#pi Selection");	
+      else DrawDataMCAndSyst(cname, h_1e0p_sum, h_1e0p_bg, h_1e0p_dummy, "Reconstructed Visible Energy [GeV]", "#nu_{e} 1e0p0#pi Selection");
     }	
   //}
   
+  std::cout << "D" << std::endl;
   //For the unconstrained matrix, we need to make the number of columns to be consistent with the number of the nue bins
   //Basically we are making a copy of the covariance matrix without the numu part
   TMatrixD covnue(nuematrix.GetNrows(),nuematrix.GetNcols());
@@ -884,6 +848,7 @@ int main(int argc, char* argv[])
     }
   }
  
+  std::cout << "E" << std::endl;
   //write out the output 
   TFile * fspec = new TFile(Form("constrained_%s.SBNspec.root",tag.c_str()),"recreate");
   fspec->cd();
@@ -903,6 +868,7 @@ int main(int argc, char* argv[])
     (TH1D*)channel_hists_after[ic]->Write(title.c_str());
   }
   fspec->Close();
+  std::cout << "F" << std::endl;
   TFile * fspec2 = new TFile(Form("unconstrained_%s.SBNspec.root",tag.c_str()),"recreate");
   fspec2->cd();
   //loop over all channels
@@ -922,6 +888,7 @@ int main(int argc, char* argv[])
   }
   fspec2->Close();
   
+  std::cout << "G" << std::endl;
   //write out the output 
   TFile * fspec3 = new TFile(Form("constrained_%s_signal.SBNspec.root",tag.c_str()),"recreate");
   fspec3->cd();
@@ -942,6 +909,7 @@ int main(int argc, char* argv[])
   }
   fspec3->Close();
   
+  std::cout << "H" << std::endl;
   //write out the output 
   TFile * fspec4 = new TFile(Form("constrained_%s_signal_DATA.SBNspec.root",tag.c_str()),"recreate");
   fspec4->cd();
@@ -949,6 +917,7 @@ int main(int argc, char* argv[])
   if( doFakedata && ( combined || zp ) ) (TH1D*)h_1e0p_data_signal->Write("nu_uBooNE_1e0p_data");
   fspec4->Close();
   
+  std::cout << "I" << std::endl;
   TFile * fcovar = new TFile(Form("constrained_%s.SBNcovar.root",tag.c_str()),"recreate");
   fcovar->cd();
   (TMatrixD*)constnuematrix.Write("full_covariance");
@@ -956,6 +925,7 @@ int main(int argc, char* argv[])
   (TMatrixD*)corrnuematrix.Write("full_correlation");
   fcovar->Close();
   
+  std::cout << "J" << std::endl;
   TFile * fcovar2 = new TFile(Form("unconstrained_%s.SBNcovar.root",tag.c_str()),"recreate");
   fcovar2->cd();
   (TMatrixD*)covnue.Write("full_covariance");
@@ -963,6 +933,7 @@ int main(int argc, char* argv[])
   (TMatrixD*)corrnue.Write("full_correlation");
   fcovar2->Close();
   
+  std::cout << "K" << std::endl;
   TFile * fcovar3 = new TFile(Form("constrained_%s_signal.SBNcovar.root",tag.c_str()),"recreate");
   fcovar3->cd();
   (TMatrixD*)covnue_signal.Write("full_covariance");
@@ -970,20 +941,18 @@ int main(int argc, char* argv[])
   (TMatrixD*)corrnue_signal.Write("full_correlation");
   fcovar3->Close();
   
+  std::cout << "L" << std::endl;
   TFile * fcollext = new TFile(Form("collapsed_zero_ext_bin_%s.SBNcovar.root",tag.c_str()),"recreate");
   fcollext->cd();
   (TMatrixD*)collext.Write("full_covariance");
   fcollext->Close();
- 
-  std::cout << "pval, 0.12; sigma = " << sqrt(2)*TMath::ErfInverse(1-0.12) << std::endl;
- 
+  
   return 0;
   
 }
 
 void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::string var, std::string title, double chi2){
- 
-  //std::cout << "cname: " << cName << std::endl; 
+  
   TCanvas can(cName,cName,1200,800);
   
   TH1D* tmpMC1 = (TH1D*)MC1->Clone("tempCV");
@@ -1004,8 +973,7 @@ void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::str
   for( int bin = 1; bin < tmpMC2_staterr->GetNbinsX()+1; bin++){ tmpMC2_staterr->SetBinError(bin,sqrt(tmpMC2_staterr->GetBinContent(bin))); }
   tmpratio2->Reset();
   tmpratio2->Divide(tmpData,tmpMC2_staterr,1.0,1.0,"B");
-  if(verbose) std::cout << "data, mc nolee = " << tmpData->Integral() << ", " << tmpMC2->Integral() << std::endl;
-  if(verbose) std::cout << "data, mc lee = " << tmpData->Integral() << ", " << tmpMC1->Integral() << std::endl;
+  if(verbose) std::cout << "nbins data, mc nolee = " << tmpData->Integral() << ", " << tmpMC2->Integral() << std::endl;
 
   TH1D* tmpsys = (TH1D*)MC2->Clone("tempSysRatio");
   TH1D* tmpsys2 = (TH1D*)MC1->Clone("tempSysRatio1");
@@ -1013,7 +981,7 @@ void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::str
   for( int bin = 1; bin < tmpsys->GetNbinsX()+1; bin++){
     tmpsys->SetBinContent(bin,1.0);
     tmpsys->SetBinError(bin,tmpMC2->GetBinError(bin)/tmpMC2->GetBinContent(bin));
-    if(verbose) std::cout << "bin, tempSys MC2 content, error " << bin << ", " << tmpsys->GetBinContent(bin) << ", " << tmpsys->GetBinError(bin) << std::endl;
+    if(verbose) std::cout << "tempSys MC2 " << tmpsys->GetBinError(bin) << std::endl;
     tmpsys2->SetBinContent(bin,1.0);
     tmpsys2->SetBinError(bin,tmpMC1->GetBinError(bin)/tmpMC1->GetBinContent(bin));
     if(verbose) std::cout << "tempSys MC1 " << tmpsys2->GetBinError(bin) << std::endl;
@@ -1086,7 +1054,7 @@ void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::str
   sysErr2->Draw("E2 same");
   tmpMC1->Draw("hist same"); 
   tmpMC2->Draw("hist same"); 
-  if(title == "#nu_{e} Near Sideband Selection" || title == "#nu_{#mu} Selection" || std::string(cName).find("fakedata") != std::string::npos ) tmpData->Draw("PE same"); 
+  if(title == "#nu_{#mu} Selection" || std::string(cName).find("fakedata") != std::string::npos ) tmpData->Draw("PE same"); 
    tmpData->Draw("PE same");
 
    TLatex latex;
@@ -1262,13 +1230,14 @@ void DrawDataMCAndSyst(TString cName, TH1D* MC1, TH1D* MC2, TH1D* data, std::str
 }
 
 void plot_one(TMatrixD matrix, std::vector<double> spectrum, std::vector<std::string> channel_names, std::vector<int> num_bins, std::string tag, bool collapsed){
-    gStyle->SetPalette(kLightTemperature);
+    gStyle->SetPalette(kRedBlue);
     std::string title;
     if(collapsed) title = "Collapsed";
     else title = "Full";
     if(tag.find("correlation") != std::string::npos ) title = title + " Correlation Matrix";
     else if(tag.find("frac") != std::string::npos ) title = title + " Fractional Covariance Matrix";
     else title = title + " Covariance Matrix";
+
     int num_bins_total = matrix.GetNrows();
     TH2D h2_full(matrix);
     //h2_full.SetName((tag+"_th2d").c_str());
@@ -1282,9 +1251,8 @@ void plot_one(TMatrixD matrix, std::vector<double> spectrum, std::vector<std::st
     h2_full.GetXaxis()->SetTitle("Global Bin Number");
     h2_full.GetYaxis()->SetTitle(" ");
     h2_full.GetYaxis()->SetLabelSize(0);
-    if( tag.find("frac") != std::string::npos ) h2_full.SetMaximum(0.25);
-    if( tag.find("corr") != std::string::npos ) h2_full.SetMaximum(1.0);
-    if( tag.find("corr") != std::string::npos ) h2_full.SetMinimum(0.0);
+    if( tag.find("frac") != std::string::npos || tag.find("corr") != std::string::npos ) h2_full.SetMaximum(1.0);
+    if( tag.find("corr") != std::string::npos ) h2_full.SetMinimum(-1.0);
     if( tag.find("frac") != std::string::npos ) h2_full.SetMinimum(0.0);
 
     c_full->SetFrameFillColor(kWhite);
@@ -1313,9 +1281,7 @@ void plot_one(TMatrixD matrix, std::vector<double> spectrum, std::vector<std::st
         lh->SetLineWidth(3);
         lv->SetLineColor(kRed);
         lh->SetLineColor(kRed);
-        //std::cout << "num_bins.at(ic) = " << num_bins.at(ic) << std::endl;
         use_full+=num_bins.at(ic);
-        //std::cout << "use_full: " <<use_full<< std::endl;
         lv->Draw();
         lh->Draw();
 

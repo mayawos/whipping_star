@@ -104,9 +104,9 @@ std::cout << "5" << std::endl;
 void plot_one(TMatrixD matrix, std::string tag){
     gStyle->SetPalette(kLightTemperature);
     std::vector<TString> channel_names = {"1eNp0pi","1e0p0pi", "nu_mu"};
-    int num_channels = 3;
+    int num_channels = 5;
     int num_bins_total = matrix.GetNrows();
-    std::vector<int> num_bins = {14,14,14}; 
+    std::vector<int> num_bins = {10,10,14}; 
 
     TH2D h2_full(matrix);
     h2_full.SetName((tag+"_th2d").c_str());

@@ -183,6 +183,7 @@ namespace sbn{
 
             float PoissonLogLiklihood(float * h0_corein, float *collapsed);
             float CalcChi_CNP(float * pred, float* data);
+            float CalcChi_Pearson(float * pred, float* data);
             double CalcChi(TMatrixT<double> M, std::vector<double>& spec, std::vector<double>& data);
 
             std::vector<std::vector<double >> TMatrixDToVector(TMatrixT <double> McI);
@@ -239,7 +240,8 @@ namespace sbn{
 
             //pelee fakedata and detsys specific function
             std::vector<CLSresult> Mike_NP_fakedata(SBNspec *specin, std::vector<float> fakedata, std::vector<float> &chidata, SBNchi &chi_h0, SBNchi & chi_h1, int num_MC, int which_sample, int id);
-            void FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool useBDT = true );
+            void FillDetSysMatrix(TMatrixT <double> &M, SBNspec core_spectrum, bool useBDT, std::string tag );
+            std::vector<double> GetDetsys(std::string channel, std::string tag, std::string signal_region, int bin );
     };
 
 

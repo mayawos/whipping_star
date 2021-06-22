@@ -586,9 +586,23 @@ for(int j=0; j < num_files; j++){
     int nevents = std::min(montecarlo_maxevents[j], nentries[j]);
     std::cout << otag<<" Starting @ data file=" << files[j]->GetName() <<" which has "<<nevents<<" Events. "<<std::endl;
     size_t nbytes = 0;
+    Double_t reco_e;
+    Double_t nprotons;
+    Double_t protonangle;
+    Double_t thetasum;
+    Double_t protonenergy;
+    trees.at(j)->SetBranchAddress("reco_e", &reco_e);
+    trees.at(j)->SetBranchAddress("nprotons", &nprotons);
+    trees.at(j)->SetBranchAddress("thetasum", &thetasum);
+    trees.at(j)->SetBranchAddress("protonangle", &protonangle);
+    trees.at(j)->SetBranchAddress("protonenergy", &protonenergy);
     for(int i=0; i < nevents; i++) {
         if(i%100==0)std::cout<<otag<<" -- uni :"<<i<<" / "<<nevents<<std::endl;
         nbytes+= trees[j]->GetEntry(i);
+        //std::cout << "getting reco e" << std::endl;
+        //if( ( std::string(files[j]->GetName()).find("numu") == std::string::npos ) && reco_e < 0.65 ) continue; 
+        //if( ( std::string(files[j]->GetName()).find("numu") != std::string::npos ) && nprotons == 0 ) continue; 
+        //std::cout << "reco_e, nprotons, proton angle, proton energy = " << reco_e << ", " << nprotons << ", " << protonangle << ", " << protonenergy << std::endl; 
         ProcessEvent(*(f_weights[j]),j,i);
     } //end of entry loop
     std::cout << otag<<" nbytes read=" << nbytes << std::endl;
@@ -636,7 +650,8 @@ void SBNcovariance::ProcessEvent(
         ss << "SBNcovariance::ProcessEvent\t||\tERROR  error @ " << entryid
             << " in File " << montecarlo_file.at(fileid) 
             << " as its either inf/nan: " << global_weight << std::endl;
-        throw std::runtime_error(ss.str());
+        global_weight = 1.0;
+        //throw std::runtime_error(ss.str());
     }
     if(global_weight < 0) std::cout<<"ERROR! the global weight is negative: " << global_weight <<  ", " << montecarlo_additional_weight_formulas[fileid]->GetNdata() << std::endl;
     if(!EventSelection(fileid)) return;
@@ -1080,6 +1095,7 @@ int SBNcovariance::FormCovarianceMatrix(std::string tag){
 
     fout->Close();
 
+    std::cout << "tag: " << std::endl;
     spec_central_value.WriteOut(tag);
 
     qualityTesting();
@@ -1182,7 +1198,7 @@ int SBNcovariance::PrintVariations(std::string tag){
             tmpc.push_back(new TCanvas((fullnames.at(i)+"||"+v).c_str()));
             tmpc.back()->cd();
             TH1D * temp_cv_spec = (TH1D*)spec_central_value.hist.at(i).Clone((std::to_string(i)+v).c_str());
-            temp_cv_spec->Scale(1,"width");
+            //temp_cv_spec->Scale( montecarlo_scale[i]);
 
             tmpc.back()->cd();
             double maxval = temp_cv_spec->GetMaximum();
@@ -1219,11 +1235,12 @@ int SBNcovariance::PrintVariations(std::string tag){
 
         for(int i=0; i< temp_spec.hist.size(); i++){
             vec_canvas.at(which_matrix).at(i)->cd();
-            temp_spec.hist.at(i).Scale(1,"width");
+            //temp_spec.hist.at(i).Scale( montecarlo_scale[i] );
             temp_spec.hist.at(i).SetLineColor((int)rangen->Uniform(300,1000));	
             temp_spec.hist.at(i).DrawCopy("same hist");
 
-        }	
+        }
+        //std::cout << "m+1, universes_used = " << m+1 << ", " << universes_used << std::endl;	
         //check to see if variation is over. if so
         if(m+1 != universes_used ) {
             if(var != map_universe_to_var[m+1]){
@@ -1234,7 +1251,7 @@ int SBNcovariance::PrintVariations(std::string tag){
                     vec_dir.at(which_matrix)->cd();
                     vec_canvas.at(which_matrix).at(i)->cd();
                     TH1D * temp_cv_spec = (TH1D*)spec_central_value.hist.at(i).Clone((std::to_string(i)+var+"tmp2").c_str());
-                    temp_cv_spec->Scale(1,"width");
+                    //temp_cv_spec->Scale(1,"width");
                     temp_cv_spec->SetLineColor(kBlack);
                     temp_cv_spec->SetMarkerStyle(34);
                     temp_cv_spec->SetLineWidth(2);
@@ -1244,6 +1261,7 @@ int SBNcovariance::PrintVariations(std::string tag){
                     vec_dir.at(which_matrix)->cd();
                     vec_canvas.at(which_matrix).at(i)->Write();
                     vec_canvas.at(which_matrix).at(i)->SaveAs(("variations/Variation_"+tag+"_"+var+"_"+fullnames[i]+"_1D.pdf").c_str(),"pdf");
+                    std::cout << "Print variations/Variation_" << tag << "_" << var << "_" << fullnames[i] << "_1D.pdf" << std::endl;
                     ;
                     delete temp_cv_spec;
                     delete vec_canvas.at(which_matrix).at(i);
@@ -1257,7 +1275,7 @@ int SBNcovariance::PrintVariations(std::string tag){
     }//end universe loop
 
     std::cout << "SBNcovariance::PrintVariations\t||\tFinished. Just tidying up and writing TCanvas. " << std::endl;
-    /*
+   /* 
        for(int v =0; v< variations.size(); v++){
        fout->cd();
        vec_dir.at(v)->cd();
@@ -1275,11 +1293,12 @@ int SBNcovariance::PrintVariations(std::string tag){
        delete temp_cv_spec;
        }
        }
-       */
-
+       
+    */
     fout->Close();
     return 0;
 }
+
 int SBNcovariance::PrintVariations_2D(std::string tag){
     TFile *fout = new TFile(("SBNfit_variation_plots_2D_"+tag+".root").c_str(),"recreate");
     fout->cd();

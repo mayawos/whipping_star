@@ -300,7 +300,6 @@ int SBNcls::makePlots(CLSresult &h0_result, CLSresult & h1_result, std::string t
   //h0_pdf.GetXaxis()->SetRangeUser(minbin<0 ? minbin*1.2: minbin*0.8, maxbin*0.8);
   h0_pdf.GetXaxis()->SetRangeUser(min_plot,max_plot);
   
-  
   bool draw_both = true;
   
   std::vector<std::string> quantile_names = {"-2#sigma","-1#sigma","Median","+1#sigma","+2#sigma"};
@@ -410,14 +409,14 @@ int SBNcls::makePlots(CLSresult &h0_result, CLSresult & h1_result, std::string t
 
 int SBNcls::makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float chi2data, float pval_data, std::string tag, int which_mode){
 
-    double max_plot = std::max(h0_result.m_max_value,h1_result.m_max_value)*1.5;
+    //double max_plot = std::max(h0_result.m_max_value,h1_result.m_max_value)*1.5;
     double min_plot = std::min(h0_result.m_min_value,h1_result.m_min_value);
 
-    //double max_plot = 80;
+    double max_plot = 60;
     //double min_plot = -55.;
 
-    TH1D h0_pdf((tag+"h0").c_str(),(tag+"h0").c_str(),250,-100.,100.);
-    TH1D h1_pdf((tag+"h1").c_str(),(tag+"h1").c_str(),250,-100.,100.);
+    TH1D h0_pdf((tag+"h0").c_str(),(tag+"h0").c_str(),250,-100.,150.);
+    TH1D h1_pdf((tag+"h1").c_str(),(tag+"h1").c_str(),250,-100.,150.);
 
     for(int i=0; i<h0_result.m_values.size(); i++){
         h0_pdf.Fill(h0_result.m_values[i]);
@@ -495,8 +494,8 @@ int SBNcls::makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float
 	qnam->SetTextSize(0.045);
 	qnam->SetTextAlign(12);  //align at top
 	qnam->SetTextAngle(-90);
-	qnam->DrawLatex(quantiles.at(i), maxval*1.3 ,quantile_names.at(i).c_str());
-	l->Draw("same");
+	if(tag.find("_Chi2Only_") == std::string::npos ) qnam->DrawLatex(quantiles.at(i), maxval*1.3 ,quantile_names.at(i).c_str());
+	if(tag.find("_Chi2Only_") == std::string::npos ) l->Draw("same");
 	TLine *ln = new TLine(chi2data,0.0, chi2data,maxval*1.05);
 	ln->SetLineColor(kRed);
 	ln->SetLineWidth(2);
@@ -506,7 +505,6 @@ int SBNcls::makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float
 	qnam2->SetTextAngle(-90);
 	qnam2->DrawLatex(chi2data, maxval*1.3, "Fakedata");
 	ln->Draw("same");
-	
 	TLatex * qvals = new TLatex();
 	qvals->SetTextSize(0.03);
 	qvals->SetTextAlign(32);
@@ -539,11 +537,12 @@ int SBNcls::makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float
 	//          std::string details =  ("#splitline{"+quantile_names.at(i)+"}{1-#beta(" +to_string_prec(1-prob_values.at(i),3) + ") #alpha("+ a_string +" | "+whatsigma+ ") CL_{s}("+to_string_prec(vec_CLs.at(i),3)+")}");
 	std::string details2 =  ("#splitline{"+quantile_names.at(i)+"}{1-#beta(" +to_string_prec(1-prob_values.at(i),10) + ") #alpha("+ to_string_prec(pval.at(i),10) +" | "+to_string_prec(pval2sig(pval.at(i)),1)+ "#sigma) CL_{s}("+to_string_prec(vec_CLs.at(i),10)+")}");
 	std::cout<<details2<<std::endl;
-	qvals->DrawLatexNDC(0.875, 0.2+i*0.1,details.c_str()  );
+	if(tag.find("_Chi2Only_") == std::string::npos ) qvals->DrawLatexNDC(0.875, 0.2+i*0.1,details.c_str()  );
 	if(i == quantiles.size()-1) details =  ("#splitline{Fakedata}{1-#beta(  -  ) #alpha("+ a_string_data +" | "+whatsigma_data+ ")}");
 	if(i == quantiles.size()-1) qvals->DrawLatexNDC(0.375, 0.4,details.c_str()  );
       }
     }
+    if(tag.find("_Chi2Only_") != std::string::npos ) draw_both=false;
 
     /*
        TLine *lcv = new TLine(central_value_chi,minval,central_value_chi, maxval);
@@ -593,7 +592,7 @@ int SBNcls::makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float
       h0_pdf.GetXaxis()->SetTitle("#chi^{2}");
     }else if(which_mode==1){
       h0_pdf.GetXaxis()->SetTitle("#Delta #chi^{2} = #chi^{2}_{H0} - #chi^{2}_{H1} ");
-      if(tag.find("_Chi2Only_CNP_") != std::string::npos ) h0_pdf.GetXaxis()->SetTitle("#chi^{2}");
+      if(tag.find("_Chi2Only_") != std::string::npos ) h0_pdf.GetXaxis()->SetTitle("#chi^{2}");
     }
     h0_pdf.GetYaxis()->SetTitle("PDF");
     

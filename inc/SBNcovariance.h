@@ -119,6 +119,7 @@ namespace sbn{
     std::vector<int> nentries;
     std::vector<TBranch*>* branch_weight;
     std::vector<std::map<std::string, std::vector<eweight_type> >* > f_weights;
+    std::vector<double> recoenergy;
 
     std::vector<std::vector<int> > vars_i;
     std::vector<std::vector<double> > vars_d;

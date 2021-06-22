@@ -7,7 +7,8 @@ echo "\\hline" >> $1_$3_beforeconstraint_table.tex;
 echo "Energy [GeV] & Flux Only & Genie Only  & G4 Only & Flux+ Genie+ G4 & Flux+ Genie+ G4+ Det.Syst. & Flux+ Genie+ G4+ Det.Syst.+ Sample Stats\\\\" >> $1_$3_beforeconstraint_table.tex;
 echo "\hline" >> $1_$3_beforeconstraint_table.tex;
 rows=`wc -l full_$1_systematicstable_beforeconstraint_$2_H1_$3.txt | awk '{print $1}'`
-for (( l=1; l<=${rows}; l++ ))
+echo $rows
+for (( l=1; l<=${rows}; l++ )) 
 do
   col1=`head -${l} full_$1_systematicstable_beforeconstraint_$2_H1_$3_fluxonly.txt | tail -1 | awk '{print $2}'`; 
   col2=`head -${l} full_$1_systematicstable_beforeconstraint_$2_H1_$3_genieonly.txt | tail -1 | awk '{print $2}'`; 

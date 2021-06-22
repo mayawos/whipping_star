@@ -1,5 +1,6 @@
 #include "SBNspec.h"
 #include <cassert>
+#include <fstream>
 using namespace sbn;
 
 SBNspec::SBNspec(std::string whichxml, int which_universe, bool isverbose, bool useuniverse) : SBNconfig(whichxml,isverbose, useuniverse){
@@ -256,6 +257,11 @@ int SBNspec::Norm(std::string name, double val){
 
 int SBNspec::CalcFullVector(){
   //std::cout << "SBNspec::CalcFullVector()" << std::endl;
+
+  std::ofstream mcstatsfile;
+  mcstatsfile.open("mc_stats_err.tex");
+
+
   full_vector.clear();
   full_error.clear();
   
@@ -265,16 +271,32 @@ int SBNspec::CalcFullVector(){
   int hoffset = 0;
   for(size_t hid=0; hid<hist.size(); ++hid) {
     const auto& h =  hist[hid];
+  mcstatsfile << "\\begin{table}[H]" << std::endl; 
+  mcstatsfile << "\\centering" << std::endl; 
+  mcstatsfile << "\\begin{tabular}{| c | c | c | c |} " << std::endl;
+  mcstatsfile << "\\hline" << std::endl; 
+  mcstatsfile << "Sample & Bin number & N Event & MC Stats Error \\\\" << std::endl; 
+  mcstatsfile << "\\hline" << std::endl; 
+  mcstatsfile << "\\hline" << std::endl; 
     for(int i = 1; i < (h.GetSize()-1); ++i){
       full_vector[hoffset + i - 1] = h.GetBinContent(i);
       full_error[hoffset + i - 1] = h.GetBinError(i);
+      if(i==1)  mcstatsfile << "\\multirow{"<<h.GetSize()-2<<"}{*}{"<< h.GetName() << "} & " << i << " & " <<  full_vector[hoffset + i - 1] << " & " << full_error[hoffset + i - 1] << " \\\\ " << std::endl;
+      else  mcstatsfile << "{} & " << i << " & " <<  full_vector[hoffset + i - 1] << " & " << full_error[hoffset + i - 1] << " \\\\ " << std::endl;
       //std::cout << h.GetName() << "  bin content: " << h.GetBinContent(i) << ", full vector, full error: " << full_vector[hoffset + i - 1] << ", " << full_error[hoffset + i - 1] << std::endl;
     }
+    mcstatsfile << "\\hline" << std::endl; 
+  mcstatsfile << "\\hline" << std::endl;
+  mcstatsfile << "\\end{tabular}" << std::endl;
+  mcstatsfile << "\\label{tab:mc\_stats}" << std::endl;
+  mcstatsfile << "\\end{table}" << std::endl;
+  mcstatsfile << "" << std::endl;
+  mcstatsfile << "\\newpage" << std::endl;
     hoffset += (h.GetSize()-2);
   }
     
   assert (hoffset == num_bins_total);
-
+  mcstatsfile.close();
   return 0;
 }
 
@@ -326,17 +348,19 @@ int SBNspec::CalcErrorVector(){
 		    for(int is=0; is< num_subchannels[ic]; is++){
 			TH1D& h = hist[index];
                         std::string name = h.GetName();
+                        std::cout << "name: " << name << std::endl;
                         if(name.find("ext") != std::string::npos){ 
-				//std::cout << "found ext histogram!" << std::endl;
+				std::cout << "found ext histogram!" << std::endl;
 				for(int ibin=0; ibin < h.GetNbinsX(); ibin++){
 					double ext_err = 0.0;
 					if( h.GetBinError(ibin+1) == 0.0 ) ext_err = 1.4*0.371;
+                                        std::cout << "ext = " << ext_err << std::endl;
 					full_err_vector.push_back(0.0);
 					full_ext_err_vector.push_back(ext_err);
 				}
 			}
 			else{
-				//std::cout << "found other histograms, filling as normal!" << std::endl;
+				std::cout << "found other histograms, filling as normal!" << std::endl;
 				for(int ibin=0; ibin < h.GetNbinsX(); ibin++){ 
 					full_err_vector.push_back(h.GetBinError(ibin+1));
 					full_ext_err_vector.push_back(0.0);
@@ -347,14 +371,19 @@ int SBNspec::CalcErrorVector(){
 				hsum->Reset();
 			}	
 			hsum->Add(&h);
+                        std::cout << "index: " << std::endl;
 			index++;
 		    }
+                    std::cout << "outside loop of subchannel" << std::endl;
 
 		   for(int ibin=0; ibin < hsum->GetNbinsX(); ibin++)
 			collapsed_err_vector.push_back(hsum->GetBinError(ibin+1));
 
 		}
+                std::cout << "outside loop of channel" << std::endl;
+
 	    }
+            std::cout << "outside loop of detector" << std::endl;
 	}	
 
 	return 0;
