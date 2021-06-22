@@ -1,4 +1,5 @@
 #include "SBNfeld.h"
+#include <fstream> ///needed for printout
 using namespace sbn;
 
 
@@ -118,7 +119,9 @@ int SBNfeld::GenerateBackgroundScaledSpectrum(){
 int SBNfeld::SetCoreSpectrum(std::string file){
 
     std::cout<<"Set Core Spectrum1"<<std::endl;
+
     m_core_spectrum= new SBNosc(file,this->xmlname);
+    
     m_bool_core_spectrum_set = true;
     std::cout<<"Set Core Spectrum2"<<std::endl;
     return 0;
@@ -327,9 +330,10 @@ int SBNfeld::CalcSBNchis(){
 
 int SBNfeld::FullFeldmanCousins(){
     int num_universes = m_num_universes;
-
+    
     //Ok take the background only spectrum and form a background only covariance matrix. CalcCovarianceMatrix includes stats
     TMatrixT<double> background_full_covariance_matrix = m_sbnchi_grid[0]->CalcCovarianceMatrix(m_full_fractional_covariance_matrix, *m_tvec_background_spectrum);
+
     TMatrixT<double> background_collapsed_covariance_matrix(m_background_spectrum->num_bins_total_compressed, m_background_spectrum->num_bins_total_compressed);
     m_sbnchi_grid[0]->CollapseModes(background_full_covariance_matrix, background_collapsed_covariance_matrix);    
     TMatrixT<double> inverse_background_collapsed_covariance_matrix = m_sbnchi_grid[0]->InvertMatrix(background_collapsed_covariance_matrix);   
@@ -341,6 +345,7 @@ int SBNfeld::FullFeldmanCousins(){
 
     for(size_t t =0; t < m_num_total_gridpoints; t++){
         if(m_use_CNP) std::cout << "Using CNP matrix!" << std::endl;
+        if(m_use_LLR) std::cout << "Using LLR test statistic!" << std::endl;
         time_t start_time = time(0);
 
         SBNspec * true_spec = m_cv_spec_grid.at(t);
@@ -380,12 +385,12 @@ int SBNfeld::FullFeldmanCousins(){
 
         for(size_t i=0; i< num_universes; i++){
 
-
             const std::vector<float>  fake_data = true_chi->GeneratePseudoExperiment();
             //std::cout << "univ = " << i << std::endl;
+            //return {(double)best_grid_point, this_chi, last_chi_min, delta_this_chi};
             std::vector<double> ans = this->PerformIterativeGridFit(fake_data,t,inverse_background_collapsed_covariance_matrix);
 
-            vec_delta_chi[i] = ans[1]-ans[2];
+            vec_delta_chi[i] = ans[1]-ans[2]; //delta_chi2 = this_chi - last_chi_min
             vec_this_chi[i] = ans[1];
             vec_chi_min[i] = ans[2];
             vec_delta_this_chi[i] = ans[3];
@@ -520,7 +525,7 @@ int SBNfeld::FullFeldmanCousins(){
 };
 
 
-int SBNfeld::CompareToData(SBNspec *datain){
+std::vector<double> SBNfeld::CompareToData(SBNspec *datain){
 
     //Ok take the background only spectrum and form a background only covariance matrix. CalcCovarianceMatrix includes stats
     TMatrixT<double> background_full_covariance_matrix = m_sbnchi_grid[0]->CalcCovarianceMatrix(m_full_fractional_covariance_matrix, *m_tvec_background_spectrum);
@@ -532,27 +537,75 @@ int SBNfeld::CompareToData(SBNspec *datain){
     const std::vector<float>  fake_data = datain->f_collapsed_vector;
     std::vector<double> ans = this->PerformIterativeGridFit(fake_data,0,inverse_background_collapsed_covariance_matrix);
 
-    double delta_chi = ans[1]-ans[2];
+    double delta_chi = ans[1]-ans[2]; //delta_chi2 = this_chi2(mu = 0) - chi2_min(mu=mu^)
     double chi_min = ans[2];
-    double bf_val = m_grid.f_dimensions[0].GetPoint((int)ans[0]);
+    double bf_val = m_grid.f_dimensions[0].GetPoint((int)ans[0]); //@ mu = mu^
     double bf_pt = (int)ans[0];
 
     
-   //Some BF
-   std::cout << "ready to calculate BF...." << std::endl; 
+    //Some BF
+    std::cout << "ready to calculate BF...." << std::endl; 
     m_cv_spec_grid[bf_pt]->CompareSBNspecs(background_collapsed_covariance_matrix,datain, "DatFeld_"+tag);
     std::cout<<"DATA_Comparason_Point : Delta Chi "<<delta_chi<<" Chi^Min "<<chi_min<<" BF_val "<<bf_val<<" BF_PT "<<bf_pt<<std::endl;
-    return 0;
+    std::vector<double> result;
+    result.push_back(delta_chi); result.push_back(chi_min); result.push_back(bf_val); result.push_back(bf_pt);
+    return result;
+};
+
+std::vector< std::vector<double> > SBNfeld::CompareDataToAllScaleFactors(SBNspec *datain){
+
+    //Ok take the background only spectrum and form a background only covariance matrix. CalcCovarianceMatrix includes stats
+    TMatrixT<double> background_full_covariance_matrix = m_sbnchi_grid[0]->CalcCovarianceMatrix(m_full_fractional_covariance_matrix, *m_tvec_background_spectrum);
+    TMatrixT<double> background_collapsed_covariance_matrix(m_background_spectrum->num_bins_total_compressed, m_background_spectrum->num_bins_total_compressed);
+    m_sbnchi_grid[0]->CollapseModes(background_full_covariance_matrix, background_collapsed_covariance_matrix);    
+    TMatrixT<double> inverse_background_collapsed_covariance_matrix = m_sbnchi_grid[0]->InvertMatrix(background_collapsed_covariance_matrix);   
+
+    std::cout << "STARTING SBNfeld::CompareDataToAllScaleFactors" << std::endl;
+    if(m_use_LLR){
+        std::cout << "USING LLR FOR DATA COMP!" << std::endl;
+    }else{    
+        std::cout << "USING CNP FOR DATA COMP!" << std::endl;
+    }
+    datain->CollapseVector();
+    const std::vector<float>  fake_data = datain->f_collapsed_vector;
+    std::vector<std::vector<double>> result;
+    std::cout << "STARTING SBNfeld::PerformIterativeGridFit" << std::endl;
+    for(size_t t =0; t < m_num_total_gridpoints; t++){
+        std::vector<double> ans = this->PerformIterativeGridFit(fake_data,t,inverse_background_collapsed_covariance_matrix);
+        double delta_chi = ans[1]-ans[2]; //delta_chi2 = this_chi2(mu(t)) - chi2_min(mu=mu^)
+        double chi_min = ans[2];
+        double bf_val = m_grid.f_dimensions[0].GetPoint((int)ans[0]); //@ mu = mu^
+        double bf_pt = (int)ans[0];
+        double grid_pt_val =  m_grid.f_dimensions[0].GetPoint(t);
+            //Some BF
+        //std::cout << "ready to calculate BF...." << std::endl; 
+        //m_cv_spec_grid[bf_pt]->CompareSBNspecs(background_collapsed_covariance_matrix,datain, "DatFeld_"+tag);
+        std::cout<<"DATA_Comparason_Point : Delta Chi "<<delta_chi<< " Chi2 " << ans[1] <<" Chi^Min "<<chi_min<<" BF_val "<<bf_val<<" BF_PT "<<bf_pt << " for grid_val = "<< grid_pt_val<<std::endl;
+        std::vector<double> result_grid_pt;
+        result_grid_pt.push_back(delta_chi); result_grid_pt.push_back(chi_min); result_grid_pt.push_back(bf_val); result_grid_pt.push_back(bf_pt); result_grid_pt.push_back(grid_pt_val);
+        result.push_back(result_grid_pt);
+    }
+    return result;
 };
 
 
 
-
-
-
-
 int SBNfeld::UpdateInverseCovarianceMatrixCNP(size_t best_grid_point, const std::vector<float> &datavec, TMatrixT<double>& inverse_collapsed, SBNchi * helper){
-    TMatrixT<double> full = helper->CalcCovarianceMatrixCNP(m_full_fractional_covariance_matrix, m_cv_spec_grid[best_grid_point]->full_vector, datavec);
+    TMatrixT<double> coll = helper->CalcCovarianceMatrixCNP_FC(*m_full_fractional_covariance_matrix, m_cv_spec_grid[best_grid_point]->full_vector, m_cv_spec_grid[best_grid_point]->collapsed_vector, datavec);
+    inverse_collapsed = helper->InvertMatrix(coll);
+    
+    //TMatrixT<double> full = helper->CalcCovarianceMatrixCNP(m_full_fractional_covariance_matrix, m_cv_spec_grid[best_grid_point]->full_vector, datavec);
+    //helper->CollapseModes(full, inverse_collapsed);
+    //inverse_collapsed = helper->InvertMatrix(inverse_collapsed);
+    
+    //inverse_collapsed.Print();
+    return 0;
+}
+
+
+
+int SBNfeld::UpdateInverseCovarianceMatrixLLR(size_t best_grid_point, const std::vector<float> &datavec, TMatrixT<double>& inverse_collapsed, SBNchi * helper){
+    TMatrixT<double> full = helper->CalcCovarianceMatrixLLR(m_full_fractional_covariance_matrix, m_cv_spec_grid[best_grid_point]->full_vector, datavec);
     helper->CollapseModes(full, inverse_collapsed);    
     inverse_collapsed = helper->InvertMatrix(inverse_collapsed);   
     return 0;
@@ -572,10 +625,9 @@ std::vector<double> SBNfeld::PerformIterativeGridFit(const std::vector<float> &d
     double last_chi_min = DBL_MAX;
     int best_grid_point = -99;
 
-    TMatrixT<double> inverse_current_collapsed_covariance_matrix = inverse_background_collapsed_covariance_matrix;  
-
-    SBNchi  * grid_chi = m_sbnchi_grid.at(grid_pt); 
-
+    TMatrixT<double> inverse_current_collapsed_covariance_matrix = inverse_background_collapsed_covariance_matrix;
+    SBNchi  * grid_chi = m_sbnchi_grid.at(grid_pt);
+   
     for(size_t n_iter = 0; n_iter < m_max_number_iterations; n_iter++){
 
         //Step 1. What covariance matrix do we use?
@@ -585,33 +637,40 @@ std::vector<double> SBNfeld::PerformIterativeGridFit(const std::vector<float> &d
             //Calculate current full covariance matrix, collase it, then Invert. 
             if(m_use_CNP){
                 UpdateInverseCovarianceMatrixCNP(best_grid_point, datavec, inverse_current_collapsed_covariance_matrix ,grid_chi);
-
             }else{
                 UpdateInverseCovarianceMatrix(best_grid_point, inverse_current_collapsed_covariance_matrix ,grid_chi);
             }
+
         }
+        
+        //for(int bin=0; bin < inverse_current_collapsed_covariance_matrix.GetNrows(); bin++) std::cout << "bin " << bin << " = " << inverse_current_collapsed_covariance_matrix(bin,bin) << std::endl;
 
         //Step 2.0 Find the global_minimum_for this universe. Integrate in SBNfit minimizer here, a grid scan for now.
         double chi_min = DBL_MAX;
         for(size_t r =0; r < m_num_total_gridpoints; r++){
-
-            double chi_tmp = this->CalcChi(datavec, m_cv_spec_grid[r]->collapsed_vector, inverse_current_collapsed_covariance_matrix);
-
-            std::cout<<"Iter: "<<n_iter<<" "<<r<<" "<<chi_tmp<<std::endl;
+            double chi_tmp;
+            if(m_use_LLR){
+                chi_tmp = this->CalcPoissonLogLiklihood(datavec, m_cv_spec_grid[r]->collapsed_vector);
+            }else{
+                chi_tmp = this->CalcChi(datavec, m_cv_spec_grid[r]->collapsed_vector, inverse_current_collapsed_covariance_matrix);
+            }
+            //std::cout<<"On iter: "<<n_iter<<" w/ chi^2: "<<chi_tmp<<" best_grid_point: "<<best_grid_point << ", grid_pt = " << grid_pt <<", r = " << r << std::endl;
 
             if(chi_tmp < chi_min){
                 best_grid_point = r;
+                //if(m_bool_simple_hypothesis) best_grid_point = grid_pt; 
                 chi_min = chi_tmp;
             }
         }
 
         if(n_iter!=0){
-            std::cout<<"On iter: "<<n_iter<<" w/ chi^2: "<<chi_min<<" lastchi^2: "<<last_chi_min<<" diff() "<<fabs(chi_min-last_chi_min)<<" tol: "<<m_chi_min_convergance_tolerance<<" best_grid_point: "<<best_grid_point<<std::endl;
+            //std::cout<<"On iter: "<<n_iter<<" w/ chi^2: "<<chi_min<<" lastchi^2: "<<last_chi_min<<" diff() "<<fabs(chi_min-last_chi_min)<<" tol: "<<m_chi_min_convergance_tolerance<<" best_grid_point: "<<best_grid_point << ", grid_pt = " << grid_pt << std::endl;
 
             //Step 3.0 Check to see if mgrid_chi for this particular fake_data  has converged sufficiently
 
             if(fabs(chi_min-last_chi_min)< m_chi_min_convergance_tolerance){
                 last_chi_min = chi_min;
+                //inverse_current_collapsed_covariance_matrix.Print();
                 break;
             }
         }
@@ -619,24 +678,45 @@ std::vector<double> SBNfeld::PerformIterativeGridFit(const std::vector<float> &d
     }
 
     //Now use the curent_iteration_covariance matrix to also calc this_chi here for the delta.
-    double this_chi   = this->CalcChi(datavec, m_cv_spec_grid[grid_pt]->collapsed_vector, inverse_current_collapsed_covariance_matrix);
+    
+    if(m_bool_simple_hypothesis){
+        if(m_use_CNP){
+                UpdateInverseCovarianceMatrixCNP(grid_pt, datavec, inverse_current_collapsed_covariance_matrix ,grid_chi);
+            }else{
+                UpdateInverseCovarianceMatrix(grid_pt, inverse_current_collapsed_covariance_matrix ,grid_chi);
+            }
+    }
+    
+    double this_chi; 
+    if(m_use_LLR){
+        this_chi = this->CalcPoissonLogLiklihood(datavec, m_cv_spec_grid[grid_pt]->collapsed_vector);
+    }else{
+        this_chi = this->CalcChi(datavec, m_cv_spec_grid[grid_pt]->collapsed_vector, inverse_current_collapsed_covariance_matrix);
+    }
+
     double this_chi_alt = 0.0;
+
     if( m_bool_simple_hypothesis ){
-      for(int bin=0; bin < inverse_current_collapsed_covariance_matrix.GetNrows(); bin++) std::cout << "bin " << bin << " = " << inverse_current_collapsed_covariance_matrix(bin,bin) << std::endl; 
+      
       int grid_pt_alt;
       if(grid_pt==0) grid_pt_alt=1;
       if(grid_pt==1) grid_pt_alt=0;
-      std::cout << "matrix for grid point " << grid_pt_alt << std::endl;
+      
+      //std::cout << "matrix for grid point " << grid_pt_alt << std::endl;
       UpdateInverseCovarianceMatrixCNP(grid_pt_alt, datavec, inverse_current_collapsed_covariance_matrix ,grid_chi);
-      for(int bin=0; bin < inverse_current_collapsed_covariance_matrix.GetNrows(); bin++) std::cout << "bin " << bin << " = " << inverse_current_collapsed_covariance_matrix(bin,bin) << std::endl; 
-      double this_chi_alt   = this->CalcChi(datavec, m_cv_spec_grid[grid_pt_alt]->collapsed_vector, inverse_current_collapsed_covariance_matrix);
+      
+      if(m_use_LLR){
+        this_chi_alt   = this->CalcPoissonLogLiklihood(datavec, m_cv_spec_grid[grid_pt_alt]->collapsed_vector);
+      }else{
+        this_chi_alt   = this->CalcChi(datavec, m_cv_spec_grid[grid_pt_alt]->collapsed_vector, inverse_current_collapsed_covariance_matrix);
+      }
     }
-    double delta_this_chi = this_chi - this_chi_alt;
+    double delta_this_chi = this_chi - this_chi_alt; //dChi2 = chi2_0 - chi2_1
     if( m_bool_simple_hypothesis && grid_pt==1) delta_this_chi = this_chi_alt - this_chi;
-    //std::cout<<"this_chi, last_chi_min, delta_chi, best_grid_point = "<<" "<<this_chi<< " "<<last_chi_min<<" "<<this_chi-last_chi_min<<" "<<best_grid_point<<" "<< std::endl;
 
     //returns the BF grid, the chi^2 and the minimum_chi at the BF. 
     return {(double)best_grid_point, this_chi, last_chi_min, delta_this_chi};
+
 }
 
 int SBNfeld::PointFeldmanCousins(size_t grid_pt){
@@ -740,6 +820,15 @@ float SBNfeld::CalcChi(const std::vector<float>& data, const std::vector<double>
 
     return tchi;
 };
+
+float SBNfeld::CalcPoissonLogLiklihood(const std::vector<float>& data, const std::vector<double>& pred){
+    float llr = 0;
+    for(int i =0; i<num_bins_total_compressed; i++){
+            llr += ( data[i] > 0.001 ? 2.0*(pred[i] - data[i] + data[i]*log(data[i]/pred[i]) ) : 2*(pred[i]));
+    }
+    return llr;
+};
+
 
 
 std::vector<double> SBNfeld::GlobalScan(){
