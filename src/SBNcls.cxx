@@ -503,7 +503,7 @@ int SBNcls::makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float
 	qnam2->SetTextSize(0.045);
 	qnam2->SetTextAlign(12);  //align at top
 	qnam2->SetTextAngle(-90);
-	qnam2->DrawLatex(chi2data, maxval*1.3, "Fakedata");
+	qnam2->DrawLatex(chi2data, maxval*1.3, "Data");
 	ln->Draw("same");
 	TLatex * qvals = new TLatex();
 	qvals->SetTextSize(0.03);
@@ -538,7 +538,7 @@ int SBNcls::makePlotsFakedata(CLSresult &h0_result, CLSresult & h1_result, float
 	std::string details2 =  ("#splitline{"+quantile_names.at(i)+"}{1-#beta(" +to_string_prec(1-prob_values.at(i),10) + ") #alpha("+ to_string_prec(pval.at(i),10) +" | "+to_string_prec(pval2sig(pval.at(i)),1)+ "#sigma) CL_{s}("+to_string_prec(vec_CLs.at(i),10)+")}");
 	std::cout<<details2<<std::endl;
 	if(tag.find("_Chi2Only_") == std::string::npos ) qvals->DrawLatexNDC(0.875, 0.2+i*0.1,details.c_str()  );
-	if(i == quantiles.size()-1) details =  ("#splitline{Fakedata}{1-#beta(  -  ) #alpha("+ a_string_data +" | "+whatsigma_data+ ")}");
+	if(i == quantiles.size()-1) details =  ("#splitline{Data}{1-#beta(  -  ) #alpha("+ a_string_data +" | "+whatsigma_data+ ")}");
 	if(i == quantiles.size()-1) qvals->DrawLatexNDC(0.375, 0.4,details.c_str()  );
       }
     }
