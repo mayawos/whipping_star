@@ -9,7 +9,7 @@ SAMPLE=("np" "zp" "np_zp")
 
 DOLLR=$1 #( ' ' '--llr') #Option to use LLR
 
-OUTPUTDIR='Unblinded_data'
+OUTPUTDIR='ResultPlots'
 mkdir $OUTPUTDIR
 
 #make
