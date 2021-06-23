@@ -1,0 +1,58 @@
+<?xml version="1.0" ?>
+
+<!-- For this simple example we have one mode: Neutrino mode (nu) and one detector (uBooNE) -->
+<mode name="nu" />
+<detector name="uBooNE"  />
+
+<channel name="1eNp" unit="GeV"  >
+    <bins
+        edges="0.15 0.29 0.43 0.57 0.71 0.85 0.99 1.13 1.27 1.41 1.55"
+        />
+    <subchannel name="lee" />
+    <subchannel name="bg" />
+    <subchannel name="data" />
+</channel>
+
+<channel name="1e0p" unit="GeV"  >
+    <bins
+        edges="0.15 0.29 0.43 0.57 0.71 0.85 0.99 1.13 1.27 1.41 1.55"
+        />
+    <subchannel name="lee" />
+    <subchannel name="bg" />
+    <subchannel name="data" />
+</channel>
+
+<channel name="numu" unit="GeV"  >
+    <bins
+        edges="0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95 1.05 1.15 1.25 1.35 1.45 1.55"
+        />
+    <subchannel name="data" />
+</channel>
+
+<plotpot value=2.13e20/>
+
+<!-- ############################# BUILDING A COVARIANCE MATRIX  #####################################################-->
+<!-- This is where we define the location and some basic info for where the TTree files are saved that we wish to build a covariance matrix outof -->
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/unblinding/1eNp.root" scale = "1.0" pot = "2.13e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1eNp_data"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/davidc/searchingfornues/v08_00_00_48/0928/SBNFit/unblinding/1e0p.root" scale = "1.0" pot = "2.13e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_1e0p_data"
+         />
+ </MultisimFile>
+
+ <MultisimFile treename="NeutrinoSelectionFilter" filename="/uboone/data/users/wospakrk/sbnfit_0928/numu/data.root" scale = "1.0" pot = "2.13e20"> 
+     <branch
+         name="reco_e"
+         type="double"
+         associated_subchannel="nu_uBooNE_numu_data"
+         />
+ </MultisimFile>
