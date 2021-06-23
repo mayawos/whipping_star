@@ -146,6 +146,7 @@ int main(int argc, char* argv[])
     }
   
   bool doFakedata = false;
+  bool doData = true;
   std::string detsyslabel = "";
   std::string mcerrlabel = "";
   std::string zerobinlabel = "";
@@ -154,6 +155,8 @@ int main(int argc, char* argv[])
   if( addext ) zerobinlabel = "_with_zerobin_err"; 
   if( detsys ) detsyslabel = "_with_detsys"; 
   if( tag.find("fakedata") != std::string::npos ) doFakedata = true; 
+  if( tag.find("opendata") != std::string::npos ) doData = true; 
+  if( tag.find("unblinding") != std::string::npos ) doData = true; 
   if( tag.find("nearfarSB") != std::string::npos ) doFakedata = true; 
   if( tag.find("nearSB") != std::string::npos ) doFakedata = true; 
   if( tag.find("farSB") != std::string::npos ) doFakedata = true; 
@@ -548,14 +551,14 @@ int main(int argc, char* argv[])
   TFile *f_data = new TFile(fakedata.c_str(),"read");
   //1eNp data
   TH1D *h_nue_np_fake_data;
-  std::cout << "doFakedata, np, constr_mode = " << doFakedata << ", " << np << ", " << constr_mode << std::endl;
+  std::cout << "doFakedata, doData, np, constr_mode = " << doFakedata << ", " << doData << ", " << np << ", " << constr_mode << std::endl;
 
-  if( doFakedata && (np || combined) && constr_mode != 1 ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_sig_data");
-  if( doFakedata && (np || combined) && constr_mode == 1 ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_data");
+  if( (doFakedata || doData) && (np || combined) && constr_mode != 1 ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_sig_data");
+  if( (doFakedata || doData) && (np || combined) && constr_mode == 1 ) h_nue_np_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_data");
   //1e0p data
   TH1D *h_nue_0p_fake_data;
-  if( doFakedata && (zp || combined) && constr_mode != 1 ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_sig_data");
-  if( doFakedata && (zp || combined) && constr_mode == 1 ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_data");
+  if( (doFakedata || doData) && (zp || combined) && constr_mode != 1 ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_sig_data");
+  if( (doFakedata || doData) && (zp || combined) && constr_mode == 1 ) h_nue_0p_fake_data = (TH1D*)f_data->Get("nu_uBooNE_1e0p_data");
   //1eNp SB data
   TH1D *h_1eNp_constr_data;
   if( constr_mode != 1 && (np || combined) ) h_1eNp_constr_data = (TH1D*)f_data->Get("nu_uBooNE_1eNp_constr_data");
@@ -593,12 +596,12 @@ int main(int argc, char* argv[])
     //Draw the before constraint plots
     if( np || combined ){
       cname = tag + "_before_constraint_1eNp";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_nue_np_fake_data, var_label, "#nu_{e} 1eNp0#pi Selection");	
+      if(doFakedata || doData ) DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_nue_np_fake_data, var_label, "#nu_{e} 1eNp0#pi Selection");	
       else DrawDataMCAndSyst(cname, h_1eNp_sum_before, h_1eNp_bg_before, h_1eNp_dummy, var_label, "#nu_{e} 1eNp0#pi Selection");
     }	
     if( zp || combined ){
       cname = tag + "_before_constraint_1e0p";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_nue_0p_fake_data, var_label, "#nu_{e} 1e0p0#pi Selection");	
+      if(doFakedata || doData ) DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_nue_0p_fake_data, var_label, "#nu_{e} 1e0p0#pi Selection");	
       else DrawDataMCAndSyst(cname, h_1e0p_sum_before, h_1e0p_bg_before, h_1e0p_dummy, var_label, "#nu_{e} 1e0p0#pi Selection");
     }	
  
@@ -668,9 +671,9 @@ int main(int argc, char* argv[])
     cname = tag + "_before_constraint_numu";
     if( h_numu_data ) DrawDataMCAndSyst(cname, h_numu_before, h_numu_before, h_numu_data, var_label, "#nu_{#mu} Selection", chi2);	
     cname = tag + "_before_constraint_1eNp_SB";
-    if( (np || combined ) && doFakedata && constr_mode != 1 ) DrawDataMCAndSyst(cname, h_1eNp_constr_before, h_1eNp_constr_before, h_1eNp_constr_data, var_label, "1eNp0#pi #nu_{e} Far Sideband Selection", chi2);	
+    if( (np || combined ) && (doFakedata || doData) && constr_mode != 1 ) DrawDataMCAndSyst(cname, h_1eNp_constr_before, h_1eNp_constr_before, h_1eNp_constr_data, var_label, "1eNp0#pi #nu_{e} Far Sideband Selection", chi2);	
     cname = tag + "_before_constraint_1e0p_SB";
-    if( (zp || combined ) && doFakedata && constr_mode != 1 ) DrawDataMCAndSyst(cname, h_1e0p_constr_before, h_1e0p_constr_before, h_1e0p_constr_data, var_label, "1e0p0#pi #nu_{e} Far Sideband Selection", chi2);	
+    if( (zp || combined ) && (doFakedata || doData) && constr_mode != 1 ) DrawDataMCAndSyst(cname, h_1e0p_constr_before, h_1e0p_constr_before, h_1e0p_constr_data, var_label, "1e0p0#pi #nu_{e} Far Sideband Selection", chi2);	
 
   //add the stats error to the cov matrix
   for( int i = 0; i < numumatrix.GetNcols(); i++ ){ 
@@ -822,12 +825,12 @@ int main(int argc, char* argv[])
 
   TH1D *h_1eNp_data_signal, *h_1e0p_data_signal;
   //1eNp data
-  if( doFakedata && (np || combined) ){ h_1eNp_data_signal = (TH1D*)h_nue_np_fake_data->Clone("data_1eNp");
+  if( (doFakedata || doData) && (np || combined) ){ h_1eNp_data_signal = (TH1D*)h_nue_np_fake_data->Clone("data_1eNp");
   h_1eNp_data_signal->Reset();
   for(int bin=0; bin < h_1eNp_data_signal->FindBin(0.85)-1; bin++) h_1eNp_data_signal->SetBinContent(bin+1,h_nue_np_fake_data->GetBinContent(bin+1));
   for(int bin=0; bin < h_1eNp_data_signal->FindBin(0.85)-1; bin++) h_1eNp_data_signal->SetBinError(bin+1,h_nue_np_fake_data->GetBinError(bin+1));}
   //1e0p data
-  if( doFakedata && (zp || combined) ){ h_1e0p_data_signal = (TH1D*)h_nue_0p_fake_data->Clone("data_1e0p");
+  if( (doFakedata || doData) && (zp || combined) ){ h_1e0p_data_signal = (TH1D*)h_nue_0p_fake_data->Clone("data_1e0p");
   h_1e0p_data_signal->Reset();
   for(int bin=0; bin < h_1e0p_data_signal->FindBin(0.85)-1; bin++) h_1e0p_data_signal->SetBinContent(bin+1,h_nue_0p_fake_data->GetBinContent(bin+1));
   for(int bin=0; bin < h_1e0p_data_signal->FindBin(0.85)-1; bin++) h_1e0p_data_signal->SetBinError(bin+1,h_nue_0p_fake_data->GetBinError(bin+1)); }
@@ -854,12 +857,12 @@ int main(int argc, char* argv[])
     //Draw the before constraint plots
     if( np || combined ){
       cname = tag + "after_constraint_1eNp";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1eNp_sum, h_1eNp_bg, h_nue_np_fake_data, var_label, "#nu_{e} 1eNp0#pi Selection");	
+      if((doFakedata || doData)) DrawDataMCAndSyst(cname, h_1eNp_sum, h_1eNp_bg, h_nue_np_fake_data, var_label, "#nu_{e} 1eNp0#pi Selection");	
       else DrawDataMCAndSyst(cname, h_1eNp_sum, h_1eNp_bg, h_1eNp_dummy, var_label, "#nu_{e} 1eNp0#pi Selection");
     }	
     if( zp || combined ){
       cname = tag + "after_constraint_1e0p";
-      if(doFakedata) DrawDataMCAndSyst(cname, h_1e0p_sum, h_1e0p_bg, h_nue_0p_fake_data, var_label, "#nu_{e} 1e0p0#pi Selection");	
+      if((doFakedata || doData)) DrawDataMCAndSyst(cname, h_1e0p_sum, h_1e0p_bg, h_nue_0p_fake_data, var_label, "#nu_{e} 1e0p0#pi Selection");	
       else DrawDataMCAndSyst(cname, h_1e0p_sum, h_1e0p_bg, h_1e0p_dummy, var_label, "#nu_{e} 1e0p0#pi Selection");
     }	
   //}
@@ -945,8 +948,8 @@ int main(int argc, char* argv[])
   //write out the output 
   TFile * fspec4 = new TFile(Form("constrained_%s_signal_DATA.SBNspec.root",tag.c_str()),"recreate");
   fspec4->cd();
-  if( doFakedata && ( combined || np ) ) (TH1D*)h_1eNp_data_signal->Write("nu_uBooNE_1eNp_data");
-  if( doFakedata && ( combined || zp ) ) (TH1D*)h_1e0p_data_signal->Write("nu_uBooNE_1e0p_data");
+  if( (doFakedata || doData) && ( combined || np ) ) (TH1D*)h_1eNp_data_signal->Write("nu_uBooNE_1eNp_data");
+  if( (doFakedata || doData) && ( combined || zp ) ) (TH1D*)h_1e0p_data_signal->Write("nu_uBooNE_1e0p_data");
   fspec4->Close();
   
   TFile * fcovar = new TFile(Form("constrained_%s.SBNcovar.root",tag.c_str()),"recreate");
@@ -974,8 +977,6 @@ int main(int argc, char* argv[])
   fcollext->cd();
   (TMatrixD*)collext.Write("full_covariance");
   fcollext->Close();
- 
-  std::cout << "pval, 0.12; sigma = " << sqrt(2)*TMath::ErfInverse(1-0.12) << std::endl;
  
   return 0;
   

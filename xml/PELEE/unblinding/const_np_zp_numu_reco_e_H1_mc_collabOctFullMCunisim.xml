@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+
+<!-- For this simple example we have one mode: Neutrino mode (nu) and one detector (uBooNE) -->
+<mode name="nu" />
+<detector name="uBooNE"  />
+
+<!-- We have three channels. Each "Channel" referes to a physically observable selelection. In this case nue-like and numu-like. -->
+<channel name="1eNp" unit="GeV"  >
+    <bins
+        edges="0.15 0.29 0.43 0.57 0.71 0.85 0.99 1.13 1.27 1.41 1.55"
+        />
+    <subchannel name="lee"/>
+    <subchannel name="bg"/>
+</channel>
+
+<channel name="1e0p" unit="GeV"  >
+    <bins
+        edges="0.15 0.29 0.43 0.57 0.71 0.85 0.99 1.13 1.27 1.41 1.55"
+        />
+    <subchannel name="lee"/>
+    <subchannel name="bg"/>
+</channel>
