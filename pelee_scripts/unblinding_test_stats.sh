@@ -244,7 +244,7 @@ do
 	    #sensitivity test for flux+xsec+detsys. with mc stats error + zero bin error, with zero bin error only
 	    if [[ "$detsys" == "true" ]]; then
                 if [[ "$gof" == true ]]; then
-	          if [[ "$mcstats" == "true" && "$zerobin" == "true" ]]; then ./sbnfit_lee_frequentist_study --xml const_${t}_H1_${s}.xml --signal constrained_${t}_H1_${s}${m}${a}_detsys_CV.SBNspec.root --background constrained_${t}_H1_${s}${m}${a}_detsys_BKG.SBNspec.root --covariance constrained_${t}_H1_${s}${m}${a}_detsys.SBNcovar.root --fakedata constrained_${t}_H1_${s}_DATA_CV.SBNspec.root -e 1e-8 --tag constrained_${t}_H1_${s}${m}${a}_syst_detsys; fi
+	          if [[ "$mcstats" == "true" && "$zerobin" == "true" ]]; then ./sbnfit_lee_frequentist_study --xml const_${t}_H1_${s}.xml --signal constrained_${t}_H1_${s}${m}${a}_detsys_CV.SBNspec.root --background constrained_${t}_H1_${s}${m}${a}_detsys_BKG.SBNspec.root --covariance constrained_${t}_H1_${s}${m}${a}_detsys.SBNcovar.root --fakedata constrained_${t}_H1_DATA_${s}_CV.SBNspec.root -e 1e-8 --tag constrained_${t}_H1_${s}${m}${a}_syst_detsys; fi
 	          #if [[ "$mcstats" == "true" && "$zerobin" == "true" ]]; then ./sbnfit_lee_frequentist_study --xml const_${t}_H1_${s}.xml --signal unconstrained_${t}_H1_${s}${m}${a}_CV.SBNspec.root --background unconstrained_${t}_H1_${s}${m}${a}_BKG.SBNspec.root --covariance unconstrained_${t}_H1_${s}${m}${a}_detsys.SBNcovar.root --fakedata constrained_${t}_H1_${s}_DATA_CV.SBNspec.root -e 1e-8 --tag unconstrained_${t}_H1_${s}${m}${a}_syst_detsys; fi
                 fi
                 if [[ "$gof" == false ]]; then
